@@ -1,0 +1,9 @@
+# Amane upstream is a read-only reference clone (see scripts/bootstrap_amane.*),
+# never our source, and must never be committed.
+/upstream/amane/
+
+# Local Python / Node artifacts for future phases.
+__pycache__/
+*.pyc
+.venv/
+node_modules/
