@@ -40,7 +40,7 @@ from fc2_metadata_core.sources.adapters._scan import (
 from fc2_metadata_core.sources.base import (
     SourceAdapter,
     require_canonical_number,
-    transport_error_result,
+    transport_failure_result,
 )
 
 __all__ = ["Fc2dbNetAdapter", "parse_fc2db_work_page"]
@@ -180,7 +180,7 @@ class Fc2dbNetAdapter(SourceAdapter):
         try:
             response = await client.get(url)
         except HttpTransportError as exc:
-            return transport_error_result(self.source_id, exc)
+            return transport_failure_result(self.source_id, exc)
 
         failure = classify_page_response(self.source_id, number, response)
         if failure is not None:

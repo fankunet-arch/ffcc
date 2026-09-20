@@ -28,6 +28,7 @@ import httpx
 
 from fc2_metadata_core.http.client import (
     HttpConnectionError,
+    HttpDecodingError,
     HttpRedirectLimitError,
     HttpResponse,
     HttpResponseTooLargeError,
@@ -126,6 +127,8 @@ class HttpxTransport:
             raise HttpRedirectLimitError(str(exc)) from exc
         except httpx.TimeoutException as exc:
             raise HttpTimeoutError(str(exc)) from exc
+        except httpx.DecodingError as exc:
+            raise HttpDecodingError(str(exc)) from exc
         except httpx.HTTPError as exc:
             raise HttpConnectionError(str(exc)) from exc
 

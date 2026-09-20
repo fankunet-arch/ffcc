@@ -48,15 +48,25 @@ _CHALLENGE_TITLE_RE = re.compile(
 
 
 def failure_result(
-    source_id: str, status: SourceStatus, detail: str, *, elapsed_ms: float
+    source_id: str,
+    status: SourceStatus,
+    detail: str,
+    *,
+    elapsed_ms: float,
+    error_kind: SourceErrorKind | None = None,
 ) -> SourceResult:
-    """A non-success ``SourceResult`` whose ``error_kind`` matches ``status``."""
+    """A non-success ``SourceResult``.
+
+    ``error_kind`` refines ``status`` (Phase 3 C2, e.g. ``HTTP_SERVER_ERROR`` for
+    an ``INVALID_RESPONSE``); omitted, it is the generic kind matching ``status``.
+    ``SourceResult`` itself rejects a kind that does not belong to ``status``.
+    """
     return SourceResult(
         source_id=source_id,
         status=status,
         metadata=None,
         elapsed_ms=elapsed_ms,
-        error_kind=SourceErrorKind(status.value),
+        error_kind=error_kind if error_kind is not None else SourceErrorKind(status.value),
         error_detail=detail,
     )
 
@@ -80,7 +90,11 @@ def classify_page_response(
     - a redirect that ended on one of ``blocked_url_markers`` (e.g. a login or
       age-verification page) -> ``BLOCKED``: the site wants a private
       session we deliberately do not have.
-    - any other non-200 -> ``INVALID_RESPONSE``.
+    - HTTP 500-599 -> ``INVALID_RESPONSE`` with ``error_kind=HTTP_SERVER_ERROR``:
+      still an operational failure for aggregation, but structurally a *server-side*
+      failure, the only ``INVALID_RESPONSE`` the retry policy treats as transient
+      (closes Phase 2 review finding P2-R-12);
+    - any other non-200 -> generic ``INVALID_RESPONSE`` (not retried).
     """
     elapsed = response.elapsed_ms
     lowered_headers = {k.lower(): v for k, v in response.headers.items()}
@@ -110,6 +124,15 @@ def classify_page_response(
             hinted,
             f"{source_id}: HTTP {response.status_code} for {number}",
             elapsed_ms=elapsed,
+        )
+
+    if 500 <= response.status_code <= 599:
+        return failure_result(
+            source_id,
+            SourceStatus.INVALID_RESPONSE,
+            f"{source_id}: HTTP {response.status_code} server error for {number}",
+            elapsed_ms=elapsed,
+            error_kind=SourceErrorKind.HTTP_SERVER_ERROR,
         )
 
     if response.status_code != 200:

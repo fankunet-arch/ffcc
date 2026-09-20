@@ -13,11 +13,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
+from typing import Mapping
 
 from fc2_metadata_core.errors import SourceResultContractError
 from fc2_metadata_core.models.metadata import NormalizedMetadata
 
-__all__ = ["SourceStatus", "SourceErrorKind", "SourceResult"]
+__all__ = [
+    "SourceStatus",
+    "SourceErrorKind",
+    "SourceResult",
+    "ALLOWED_ERROR_KINDS",
+    "status_for_error_kind",
+]
 
 
 class SourceStatus(Enum):
@@ -33,14 +41,24 @@ class SourceStatus(Enum):
 
 
 class SourceErrorKind(Enum):
-    """Failure category. Mirrors every non-success ``SourceStatus``.
+    """Failure category, finer than ``SourceStatus`` (widened at Phase 3 C2).
 
     Kept as a distinct enum (rather than reusing ``SourceStatus`` directly)
     so that ``SourceResult.error_kind`` has its own type that is meaningless
-    for a successful result, and so a later phase can widen it with more
-    granular sub-kinds without touching ``SourceStatus`` itself.
+    for a successful result, and so the failure taxonomy can be refined
+    without touching the coarse, aggregate-visible ``SourceStatus``
+    vocabulary. **Retry decisions are made from this structured kind, never
+    from ``error_detail`` text** (closes Phase 2 review finding P2-R-12).
+
+    The six *generic* members (one per non-success status) are kept unchanged
+    for backward compatibility: every ``SourceResult`` built before C2, and any
+    adapter that does not refine its failures, still validates; a generic
+    ``NETWORK_ERROR`` is treated as a retryable transport failure, the other
+    generics are not. The refined members and the ``SourceStatus`` each may
+    accompany are frozen in :data:`ALLOWED_ERROR_KINDS`.
     """
 
+    # generic (one per non-success status)
     NOT_FOUND = "not_found"
     BLOCKED = "blocked"
     RATE_LIMITED = "rate_limited"
@@ -48,15 +66,59 @@ class SourceErrorKind(Enum):
     PARSE_ERROR = "parse_error"
     INVALID_RESPONSE = "invalid_response"
 
+    # refinements of NETWORK_ERROR (nothing usable was received)
+    TIMEOUT = "timeout"
+    CONNECTION_ERROR = "connection_error"  # DNS / connect / TLS
+    DECODE_ERROR = "decode_error"  # body decode / decompress failure
+    REDIRECT_ERROR = "redirect_error"  # redirect chain limit exceeded
+    SOURCE_DEADLINE = "source_deadline"  # the per-source wall-clock deadline (aggregation layer)
 
-_STATUS_TO_ERROR_KIND: dict[SourceStatus, SourceErrorKind] = {
-    SourceStatus.NOT_FOUND: SourceErrorKind.NOT_FOUND,
-    SourceStatus.BLOCKED: SourceErrorKind.BLOCKED,
-    SourceStatus.RATE_LIMITED: SourceErrorKind.RATE_LIMITED,
-    SourceStatus.NETWORK_ERROR: SourceErrorKind.NETWORK_ERROR,
-    SourceStatus.PARSE_ERROR: SourceErrorKind.PARSE_ERROR,
-    SourceStatus.INVALID_RESPONSE: SourceErrorKind.INVALID_RESPONSE,
-}
+    # refinements of INVALID_RESPONSE (a response arrived but is unusable)
+    HTTP_SERVER_ERROR = "http_server_error"  # HTTP 500-599
+    RESPONSE_TOO_LARGE = "response_too_large"
+    ADAPTER_EXCEPTION = "adapter_exception"  # the adapter itself raised
+    RESULT_CONTRACT_MISMATCH = "result_contract_mismatch"  # wrong source_id / number / type
+
+
+# Which fine-grained kinds may accompany each failure status. Frozen contract
+# (docs/specifications/PHASE3_RESILIENCE_CONTRACT.md); a status/kind pairing
+# outside this table is rejected by ``SourceResult`` at construction.
+ALLOWED_ERROR_KINDS: Mapping[SourceStatus, frozenset[SourceErrorKind]] = MappingProxyType(
+    {
+        SourceStatus.NOT_FOUND: frozenset({SourceErrorKind.NOT_FOUND}),
+        SourceStatus.BLOCKED: frozenset({SourceErrorKind.BLOCKED}),
+        SourceStatus.RATE_LIMITED: frozenset({SourceErrorKind.RATE_LIMITED}),
+        SourceStatus.NETWORK_ERROR: frozenset(
+            {
+                SourceErrorKind.NETWORK_ERROR,
+                SourceErrorKind.TIMEOUT,
+                SourceErrorKind.CONNECTION_ERROR,
+                SourceErrorKind.DECODE_ERROR,
+                SourceErrorKind.REDIRECT_ERROR,
+                SourceErrorKind.SOURCE_DEADLINE,
+            }
+        ),
+        SourceStatus.PARSE_ERROR: frozenset({SourceErrorKind.PARSE_ERROR}),
+        SourceStatus.INVALID_RESPONSE: frozenset(
+            {
+                SourceErrorKind.INVALID_RESPONSE,
+                SourceErrorKind.HTTP_SERVER_ERROR,
+                SourceErrorKind.RESPONSE_TOO_LARGE,
+                SourceErrorKind.ADAPTER_EXCEPTION,
+                SourceErrorKind.RESULT_CONTRACT_MISMATCH,
+            }
+        ),
+    }
+)
+
+_KIND_TO_STATUS: Mapping[SourceErrorKind, SourceStatus] = MappingProxyType(
+    {kind: status for status, kinds in ALLOWED_ERROR_KINDS.items() for kind in kinds}
+)
+
+
+def status_for_error_kind(kind: SourceErrorKind) -> SourceStatus:
+    """The one ``SourceStatus`` a given ``SourceErrorKind`` belongs to."""
+    return _KIND_TO_STATUS[kind]
 
 # Statuses where the source could not have produced any usable extraction
 # at all -- metadata must be absent.
@@ -98,8 +160,8 @@ class SourceResult:
     - ``status == SUCCESS`` requires ``metadata`` to be present and to
       satisfy :meth:`NormalizedMetadata.meets_minimum_success`, and
       requires ``error_kind``/``error_detail`` to both be ``None``.
-    - Every non-success status requires ``error_kind`` to be the matching
-      :class:`SourceErrorKind` member and ``error_detail`` to be a
+    - Every non-success status requires ``error_kind`` to be a :class:`SourceErrorKind` member allowed for
+      that status (``ALLOWED_ERROR_KINDS``; the generic one always is) and ``error_detail`` to be a
       non-empty string -- callers can never leave the reason blank.
     - ``NOT_FOUND``/``BLOCKED``/``RATE_LIMITED``/``NETWORK_ERROR`` must not
       carry any ``metadata`` (nothing usable was ever extracted).
@@ -156,11 +218,11 @@ class SourceResult:
             )
 
     def _validate_failure(self) -> None:
-        expected_kind = _STATUS_TO_ERROR_KIND[self.status]
-        if self.error_kind is not expected_kind:
+        allowed = ALLOWED_ERROR_KINDS[self.status]
+        if not isinstance(self.error_kind, SourceErrorKind) or self.error_kind not in allowed:
             raise SourceResultContractError(
-                f"status={self.status.value} requires "
-                f"error_kind={expected_kind.value}, got {self.error_kind!r}"
+                f"status={self.status.value} requires error_kind in "
+                f"{sorted(kind.value for kind in allowed)}, got {self.error_kind!r}"
             )
         if not isinstance(self.error_detail, str) or not self.error_detail.strip():
             raise SourceResultContractError(

@@ -27,6 +27,7 @@ __all__ = [
     "HttpTransportError",
     "HttpTimeoutError",
     "HttpConnectionError",
+    "HttpDecodingError",
     "HttpRedirectLimitError",
     "HttpResponseTooLargeError",
 ]
@@ -47,6 +48,16 @@ class HttpTimeoutError(HttpTransportError):
 
 class HttpConnectionError(HttpTransportError):
     """DNS resolution, TCP connect, or TLS handshake failed."""
+
+
+class HttpDecodingError(HttpTransportError):
+    """The response body could not be decoded / decompressed (Phase 3 C2).
+
+    A transport-level failure of the same family as a dropped connection
+    (nothing usable was received), reported separately so retry policy can
+    tell it apart from DNS/connect/TLS failures without knowing which HTTP
+    library produced it.
+    """
 
 
 class HttpRedirectLimitError(HttpTransportError):

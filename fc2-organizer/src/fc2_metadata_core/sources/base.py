@@ -34,13 +34,19 @@ from typing import ClassVar
 from fc2_metadata_core.errors import InvalidCanonicalNumberInputError
 from fc2_metadata_core.http.client import (
     HttpConnectionError,
+    HttpDecodingError,
     HttpRedirectLimitError,
     HttpResponseTooLargeError,
     HttpTimeoutError,
     HttpTransportError,
     SourceHttpClient,
 )
-from fc2_metadata_core.models.source_result import SourceErrorKind, SourceResult, SourceStatus
+from fc2_metadata_core.models.source_result import (
+    SourceErrorKind,
+    SourceResult,
+    SourceStatus,
+    status_for_error_kind,
+)
 from fc2_metadata_core.normalize.fc2_number import is_valid_fc2_number
 
 __all__ = [
@@ -49,6 +55,8 @@ __all__ = [
     "classify_http_status",
     "classify_transport_error",
     "transport_error_result",
+    "classify_transport_failure",
+    "transport_failure_result",
 ]
 
 
@@ -100,7 +108,15 @@ _TRANSPORT_ERROR_KIND: tuple[tuple[type[HttpTransportError], SourceErrorKind], .
 
 
 def classify_transport_error(exc: HttpTransportError) -> SourceErrorKind:
-    """Map a ``SourceHttpClient`` transport exception to a ``SourceErrorKind``.
+    """**Coarse (pre-C2) classification**, kept for backward compatibility.
+
+    New code should use :func:`classify_transport_failure`, which distinguishes
+    timeout / connection / decode / redirect / too-large. This function still
+    returns the generic kinds, which is also exactly what an adapter that has not
+    adopted the refinement produces -- and the Phase 3 retry policy treats a
+    generic ``NETWORK_ERROR`` as a retryable transport failure for that reason.
+
+    Map a ``SourceHttpClient`` transport exception to a ``SourceErrorKind``.
 
     DNS/connect/TLS/timeout/redirect-loop failures are all
     ``NETWORK_ERROR`` (nothing was received to judge); a response that
@@ -128,6 +144,57 @@ def transport_error_result(
     return SourceResult(
         source_id=source_id,
         status=SourceStatus(error_kind.value),
+        metadata=None,
+        elapsed_ms=elapsed_ms,
+        error_kind=error_kind,
+        error_detail=f"{source_id}: transport error: {type(exc).__name__}: {exc}".rstrip(": "),
+    )
+
+
+_FINE_TRANSPORT_ERROR_KIND: tuple[tuple[type[HttpTransportError], SourceErrorKind], ...] = (
+    (HttpTimeoutError, SourceErrorKind.TIMEOUT),
+    (HttpConnectionError, SourceErrorKind.CONNECTION_ERROR),
+    (HttpDecodingError, SourceErrorKind.DECODE_ERROR),
+    (HttpRedirectLimitError, SourceErrorKind.REDIRECT_ERROR),
+    (HttpResponseTooLargeError, SourceErrorKind.RESPONSE_TOO_LARGE),
+)
+
+
+def classify_transport_failure(exc: HttpTransportError) -> SourceErrorKind:
+    """Fine-grained, structured classification of a transport exception (Phase 3 C2).
+
+    ==========================  ==================================  ================
+    exception                   ``SourceErrorKind``                 ``SourceStatus``
+    ==========================  ==================================  ================
+    ``HttpTimeoutError``        ``TIMEOUT``                         NETWORK_ERROR
+    ``HttpConnectionError``     ``CONNECTION_ERROR`` (DNS/TCP/TLS)  NETWORK_ERROR
+    ``HttpDecodingError``       ``DECODE_ERROR``                    NETWORK_ERROR
+    ``HttpRedirectLimitError``  ``REDIRECT_ERROR``                  NETWORK_ERROR
+    ``HttpResponseTooLarge...`` ``RESPONSE_TOO_LARGE``              INVALID_RESPONSE
+    any other transport error   ``NETWORK_ERROR`` (generic)         NETWORK_ERROR
+    ==========================  ==================================  ================
+
+    Retry decisions read this structured kind, never the error text.
+    """
+    for exc_type, kind in _FINE_TRANSPORT_ERROR_KIND:
+        if isinstance(exc, exc_type):
+            return kind
+    return SourceErrorKind.NETWORK_ERROR
+
+
+def transport_failure_result(
+    source_id: str, exc: HttpTransportError, *, elapsed_ms: float = 0.0
+) -> SourceResult:
+    """The failure ``SourceResult`` for a caught transport exception, with the
+    fine-grained ``error_kind`` from :func:`classify_transport_failure`.
+
+    ``error_detail`` names the exception type (and message if it has one); it is
+    for humans -- nothing may branch on it.
+    """
+    error_kind = classify_transport_failure(exc)
+    return SourceResult(
+        source_id=source_id,
+        status=status_for_error_kind(error_kind),
         metadata=None,
         elapsed_ms=elapsed_ms,
         error_kind=error_kind,

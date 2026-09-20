@@ -10,8 +10,10 @@ from fc2_metadata_core.sources.base import (
     SourceAdapter,
     classify_http_status,
     classify_transport_error,
+    classify_transport_failure,
     require_canonical_number,
     transport_error_result,
+    transport_failure_result,
 )
 from fc2_metadata_core.sources.registry import (
     DuplicateSourceIdError,
@@ -29,6 +31,8 @@ __all__ = [
     "classify_http_status",
     "classify_transport_error",
     "transport_error_result",
+    "classify_transport_failure",
+    "transport_failure_result",
     "SourceRegistry",
     "SourceRegistryError",
     "DuplicateSourceIdError",
