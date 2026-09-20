@@ -10,9 +10,20 @@ case over budget) instead of a hung test run.
 
 Old behaviour this pins against (measured at Phase 2 review, unclosed relevant
 tag + whitespace): fc2db_net 2000 spaces 2.9 s / 4000 spaces 63 s, av123
-2000 spaces 7.5 s, javdb 2000 spaces 3.7 s. The new parsers take single-digit
-milliseconds on 5 MiB, so the per-case budget below leaves ~100x CI headroom
-while still failing the old seconds-scale behaviour by a wide margin.
+2000 spaces 7.5 s, javdb 2000 spaces 3.7 s. On these *flat* hostile inputs (one
+unclosed tag plus filler, or a single marker repeated) the fixed parsers take
+about 15 ms or less, so the per-case budget below leaves large CI headroom while
+still failing the old seconds-scale behaviour by a wide margin.
+
+CORRECTION (Phase 3 entry C0 R1, C0-R1-01): this suite alone did NOT establish a
+*total* cost bound, and an earlier version of this docstring claimed
+"single-digit milliseconds on 5 MiB". It had no *combinatorial* shape (many
+items x marker occurrences x dense attribute tokens); the independent closure
+review found one that held the JavDB parser for seconds (~732 KiB = 1.2 s,
+~1.5 MiB = 3.8-4.5 s). That shape, and the item/probe budgets that now bound
+it, are covered by ``test_javdb_total_cost.py``; the "dense-attribute" tails in
+``support/adversarial_html.py`` guard the analogous shapes for the other two
+parsers.
 """
 
 from __future__ import annotations
