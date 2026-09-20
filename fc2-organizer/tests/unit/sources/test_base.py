@@ -90,6 +90,14 @@ def test_transport_error_result_produces_contract_valid_failure_result():
     assert result.error_kind is SourceErrorKind.NETWORK_ERROR
     assert result.metadata is None
     assert "boom" in result.error_detail
+    assert "HttpConnectionError" in result.error_detail
+
+
+def test_transport_error_detail_names_the_exception_even_when_its_message_is_empty():
+    # httpx timeouts stringify to "", which used to leave only "transport error: ".
+    result = transport_error_result("some_source", HttpTimeoutError(""))
+    assert result.status is SourceStatus.NETWORK_ERROR
+    assert result.error_detail == "some_source: transport error: HttpTimeoutError"
 
 
 # --- SourceAdapter identity enforcement --------------------------------------

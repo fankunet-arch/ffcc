@@ -131,7 +131,7 @@ def transport_error_result(
         metadata=None,
         elapsed_ms=elapsed_ms,
         error_kind=error_kind,
-        error_detail=f"{source_id}: transport error: {exc}",
+        error_detail=f"{source_id}: transport error: {type(exc).__name__}: {exc}".rstrip(": "),
     )
 
 
