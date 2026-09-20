@@ -17,6 +17,7 @@ __all__ = [
     "FC2MetadataCoreError",
     "MetadataContractError",
     "SourceResultContractError",
+    "InvalidCanonicalNumberInputError",
 ]
 
 
@@ -30,3 +31,16 @@ class MetadataContractError(FC2MetadataCoreError, ValueError):
 
 class SourceResultContractError(FC2MetadataCoreError, ValueError):
     """Raised when a ``SourceResult`` instance violates its status/error contract."""
+
+
+class InvalidCanonicalNumberInputError(FC2MetadataCoreError, ValueError):
+    """Raised when a source adapter is asked to look up a non-canonical number.
+
+    Phase 1 owns turning dirty input (filenames, free text) into a canonical
+    ``FC2-1234567`` string (see ``fc2_metadata_core.normalize``). A source
+    adapter's ``fetch`` is a Phase 2 boundary that only ever accepts an
+    already-canonical number: it must not re-implement filename parsing or
+    invent a fallback for garbage input. Passing anything else is a caller
+    (dispatcher) bug, reported explicitly here rather than silently
+    producing a fabricated or nonsensical lookup.
+    """

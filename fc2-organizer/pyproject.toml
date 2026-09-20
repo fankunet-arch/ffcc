@@ -1,8 +1,20 @@
 [project]
 name = "fc2-metadata-core"
 version = "0.1.0"
-description = "Independent FC2 metadata contracts and number normalization (Phase 1)."
+description = "Independent FC2 metadata contracts, source adapter framework, and number normalization."
 requires-python = ">=3.11"
+dependencies = [
+    # Phase 2: the only third-party runtime dependency. Needed for the
+    # production SourceHttpClient transport (fc2_metadata_core.http.httpx_client)
+    # so every source adapter shares one governed async HTTP client lifecycle
+    # instead of each constructing its own requests.Session()/httpx.Client()
+    # per fetch. Chosen over `requests` for first-class async support, which
+    # Phase 3's multi-source concurrency will need without a transport
+    # rewrite. Version range: 0.27.x is the current stable minor line as of
+    # this writing; pinned to that minor to avoid an unreviewed major-version
+    # behavior change landing silently.
+    "httpx>=0.27,<0.28",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -12,5 +24,5 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 testpaths = ["tests"]

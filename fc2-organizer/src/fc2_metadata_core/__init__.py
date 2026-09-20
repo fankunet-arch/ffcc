@@ -9,11 +9,12 @@ contract must be importable and testable in an environment where Amane is
 not installed at all. This is enforced by
 ``tests/contract/test_core_independent_of_amane.py``.
 
-Phase 1 only defines contracts (models, normalization, error semantics).
-It does not perform any network access, does not implement any site-specific
-scraper, and does not talk to Amane.
+Phase 1 defined contracts only (models, normalization, error semantics),
+with no network access and no site-specific scraper. Phase 2 adds the
+pluggable source adapter framework (``sources``) and its injectable HTTP
+transport (``http``), still with zero dependency on ``amane``.
 """
 
-from fc2_metadata_core import errors, models, normalize
+from fc2_metadata_core import errors, http, models, normalize, sources
 
-__all__ = ["errors", "models", "normalize"]
+__all__ = ["errors", "http", "models", "normalize", "sources"]

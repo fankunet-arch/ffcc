@@ -23,25 +23,76 @@ import pytest
 
 CORE_SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "fc2_metadata_core"
 
-CORE_MODULES = [
-    "fc2_metadata_core",
-    "fc2_metadata_core.errors",
-    "fc2_metadata_core.models",
-    "fc2_metadata_core.models.metadata",
-    "fc2_metadata_core.models.source_result",
-    "fc2_metadata_core.normalize",
-    "fc2_metadata_core.normalize.fc2_number",
-]
-
 
 def _iter_core_source_files() -> list[Path]:
     return sorted(CORE_SRC_ROOT.rglob("*.py"))
+
+
+def _module_name_from_source_file(path: Path) -> str:
+    """Map a source file under ``CORE_SRC_ROOT`` to its dotted module name.
+
+    ``.../fc2_metadata_core/models/metadata.py`` -> ``fc2_metadata_core.models.metadata``
+    ``.../fc2_metadata_core/models/__init__.py``  -> ``fc2_metadata_core.models``
+    """
+    relative = path.relative_to(CORE_SRC_ROOT.parent).with_suffix("")
+    parts = relative.parts
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def _discover_core_modules() -> list[str]:
+    """F4 closure: derive the module list to test from the filesystem itself.
+
+    Previously this was a hand-maintained list (``CORE_MODULES``) that a new
+    ``fc2_metadata_core`` module could be added without updating, silently
+    letting the dynamic Amane-independence check below drift out of sync
+    with the actual package tree. Deriving it from
+    ``_iter_core_source_files()`` -- the same file listing the static
+    AST check already uses -- means every new file under
+    ``fc2_metadata_core`` is automatically covered by both checks with no
+    second list to remember.
+    """
+    return sorted({_module_name_from_source_file(p) for p in _iter_core_source_files()})
+
+
+CORE_MODULES = _discover_core_modules()
 
 
 def test_core_source_root_exists_and_has_files():
     assert CORE_SRC_ROOT.is_dir(), f"expected {CORE_SRC_ROOT} to exist"
     files = _iter_core_source_files()
     assert files, "fc2_metadata_core has no source files to statically check"
+
+
+def test_module_name_from_source_file_maps_dunder_init_to_package_name():
+    package_file = CORE_SRC_ROOT / "sources" / "__init__.py"
+    assert _module_name_from_source_file(package_file) == "fc2_metadata_core.sources"
+
+
+def test_module_name_from_source_file_maps_plain_module():
+    module_file = CORE_SRC_ROOT / "sources" / "registry.py"
+    assert _module_name_from_source_file(module_file) == "fc2_metadata_core.sources.registry"
+
+
+def test_discovered_modules_have_no_duplicates_and_cover_every_file():
+    """F4 closure evidence: the discovered list is derived, not maintained by
+    hand, and its size tracks the file tree exactly -- one dotted module name
+    per source file, no more, no less."""
+    assert len(CORE_MODULES) == len(set(CORE_MODULES))
+    assert len(CORE_MODULES) == len(_iter_core_source_files())
+    assert "fc2_metadata_core" in CORE_MODULES
+
+
+def test_discovery_found_more_than_the_original_phase1_module_count():
+    """F4 regression guard: Phase 1 shipped with exactly 7 core modules under
+    a hand-maintained ``CORE_MODULES`` list that a new module could silently
+    bypass. Phase 2 adds ``fc2_metadata_core.http`` and
+    ``fc2_metadata_core.sources`` packages; this asserts the *discovery
+    mechanism itself* picked them up, with zero edits to this list, rather
+    than merely asserting today's fixed total (which would reintroduce the
+    exact hand-maintenance problem F4 closes)."""
+    assert len(CORE_MODULES) > 7
 
 
 @pytest.mark.parametrize(
