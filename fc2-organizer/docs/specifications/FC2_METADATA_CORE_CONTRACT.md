@@ -1,5 +1,11 @@
 # FC2 Metadata Core — Phase 1 Contract
 
+**Revision note (Phase 1 R1):** §2.1/§2.2/§2.3 were added/updated in R1 to
+close independent-review findings F1 (runtime type contract hole) and F2
+(`SourceResult` lifetime invariant breakable through mutable metadata). See
+`docs/review/PHASE1_R1_HANDOFF.md` for the review-round record. Everything
+else in this document is unchanged from the original Phase 1 submission.
+
 **Scope:** this document freezes the Phase 1 public contract of
 `fc2_metadata_core` (`fc2-organizer/src/fc2_metadata_core/`). It is a
 companion to the code and its tests, not a replacement for either — every
@@ -33,11 +39,10 @@ adapter), not Phase 1's.
 
 ## 2. `NormalizedMetadata`
 
-`fc2_metadata_core.models.NormalizedMetadata` — a partial-safe dataclass.
-Every field defaults to `None` (scalars) or an empty, independently
-allocated list/dict (collections) via `dataclasses.field(default_factory=...)`,
-so `NormalizedMetadata()` with no arguments is valid and two instances never
-share a mutable default (`tests/unit/core/test_metadata.py::TestMutableDefaultIsolation`).
+`fc2_metadata_core.models.NormalizedMetadata` — a **deeply immutable value
+object** (frozen dataclass; revised in R1, see §2.3). Every field defaults
+to `None` (scalars) or an empty immutable collection, so
+`NormalizedMetadata()` with no arguments is valid.
 
 Fields: `number`, `title`, `studio`, `publisher`, `release`, `runtime`,
 `actors`, `tags`, `plot`, `poster_urls`, `thumb_urls`, `fanart_urls`,
@@ -54,7 +59,99 @@ as `NormalizedMetadata.meets_minimum_success()`, backed by
 `has_valid_canonical_number()` and `has_non_empty_title()`. Covered by
 `tests/unit/core/test_metadata.py::TestMinimumSuccess` (number+title passes;
 number+empty/whitespace/missing title fails; title+missing/malformed number
-fails).
+fails). All three methods are **total predicates**: for any instance that
+was successfully constructed, they always return `bool` and never raise
+(`TestScalarTypeValidation::test_meets_minimum_success_never_raises_for_any_constructed_instance`).
+
+### 2.1 Runtime type contract (R1-01 / reviewer finding F1)
+
+R1 closed a hole where construction accepted any value for any field (e.g.
+`title=123`, `actors=[123]`) and the illegal value only surfaced later as a
+bare `AttributeError`/`TypeError` from `meets_minimum_success()` or similar
+— an undocumented exception leaking through what is supposed to be a domain
+contract boundary.
+
+`NormalizedMetadata` is a domain object: every field's runtime type is
+validated in `__post_init__` and any violation is rejected immediately as
+`MetadataContractError`, never later.
+
+| Field group | Required runtime shape | Rejected examples |
+|---|---|---|
+| `number`, `title`, `studio`, `publisher`, `release`, `plot` | `str \| None` | `title=123` |
+| `runtime` | `int \| None`, `bool` excluded, `>= 0` | `runtime=True`, `runtime=-1`, `runtime="1"` |
+| `actors`, `tags`, `poster_urls`, `thumb_urls`, `fanart_urls`, `extrafanart`, `source_urls` | a non-`str` sequence whose every element is `str` | `actors=[123]`, `actors="John"` (bare str rejected, not iterated char-by-char), `tags=123` (not iterable) |
+| `external_ids` | mapping of `str` key to `str` value | `{123: "x"}`, `{"x": 123}`, a `list` instead of a mapping |
+| `field_sources` | mapping of `str` key to a sequence of `str` | `{123: [...]}`, `{"title": [123]}`, `{"title": 123}` |
+
+Enforced by `tests/unit/core/test_metadata.py::TestScalarTypeValidation` and
+`::TestCollectionTypeValidation`, including the exact reviewer reproduction
+(`test_original_f1_reproduction_title_int_is_rejected_at_construction`).
+
+`SourceResult` mirrors this at its own boundary: `metadata` must be `None`
+or an actual `NormalizedMetadata` instance, or construction is rejected
+with `SourceResultContractError` — a caller passing e.g. `metadata=123`
+cannot get as far as `metadata.meets_minimum_success()` raising
+`AttributeError` (`tests/unit/core/test_source_result.py::TestMetadataTypeGuard`).
+
+### 2.2 Deep immutability (R1-02 / reviewer finding F2)
+
+R1 closed a lifetime hole: `SourceResult` was frozen, but the
+`NormalizedMetadata` it referenced was mutable, so a `SUCCESS` result's
+`metadata.meets_minimum_success()` guarantee (established in
+`SourceResult.__post_init__`) could be invalidated *after* construction by
+mutating the still-referenced `NormalizedMetadata` — outside any contract
+boundary. The same applied to a `PARSE_ERROR`/`INVALID_RESPONSE` result's
+partial metadata being mutated into something that meets minimum success
+after the fact.
+
+**Fix:** `NormalizedMetadata` is now deeply immutable, not just
+shallow-frozen:
+
+- The dataclass itself is `frozen=True`; scalar attribute (re)assignment
+  raises `dataclasses.FrozenInstanceError`.
+- Every sequence field (`actors`, `tags`, `poster_urls`, `thumb_urls`,
+  `fanart_urls`, `extrafanart`, `source_urls`) is snapshotted to a `tuple`
+  in `__post_init__` — `list.append`/`list[i] = ...` are simply not
+  available on the stored value.
+- `external_ids` and `field_sources` are snapshotted to
+  `types.MappingProxyType` over a freshly-built private `dict` — item
+  assignment/deletion raises `TypeError`.
+- `field_sources` values are themselves snapshotted to `tuple`, so
+  `field_sources["title"].append(...)` fails the same way sequence fields do.
+- Caller-owned input containers are copied at construction time (element by
+  element, not just re-wrapped), so mutating the original `list`/`dict`
+  *after* constructing a `NormalizedMetadata` never reaches the already-built
+  instance (no aliasing).
+
+Because `SourceResult` cannot have its own `metadata` field reassigned
+(frozen) and the referenced `NormalizedMetadata` cannot be mutated at any
+depth, a `SourceResult`'s invariants now hold for the object graph's entire
+lifetime, not just at the instant `__post_init__` ran.
+
+Enforced by `tests/unit/core/test_metadata.py::TestImmutability` and
+`::TestCallerOwnedInputAliasSafety`, and end-to-end through `SourceResult`
+by `tests/unit/core/test_source_result.py::TestSuccessLifetimeInvariant`,
+`::TestPartialFailureLifetimeInvariant`, and
+`::TestCallerOwnedAliasSafetyThroughSourceResult`.
+
+### 2.3 Consequence for Phase 3 (aggregation) — direction changed in R1
+
+The Phase 1 HANDOFF originally left `NormalizedMetadata` non-frozen with
+the stated rationale that "Phase 3 might need incremental in-place merge."
+**That rationale is withdrawn as of R1.** `NormalizedMetadata` is frozen
+architecture from here on:
+
+```text
+NormalizedMetadata = immutable value object
+```
+
+Phase 3's field-level aggregation must be **functional / copy-on-write**:
+read one or more immutable `NormalizedMetadata` inputs, compute a merge,
+and produce a *new* `NormalizedMetadata` instance. It must never attempt to
+mutate an already-constructed/published `NormalizedMetadata` in place —
+doing so is not possible through the public API (see §2.2) and must not be
+worked around via private attribute access or `object.__setattr__` from
+outside this module.
 
 ## 3. `SourceResult` / `SourceStatus` / `SourceErrorKind`
 
@@ -76,6 +173,7 @@ meaningless (and is forbidden) on a successful result.
 |---|---|
 | `source_id` must be non-empty / non-whitespace-only | `TestSourceIdInvariant` |
 | `elapsed_ms` must not be negative (int/float, not bool) | `TestElapsedMsInvariant` |
+| `metadata` must be `None` or an actual `NormalizedMetadata` instance (R1-01/F1) | `TestMetadataTypeGuard` |
 | `status == SUCCESS` requires `metadata` present **and** `metadata.meets_minimum_success()` | `TestSuccessInvariants` |
 | `status == SUCCESS` forbids `error_kind`/`error_detail` | `TestSuccessInvariants` |
 | every non-success status requires `error_kind == <matching SourceErrorKind>` | `TestErrorKindAndDetailConsistency` |

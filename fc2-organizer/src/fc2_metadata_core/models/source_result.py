@@ -90,6 +90,11 @@ class SourceResult:
 
     - ``source_id`` must be a non-empty (non-whitespace-only) string.
     - ``elapsed_ms`` must not be negative.
+    - ``metadata`` must be ``None`` or an actual :class:`NormalizedMetadata`
+      instance (R1-01/F1: a caller passing e.g. a plain ``int`` or ``dict``
+      is rejected here with :class:`SourceResultContractError`, never
+      allowed to construct and only fail later with a bare
+      ``AttributeError`` from ``metadata.meets_minimum_success()``).
     - ``status == SUCCESS`` requires ``metadata`` to be present and to
       satisfy :meth:`NormalizedMetadata.meets_minimum_success`, and
       requires ``error_kind``/``error_detail`` to both be ``None``.
@@ -101,6 +106,13 @@ class SourceResult:
     - ``PARSE_ERROR``/``INVALID_RESPONSE`` may optionally carry a partial
       ``metadata`` that does *not* meet minimum success (if it did, the
       status should have been ``SUCCESS``).
+
+    Lifetime (R1-02/F2): ``NormalizedMetadata`` is itself a deeply immutable
+    value object (see its docstring), and this dataclass is frozen, so once
+    a ``SourceResult`` is constructed there is no public API through which
+    any of the above invariants can be invalidated later -- not by
+    reassigning ``metadata``, not by mutating the referenced metadata's
+    scalars, and not by mutating its collection/mapping fields.
     """
 
     source_id: str
@@ -121,6 +133,11 @@ class SourceResult:
             raise SourceResultContractError("elapsed_ms must be an int or float")
         if self.elapsed_ms < 0:
             raise SourceResultContractError("elapsed_ms must not be negative")
+        if self.metadata is not None and not isinstance(self.metadata, NormalizedMetadata):
+            raise SourceResultContractError(
+                f"metadata must be a NormalizedMetadata or None, got "
+                f"{type(self.metadata)!r}"
+            )
 
         if self.status is SourceStatus.SUCCESS:
             self._validate_success()

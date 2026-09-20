@@ -291,3 +291,195 @@ class TestSourceResultIsImmutable:
         )
         with pytest.raises(Exception):
             result.status = SourceStatus.NOT_FOUND  # type: ignore[misc]
+
+
+class TestMetadataTypeGuard:
+    """R1-01 / F1 (SourceResult side): a caller passing a non-NormalizedMetadata
+    value for `metadata` must be rejected at the SourceResult contract
+    boundary, never allowed through to fail later with a bare AttributeError
+    from `metadata.meets_minimum_success()`."""
+
+    def test_original_f1_reproduction_int_metadata_is_rejected(self):
+        """The exact reviewer reproduction for the SourceResult side."""
+        with pytest.raises(SourceResultContractError):
+            SourceResult(
+                source_id="x",
+                status=SourceStatus.SUCCESS,
+                metadata=123,  # type: ignore[arg-type]
+                elapsed_ms=1,
+            )
+
+    def test_dict_metadata_is_rejected(self):
+        with pytest.raises(SourceResultContractError):
+            SourceResult(
+                source_id="x",
+                status=SourceStatus.SUCCESS,
+                metadata={"number": "FC2-1234567", "title": "T"},  # type: ignore[arg-type]
+                elapsed_ms=1,
+            )
+
+    def test_wrong_type_metadata_is_rejected_even_for_failure_statuses(self):
+        with pytest.raises(SourceResultContractError):
+            SourceResult(
+                source_id="x",
+                status=SourceStatus.PARSE_ERROR,
+                metadata="not a NormalizedMetadata",  # type: ignore[arg-type]
+                elapsed_ms=1,
+                error_kind=SourceErrorKind.PARSE_ERROR,
+                error_detail="could not parse",
+            )
+
+    def test_none_metadata_is_still_accepted_where_status_allows_it(self):
+        result = SourceResult(
+            source_id="x",
+            status=SourceStatus.NOT_FOUND,
+            metadata=None,
+            elapsed_ms=1,
+            error_kind=SourceErrorKind.NOT_FOUND,
+            error_detail="no such number on this source",
+        )
+        assert result.metadata is None
+
+
+class TestSuccessLifetimeInvariant:
+    """R1-02 / F2: once a SUCCESS SourceResult is constructed, no public API
+    can make `result.metadata.meets_minimum_success()` become False later.
+
+    NormalizedMetadata is now a deeply immutable value object, so every
+    mutation attempt below must itself fail (not silently succeed) --
+    which is exactly what keeps the SourceResult invariant intact for the
+    object's entire lifetime, not just at __post_init__ time."""
+
+    def _success_result(self) -> SourceResult:
+        md = _minimum_metadata()
+        return SourceResult(
+            source_id="source-a",
+            status=SourceStatus.SUCCESS,
+            metadata=md,
+            elapsed_ms=10.0,
+        )
+
+    def test_scalar_mutation_attempt_fails_and_invariant_survives(self):
+        result = self._success_result()
+        with pytest.raises(Exception):
+            result.metadata.title = ""  # type: ignore[misc]
+        assert result.metadata.meets_minimum_success() is True
+
+    def test_sequence_mutation_attempt_fails_and_invariant_survives(self):
+        md = NormalizedMetadata(
+            number="FC2-4825061", title="Example Title", actors=["A"]
+        )
+        result = SourceResult(
+            source_id="source-a",
+            status=SourceStatus.SUCCESS,
+            metadata=md,
+            elapsed_ms=10.0,
+        )
+        with pytest.raises(AttributeError):
+            result.metadata.actors.append("B")  # type: ignore[attr-defined]
+        assert result.metadata.meets_minimum_success() is True
+        assert result.metadata.actors == ("A",)
+
+    def test_mapping_mutation_attempt_fails_and_invariant_survives(self):
+        md = NormalizedMetadata(
+            number="FC2-4825061",
+            title="Example Title",
+            external_ids={"source-a": "ext-1"},
+        )
+        result = SourceResult(
+            source_id="source-a",
+            status=SourceStatus.SUCCESS,
+            metadata=md,
+            elapsed_ms=10.0,
+        )
+        with pytest.raises(TypeError):
+            result.metadata.external_ids["source-b"] = "ext-2"  # type: ignore[index]
+        assert result.metadata.meets_minimum_success() is True
+        assert dict(result.metadata.external_ids) == {"source-a": "ext-1"}
+
+    def test_nested_field_sources_mutation_attempt_fails_and_invariant_survives(self):
+        md = NormalizedMetadata(
+            number="FC2-4825061",
+            title="Example Title",
+            field_sources={"title": ["source-a"]},
+        )
+        result = SourceResult(
+            source_id="source-a",
+            status=SourceStatus.SUCCESS,
+            metadata=md,
+            elapsed_ms=10.0,
+        )
+        with pytest.raises(AttributeError):
+            result.metadata.field_sources["title"].append("source-z")  # type: ignore[attr-defined]
+        assert result.metadata.meets_minimum_success() is True
+        assert result.metadata.field_sources["title"] == ("source-a",)
+
+    def test_result_metadata_attribute_itself_cannot_be_reassigned(self):
+        result = self._success_result()
+        other = NormalizedMetadata(title="not minimum success on its own")
+        with pytest.raises(Exception):
+            result.metadata = other  # type: ignore[misc]
+        assert result.metadata.meets_minimum_success() is True
+
+
+class TestPartialFailureLifetimeInvariant:
+    """R1-02 / F2: a PARSE_ERROR/INVALID_RESPONSE SourceResult carrying
+    partial (non-minimum-success) metadata must never be mutable into a
+    metadata that meets minimum success after the fact."""
+
+    @pytest.mark.parametrize("status, error_kind", PARTIAL_ALLOWED_STATUSES)
+    def test_partial_metadata_cannot_be_mutated_into_minimum_success(
+        self, status, error_kind
+    ):
+        md = NormalizedMetadata(title="Only a title, no valid number")
+        result = SourceResult(
+            source_id="source-a",
+            status=status,
+            metadata=md,
+            elapsed_ms=10.0,
+            error_kind=error_kind,
+            error_detail="could not fully parse response",
+        )
+        assert result.metadata.meets_minimum_success() is False
+
+        with pytest.raises(Exception):
+            result.metadata.number = "FC2-4825061"  # type: ignore[misc]
+
+        assert result.metadata.meets_minimum_success() is False
+
+
+class TestCallerOwnedAliasSafetyThroughSourceResult:
+    """R1-02 / F2: mutating the caller's own input containers, or the
+    NormalizedMetadata instance directly, after it has already been used
+    to build a SourceResult, must never reach the constructed result."""
+
+    def test_mutating_original_metadata_instance_reference_cannot_succeed(self):
+        md = _minimum_metadata()
+        result = SourceResult(
+            source_id="source-a",
+            status=SourceStatus.SUCCESS,
+            metadata=md,
+            elapsed_ms=10.0,
+        )
+        assert result.metadata is md
+
+        with pytest.raises(Exception):
+            md.title = ""  # type: ignore[misc]
+
+        assert result.metadata.meets_minimum_success() is True
+
+    def test_caller_owned_list_mutation_after_source_result_construction_is_isolated(
+        self,
+    ):
+        actors = ["A"]
+        md = NormalizedMetadata(
+            number="FC2-4825061", title="Example Title", actors=actors
+        )
+        result = SourceResult(
+            source_id="source-a",
+            status=SourceStatus.SUCCESS,
+            metadata=md,
+            elapsed_ms=10.0,
+        )
+        actors.append("B")
+        assert result.metadata.actors == ("A",)
