@@ -1,0 +1,1338 @@
+{
+  "schema_version": 2,
+  "created_at": "2026-09-20T23:16:45+00:00",
+  "selection_method": {
+    "id": "PHASE3-50ID-SELECTION-v2",
+    "doc": "docs/acceptance/PHASE3_50_ID_SELECTION_METHOD.md",
+    "tool": "tools/select_50id_set.py",
+    "bands": [
+      {
+        "name": "older",
+        "min": 0,
+        "max_exclusive": 2000000,
+        "quota": 14
+      },
+      {
+        "name": "middle",
+        "min": 2000000,
+        "max_exclusive": 4000000,
+        "quota": 15
+      },
+      {
+        "name": "recent",
+        "min": 4000000,
+        "max_exclusive": 1000000000,
+        "quota": 14
+      }
+    ],
+    "mandatory": [
+      "FC2-4825061",
+      "FC2-4824605",
+      "FC2-4979299",
+      "FC2-4976588",
+      "FC2-1042815",
+      "FC2-4978035",
+      "FC2-4972767"
+    ],
+    "eligibility": "tier1 (>=2 confirmed external references) first; tier2 (exactly 1) only to fill a band's deficit"
+  },
+  "candidate_pool": {
+    "file": "docs/acceptance/PHASE3_CANDIDATE_POOL.json",
+    "sha256": "48e8300031f855e995114c30bf815843d5c61bcdcff42492803766b5b95a82e2",
+    "candidates": 167
+  },
+  "evidence_tier_counts": {
+    "dual_reference": 38,
+    "phase2_mandatory": 7,
+    "single_reference_fallback": 5
+  },
+  "ids": [
+    {
+      "number": "FC2-1042815",
+      "band": "older",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 0,
+      "validity_sources": [
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference); sukebei negative (no exact match); netflav negative (no exact match); no external reference confirmed",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1097500",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "single_reference_fallback",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "10"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1097500 in 1 torrent row(s); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1261799",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "single_reference_fallback",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "12"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1261799 in 1 torrent row(s); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1395953",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "single_reference_fallback",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "13"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1395953 in 1 torrent row(s); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1528279",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "single_reference_fallback",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "15"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1528279 in 1 torrent row(s); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1692217",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "single_reference_fallback",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "16"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1692217 in 1 torrent row(s); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1713543",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "17"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1713543 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1737461",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "17"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1737461 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1782986",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "17"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1782986 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1817510",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "18"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1817510 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1841311",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "18"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1841311 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1858921",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "18"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1858921 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1879883",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "18"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1879883 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1940353",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "19"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1940353 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-1977836",
+      "band": "older",
+      "selection_origin": "sampled:older",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "19"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-1977836 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2050468",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "20"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2050468 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2086710",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "20"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2086710 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2172250",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "21"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2172250 in 2 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2278260",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "22"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2278260 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2570996",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "25"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2570996 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2629560",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "26"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2629560 in 2 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2733270",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "27"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2733270 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2807093",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "28"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2807093 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2865991",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "28"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2865991 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2909140",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "29"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2909140 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-2954603",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "29"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-2954603 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-3078940",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "30"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-3078940 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-3084171",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "30"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-3084171 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-3119265",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "31"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-3119265 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-3178581",
+      "band": "middle",
+      "selection_origin": "sampled:middle",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "31"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-3178581 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4070093",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "40"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4070093 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4134556",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "41"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4134556 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4174411",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "41"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4174411 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4266906",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "42"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4266906 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4336025",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "43"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4336025 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4385140",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "43"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4385140 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4493606",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "44"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4493606 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4499275",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "44"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4499275 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4547366",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "45"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4547366 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4548410",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "45"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4548410 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4655045",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "46"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4655045 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4699133",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "46"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4699133 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4791899",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "47"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4791899 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4824605",
+      "band": "recent",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)",
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match_in_2_torrent_rows"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4824605 in 2 torrent row(s); exact 'fc2-ppv' code hit on netflav; frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4825061",
+      "band": "recent",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)",
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match_in_6_torrent_rows"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4825061 in 6 torrent row(s); exact 'fc2-ppv' code hit on netflav; frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4835063",
+      "band": "recent",
+      "selection_origin": "sampled:recent",
+      "validation_tier": "dual_reference",
+      "external_reference_count": 2,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "netflav.com search (exact code match)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "torrent_name_match_via_prefix_query",
+          "shared_with_prefix_query": "48"
+        },
+        "netflav": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4835063 in 1 torrent row(s); exact 'fc2-ppv' code hit on netflav",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4972767",
+      "band": "recent",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 0,
+      "validity_sources": [
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference); sukebei negative (no exact match); netflav negative (no exact match); no external reference confirmed",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4976588",
+      "band": "recent",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 0,
+      "validity_sources": [
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference); sukebei negative (no exact match); netflav negative (no exact match); no external reference confirmed",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4978035",
+      "band": "recent",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match_in_2_torrent_rows"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4978035 in 2 torrent row(s); frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    },
+    {
+      "number": "FC2-4979299",
+      "band": "recent",
+      "selection_origin": "phase2_frozen",
+      "validation_tier": "phase2_mandatory",
+      "external_reference_count": 1,
+      "validity_sources": [
+        "sukebei.nyaa.si torrent listing",
+        "Phase 2 frozen probe set (docs/PHASE2_PROBE_SET.md)"
+      ],
+      "reference_checks": {
+        "sukebei": {
+          "state": "confirmed",
+          "attempts": 1,
+          "detail": "exact_match_in_2_torrent_rows"
+        },
+        "netflav": {
+          "state": "negative",
+          "attempts": 1,
+          "detail": "no_exact_match"
+        }
+      },
+      "validity_note": "named FC2-PPV-4979299 in 2 torrent row(s); frozen at Phase 2 as a known-valid probe ID (provenance only, not an external reference); netflav negative (no exact match); single external reference (single-source validation)",
+      "validation_date": "2026-09-20"
+    }
+  ]
+}
