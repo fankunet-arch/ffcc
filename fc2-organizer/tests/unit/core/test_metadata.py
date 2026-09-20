@@ -1,9 +1,12 @@
 """Unit tests for NormalizedMetadata: minimum success, runtime type contract
-(R1-01/F1), and deep immutability (R1-02/F2).
+(R1-01/F1, tightened to Sequence[str] in R2-01/F1), deep immutability
+(R1-02/F2), and safe handling of a misbehaving accepted Sequence
+(R2-02/F2).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from types import MappingProxyType
 
 import pytest
@@ -182,6 +185,152 @@ class TestCollectionTypeValidation:
     def test_field_sources_rejects_non_sequence_value(self):
         with pytest.raises(MetadataContractError):
             NormalizedMetadata(field_sources={"title": 123})  # type: ignore[dict-item]
+
+
+class TestSequenceContractRejectsNonSequenceIterables:
+    """R2-01 / F1: the collection-field input contract is frozen as
+    `collections.abc.Sequence[str]`, not `Iterable[str]`. A `dict`, `set`,
+    `frozenset`, or generator must be rejected at construction, never
+    silently coerced (dict -> keys only, set/frozenset -> arbitrary order,
+    generator -> consumed then discarded)."""
+
+    def test_original_r1_reviewer_reproduction_dict_as_actors_is_rejected(self):
+        """The exact R1 incremental-review reproduction: a dict must not be
+        silently reduced to a tuple of its keys."""
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(actors={"Alice": 1, "Bob": 2})  # type: ignore[arg-type]
+
+    def test_original_r1_reviewer_reproduction_set_as_actors_is_rejected(self):
+        """set has no defined order; the Core must not accept an arbitrary
+        hash-seed-dependent element order as if it were caller intent."""
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(actors={"Alice", "Bob"})  # type: ignore[arg-type]
+
+    def test_original_r1_reviewer_reproduction_frozenset_as_actors_is_rejected(self):
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(actors=frozenset({"Alice", "Bob"}))  # type: ignore[arg-type]
+
+    def test_original_r1_reviewer_reproduction_generator_as_actors_is_rejected(self):
+        """A generator is not a Sequence; it must be rejected before being
+        consumed at all -- never partially/fully drained by this check."""
+        consumed = []
+
+        def gen():
+            consumed.append("started")
+            yield "Alice"
+            yield "Bob"
+
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(actors=gen())  # type: ignore[arg-type]
+
+        assert consumed == [], "generator body must never have been executed"
+
+    def test_list_and_tuple_are_still_accepted_with_stable_order(self):
+        md_from_list = NormalizedMetadata(actors=["Alice", "Bob"])
+        md_from_tuple = NormalizedMetadata(actors=("Alice", "Bob"))
+        assert md_from_list.actors == ("Alice", "Bob")
+        assert md_from_tuple.actors == ("Alice", "Bob")
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "actors",
+            "tags",
+            "poster_urls",
+            "thumb_urls",
+            "fanart_urls",
+            "extrafanart",
+            "source_urls",
+        ],
+    )
+    def test_dict_set_frozenset_generator_rejected_for_every_sequence_field(
+        self, field_name
+    ):
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(**{field_name: {"a": 1}})
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(**{field_name: {"a", "b"}})
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(**{field_name: frozenset({"a", "b"})})
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(**{field_name: (x for x in ["a", "b"])})
+
+    def test_field_sources_value_rejects_mapping_as_sequence(self):
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(
+                field_sources={"title": {"source-a": 1, "source-b": 2}}
+            )
+
+    def test_field_sources_value_rejects_set(self):
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(field_sources={"title": {"source-a", "source-b"}})
+
+    def test_field_sources_value_rejects_frozenset(self):
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(
+                field_sources={"title": frozenset({"source-a", "source-b"})}
+            )
+
+    def test_field_sources_value_rejects_generator(self):
+        with pytest.raises(MetadataContractError):
+            NormalizedMetadata(
+                field_sources={"title": (x for x in ["source-a", "source-b"])}
+            )
+
+    def test_field_sources_value_accepts_list_with_stable_order(self):
+        md = NormalizedMetadata(field_sources={"title": ["source-a", "source-b"]})
+        assert md.field_sources["title"] == ("source-a", "source-b")
+
+
+class _BrokenSequence(Sequence):
+    """A test double satisfying `collections.abc.Sequence` (has `__len__`
+    and `__getitem__`) whose iteration raises partway through -- used to
+    prove R2-02: an exception raised while reading an *accepted* Sequence
+    must be wrapped as MetadataContractError with the cause chained, not
+    leaked as a bare RuntimeError."""
+
+    def __len__(self) -> int:
+        return 2
+
+    def __getitem__(self, index: int) -> str:
+        if index == 0:
+            return "Alice"
+        raise RuntimeError("boom")
+
+
+class TestBrokenAcceptedSequenceIsWrapped:
+    """R2-02 / F2: an accepted-type Sequence that raises mid-iteration must
+    surface as MetadataContractError with the original exception chained,
+    not as a bare RuntimeError/ValueError/etc."""
+
+    def test_broken_sequence_raises_metadata_contract_error_with_chained_cause(self):
+        with pytest.raises(MetadataContractError) as exc_info:
+            NormalizedMetadata(actors=_BrokenSequence())
+
+        assert exc_info.value.__cause__ is not None
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+        assert "boom" in str(exc_info.value.__cause__)
+
+    def test_broken_sequence_is_not_a_bare_runtime_error(self):
+        try:
+            NormalizedMetadata(actors=_BrokenSequence())
+        except MetadataContractError:
+            pass  # expected
+        except RuntimeError:
+            pytest.fail("RuntimeError leaked as-is instead of being wrapped")
+
+    def test_broken_sequence_in_field_sources_value_is_also_wrapped(self):
+        with pytest.raises(MetadataContractError) as exc_info:
+            NormalizedMetadata(field_sources={"title": _BrokenSequence()})
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+    def test_own_element_type_error_is_not_double_wrapped(self):
+        """A MetadataContractError raised by our own element-type check
+        (not an external exception) must propagate unchanged -- not get
+        wrapped a second time by the broken-sequence exception handler."""
+        with pytest.raises(MetadataContractError) as exc_info:
+            NormalizedMetadata(actors=[123])
+        assert exc_info.value.__cause__ is None
 
 
 class TestImmutability:

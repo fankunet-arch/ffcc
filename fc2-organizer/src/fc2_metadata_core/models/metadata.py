@@ -39,12 +39,50 @@ The independent Phase 1 review found two related holes, closed here:
   field-level aggregation must build merged metadata *functionally*
   (read immutable inputs, produce a new ``NormalizedMetadata``), never by
   mutating an already-published instance in place.
+
+R2 (Phase 1 review round 2) hardening
+--------------------------------------
+The independent R1 review found the R1-01 fix incomplete (**F1 / R2-01**):
+sequence-field coercion accepted *any* ``Iterable``, not just an ordered
+``Sequence``. That silently accepted e.g. ``actors={"Alice": 1, "Bob": 2}``
+(a ``dict`` is iterable -- iterating it yields only its keys, discarding
+the values without warning) and ``actors={"Alice", "Bob"}`` (a ``set`` is
+iterable but unordered, so the resulting tuple's element order would
+depend on hash seed / insertion history rather than caller intent).
+
+The accepted input contract for every sequence-shaped field (the seven
+``_STR_SEQUENCE_FIELDS`` below, and each value of ``field_sources``) is now
+frozen as ``collections.abc.Sequence[str]`` specifically -- not
+``Iterable[str]``:
+
+- ``list``/``tuple`` (or any other genuine ``Sequence``): accepted,
+  snapshotted to ``tuple`` (unchanged from R1).
+- ``str``/``bytes``: rejected (unchanged from R1).
+- ``Mapping`` (``dict`` and friends): rejected explicitly, even though a
+  ``dict`` already fails the ``Sequence`` check on its own -- this keeps
+  the rejection reason explicit and defends against a hypothetical custom
+  type registered as both.
+- ``set``/``frozenset``: rejected. The Core deliberately does **not** sort
+  and accept them: field order may carry source/display meaning that the
+  Core must not invent on the caller's behalf.
+- generator/iterator/arbitrary ``Iterable`` that is not a ``Sequence``:
+  rejected *before* being consumed at all -- a one-shot iterable is never
+  touched, so there is no risk of partial consumption or a mid-stream
+  exception from something that was never a legal input.
+
+**F2 / R2-02**: even restricted to ``Sequence``, a custom ``Sequence``
+implementation could still raise mid-iteration (e.g. a broken
+``__getitem__``). Such an exception is now caught while reading an
+*accepted* Sequence and re-raised as ``MetadataContractError`` with the
+original exception chained via ``raise ... from exc`` -- never leaked
+as-is. Our own element-type ``MetadataContractError`` is re-raised
+unchanged (never double-wrapped).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from collections.abc import Mapping as MappingABC
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
@@ -68,26 +106,57 @@ _STR_SEQUENCE_FIELDS = (
 
 
 def _coerce_str_tuple(field_name: str, value: object) -> tuple[str, ...]:
-    """Validate that ``value`` is a sequence of ``str`` and snapshot it.
+    """Validate that ``value`` is an ordered ``Sequence[str]`` and snapshot it.
 
-    Explicitly rejects a bare ``str``/``bytes`` (both are technically
-    iterable-of-characters, which would otherwise silently accept e.g.
-    ``actors="John Doe"`` as if it were a one-character-per-actor list).
+    R2/F1: the accepted input contract is ``collections.abc.Sequence``
+    (e.g. ``list``/``tuple``), not merely ``Iterable``. Explicitly rejected:
+
+    - a bare ``str``/``bytes`` (iterable-of-characters; would otherwise
+      silently accept e.g. ``actors="John Doe"`` as a one-character list);
+    - any ``Mapping`` (iterating it would silently yield only its keys,
+      discarding the values -- checked explicitly even though a ``dict``
+      already fails the ``Sequence`` check below, as defense in depth);
+    - ``set``/``frozenset`` (unordered -- the Core must not invent an
+      ordering, e.g. by sorting, on the caller's behalf);
+    - a generator/iterator or any other merely-``Iterable``,
+      non-``Sequence`` object (rejected before being consumed at all, so a
+      one-shot iterable is never partially/fully drained by this check).
+
+    R2/F2: if reading an *accepted* ``Sequence`` itself raises (a custom
+    ``Sequence`` implementation misbehaving mid-iteration), that exception
+    is not leaked as-is -- it is wrapped as ``MetadataContractError`` with
+    the original exception chained via ``from``. Our own element-type
+    ``MetadataContractError`` is re-raised unchanged, never double-wrapped.
     """
     if isinstance(value, (str, bytes)):
         raise MetadataContractError(
-            f"{field_name} must be a sequence of str, not a bare str/bytes"
+            f"{field_name} must be an ordered Sequence[str], not a bare str/bytes"
         )
-    if not isinstance(value, Iterable):
-        raise MetadataContractError(f"{field_name} must be a sequence of str")
+    if isinstance(value, MappingABC):
+        raise MetadataContractError(
+            f"{field_name} must be an ordered Sequence[str], not a mapping"
+        )
+    if not isinstance(value, Sequence):
+        raise MetadataContractError(
+            f"{field_name} must be an ordered Sequence[str] (e.g. list or "
+            f"tuple), got {type(value)!r}"
+        )
 
     items: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            raise MetadataContractError(
-                f"{field_name} elements must all be str, found {type(item)!r}"
-            )
-        items.append(item)
+    try:
+        for item in value:
+            if not isinstance(item, str):
+                raise MetadataContractError(
+                    f"{field_name} elements must all be str, found {type(item)!r}"
+                )
+            items.append(item)
+    except MetadataContractError:
+        raise
+    except Exception as exc:
+        raise MetadataContractError(
+            f"{field_name} raised an unexpected error while being read: {exc}"
+        ) from exc
+
     return tuple(items)
 
 

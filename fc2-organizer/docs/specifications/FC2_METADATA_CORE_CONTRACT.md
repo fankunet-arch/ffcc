@@ -3,8 +3,17 @@
 **Revision note (Phase 1 R1):** §2.1/§2.2/§2.3 were added/updated in R1 to
 close independent-review findings F1 (runtime type contract hole) and F2
 (`SourceResult` lifetime invariant breakable through mutable metadata). See
-`docs/review/PHASE1_R1_HANDOFF.md` for the review-round record. Everything
-else in this document is unchanged from the original Phase 1 submission.
+`docs/review/PHASE1_R1_HANDOFF.md` for the review-round record.
+
+**Revision note (Phase 1 R2):** the R1 incremental-closure review found the
+R1-01 fix only partial: collection fields accepted any `Iterable`, not just
+an ordered `Sequence` — silently discarding a `dict`'s values (keys-only)
+or accepting a `set`/`frozenset` in a hash-seed-dependent order. §2.1 below
+is updated to the R2-frozen contract (`Sequence[str]`, not `Iterable[str]`),
+and now also documents that a misbehaving *accepted* Sequence's exception is
+wrapped rather than leaked. See `docs/review/PHASE1_R2_HANDOFF.md`.
+Everything else in this document is unchanged from the original Phase 1
+submission.
 
 **Scope:** this document freezes the Phase 1 public contract of
 `fc2_metadata_core` (`fc2-organizer/src/fc2_metadata_core/`). It is a
@@ -79,9 +88,9 @@ validated in `__post_init__` and any violation is rejected immediately as
 |---|---|---|
 | `number`, `title`, `studio`, `publisher`, `release`, `plot` | `str \| None` | `title=123` |
 | `runtime` | `int \| None`, `bool` excluded, `>= 0` | `runtime=True`, `runtime=-1`, `runtime="1"` |
-| `actors`, `tags`, `poster_urls`, `thumb_urls`, `fanart_urls`, `extrafanart`, `source_urls` | a non-`str` sequence whose every element is `str` | `actors=[123]`, `actors="John"` (bare str rejected, not iterated char-by-char), `tags=123` (not iterable) |
+| `actors`, `tags`, `poster_urls`, `thumb_urls`, `fanart_urls`, `extrafanart`, `source_urls` | an ordered `collections.abc.Sequence[str]` (see §2.1a — **not** merely `Iterable[str]`) | `actors=[123]`, `actors="John"` (bare str rejected), `tags=123` (not a Sequence) |
 | `external_ids` | mapping of `str` key to `str` value | `{123: "x"}`, `{"x": 123}`, a `list` instead of a mapping |
-| `field_sources` | mapping of `str` key to a sequence of `str` | `{123: [...]}`, `{"title": [123]}`, `{"title": 123}` |
+| `field_sources` | mapping of `str` key to an ordered `Sequence[str]` value (same §2.1a rule as above, applied per value) | `{123: [...]}`, `{"title": [123]}`, `{"title": 123}`, `{"title": {"a", "b"}}` |
 
 Enforced by `tests/unit/core/test_metadata.py::TestScalarTypeValidation` and
 `::TestCollectionTypeValidation`, including the exact reviewer reproduction
@@ -92,6 +101,52 @@ or an actual `NormalizedMetadata` instance, or construction is rejected
 with `SourceResultContractError` — a caller passing e.g. `metadata=123`
 cannot get as far as `metadata.meets_minimum_success()` raising
 `AttributeError` (`tests/unit/core/test_source_result.py::TestMetadataTypeGuard`).
+
+### 2.1a Collection input contract is `Sequence[str]`, not `Iterable[str]` (R2-01 / reviewer finding F1)
+
+The R1 fix above validated collection *elements* but coerced via a bare
+`isinstance(value, Iterable)` check, which is too permissive: a `dict` is
+`Iterable` (iterating it silently yields only its keys, discarding values
+with no error), and a `set`/`frozenset` is `Iterable` but has no defined
+order, so freezing it to a `tuple` would bake in an arbitrary
+hash-seed-dependent element order the caller never asked for.
+
+**R2 freezes the accepted input contract for every one of the seven
+sequence fields above, and for each `field_sources` value, as
+`collections.abc.Sequence[str]` specifically:**
+
+| Input kind | Outcome | Why |
+|---|---|---|
+| `list[str]` / `tuple[str, ...]` / any genuine `Sequence` | **accepted**, snapshotted to `tuple[str, ...]` | ordered, exactly what the caller wrote |
+| `str` / `bytes` | **rejected** (`MetadataContractError`) | would otherwise be iterated character-by-character |
+| `Mapping` (`dict`, ...) | **rejected** (`MetadataContractError`) | iterating yields keys only, silently discarding values |
+| `set` / `frozenset` | **rejected** (`MetadataContractError`) | unordered; the Core does not invent an order (e.g. by sorting) on the caller's behalf — field order may carry source/display meaning |
+| generator / iterator / any other `Iterable` that is not a `Sequence` | **rejected** (`MetadataContractError`), *before being consumed at all* | one-shot; consuming it before rejecting would risk partial consumption or a mid-stream exception from something that was never a legal input |
+
+This closes the R1 incremental-review reproduction:
+`NormalizedMetadata(actors={"Alice": 1, "Bob": 2})` (a `dict`) and
+`NormalizedMetadata(actors={"Alice", "Bob"})` (a `set`) both now raise
+`MetadataContractError` instead of silently producing `("Alice", "Bob")`
+(keys-only) or a hash-order-dependent tuple.
+
+**R2-02 / reviewer finding F2 — a misbehaving *accepted* Sequence must not
+leak its exception as-is.** Even after narrowing to `Sequence`, a custom
+`Sequence` implementation could still raise mid-iteration (e.g. a broken
+`__getitem__`). Reading such a value now catches any exception raised
+*while iterating an accepted Sequence* and re-raises it as
+`MetadataContractError` with the original exception chained
+(`raise MetadataContractError(...) from exc`), preserving the root cause
+for debugging without leaking a bare `RuntimeError`/`ValueError`/etc. Our
+own element-type `MetadataContractError` (e.g. `actors=[123]`) is
+re-raised unchanged — never double-wrapped.
+
+Enforced by `tests/unit/core/test_metadata.py::TestSequenceContractRejectsNonSequenceIterables`
+(dict/set/frozenset/generator rejected for every sequence field and for
+`field_sources` values, generator body never executed, list/tuple still
+accepted with stable order) and `::TestBrokenAcceptedSequenceIsWrapped`
+(a `collections.abc.Sequence` test double that raises mid-iteration is
+wrapped with `__cause__` chained; our own validation error is not
+double-wrapped).
 
 ### 2.2 Deep immutability (R1-02 / reviewer finding F2)
 
