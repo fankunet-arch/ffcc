@@ -12,9 +12,10 @@ not installed at all. This is enforced by
 Phase 1 defined contracts only (models, normalization, error semantics),
 with no network access and no site-specific scraper. Phase 2 adds the
 pluggable source adapter framework (``sources``) and its injectable HTTP
-transport (``http``), still with zero dependency on ``amane``.
+transport (``http``). Phase 3 C1 adds multi-source execution and deterministic
+field-level aggregation (``aggregation``). Zero dependency on ``amane``.
 """
 
-from fc2_metadata_core import errors, http, models, normalize, sources
+from fc2_metadata_core import aggregation, errors, http, models, normalize, sources
 
-__all__ = ["errors", "http", "models", "normalize", "sources"]
+__all__ = ["aggregation", "errors", "http", "models", "normalize", "sources"]
