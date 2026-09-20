@@ -30,6 +30,29 @@ claude/phase-0-amane-integration-fnvhpq
 **Not a PASS declaration.** This is a candidate for C0 independent closure
 review. **Phase 3 functional implementation has NOT started.**
 
+> **CORRECTION (added at Phase 3 Entry C0 R1; the original text below is kept
+> unchanged).** This document claimed, in *C0-02 Result* and in *Behaviour
+> changes* item 5, that the worst 5 MiB hostile case took about **10.4 ms** and
+> that parser cost was "**milliseconds at the 5 MiB cap**". The independent C0
+> closure review (verdict: FAIL, finding **C0-R1-01**) disproved that as a
+> *total* cost conclusion:
+>
+> - the adversarial suite behind the claim contained only *flat* hostile inputs
+>   (one unclosed tag plus filler, or one marker repeated). It did **not** cover
+>   the reviewer-shaped JavDB case: a result list near the item cap whose
+>   opening tags repeatedly spell the class-token markers (`video-title`,
+>   `meta`) among filler;
+> - on that shape the C0 JavDB parser (`8b16bdb`) took, per the reviewer,
+>   **~732 KiB = 1.2 s, ~1.5 MiB = 3.8-4.5 s, ~1.8 MiB = ~5.5 s**, against
+>   ~2.8 ms for the real fixture;
+> - so "10.4 ms worst case" and "milliseconds at the 5 MiB cap" are **not** valid
+>   as a whole-parser bound (every primitive was capped, but the caps
+>   multiplied);
+> - C0-01, C0-03, C0-04 and C0-05 were not affected. C0-02's *catastrophic
+>   regex* fix stands (the reviewer's original 2-4 KB reproductions are fixed);
+>   the residual *combinatorial* cost is closed by **C0 R1**, see
+>   `docs/review/PHASE3_ENTRY_C0_R1_HANDOFF.md`.
+
 ## Required Closure Set
 
 Only C0-01..C0-05 were touched. P2-R-05..P2-R-12 were deliberately left alone
@@ -111,7 +134,9 @@ its window is *not found* (never "everything to end of page"). Transport
 quotes repeated to 5 MiB; and a *valid* real fixture followed by hostile
 tails: unclosed / nested JSON-LD, `/work-tags/` spam, `watch__info-row` spam,
 unclosed `<dd>`, `video-title` / `item` / `movie-list` spam). Worst case in my
-run: **10.4 ms on 5 MiB** (all three parsers, all cases). Hostile pages give
+run: **10.4 ms on 5 MiB** (all three parsers, all cases) **[this figure is for that
+flat suite only; it is not a total bound - see the correction at the top of this
+document]**. Hostile pages give
 `PARSE_ERROR` / `INVALID_RESPONSE`; a genuine page with junk appended still
 parses.
 
@@ -271,8 +296,9 @@ rewrites changed how pages are scanned, not what is extracted).
 4. `duration_to_minutes` rejects more malformed input than before (seconds > 59
    etc.) — a tightening, and only ever yields `None`.
 5. The parsers are still synchronous CPU work inside `async fetch`; C0 makes
-   the cost *bounded* (milliseconds at the 5 MiB cap), it does not move it off
-   the event loop.
+   the cost *bounded* (milliseconds at the 5 MiB cap **[incorrect as a total
+   bound for JavDB - corrected at C0 R1, see the note at the top]**), it does not
+   move it off the event loop.
 6. javdb still unescapes the title attribute twice (kept as-is on purpose:
    P2-R-10 is deferred, and changing it is outside the C0 set).
 
