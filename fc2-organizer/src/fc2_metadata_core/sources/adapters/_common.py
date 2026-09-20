@@ -29,15 +29,22 @@ __all__ = [
     "unique_in_order",
 ]
 
-_TAG_RE = re.compile(r"<[^>]+>")
+# ``[^<>]*`` (not ``[^>]+``): a tag body can never contain another '<', so each
+# attempt stops at the next '<' or '>' and a string full of stray '<' stays
+# linear instead of rescanning to the end once per '<'.
+_TAG_RE = re.compile(r"<[^<>]*+>")
 _WS_RE = re.compile(r"\s+")
-# "55:23" -> mm:ss, "1:02:03" -> h:mm:ss. Providers never show days.
-_DURATION_RE = re.compile(r"^\s*(?:(\d{1,2}):)?(\d{1,3}):(\d{2})\s*$")
+# "55:23" -> mm:ss, "1:02:03" -> h:mm:ss. Providers never show days. ASCII
+# digits only ([0-9], not \d): int() would happily accept Arabic-Indic digits.
+_DURATION_RE = re.compile(r"(?:([0-9]{1,2}):)?([0-9]{1,3}):([0-9]{2})")
+_MAX_DURATION_TEXT_CHARS = 64
 
 # Only ever reads the first couple of KB: a Cloudflare interstitial is a tiny
 # page whose <title> is this literal, whereas a real metadata page that merely
 # *mentions* the phrase deep in its body must not be misread as blocked.
-_CHALLENGE_TITLE_RE = re.compile(r"<title[^>]*>\s*(just a moment|attention required)", re.IGNORECASE)
+_CHALLENGE_TITLE_RE = re.compile(
+    r"<title[^>]*+>\s*+(just a moment|attention required)", re.IGNORECASE
+)
 
 
 def failure_result(
@@ -129,19 +136,27 @@ def clean_text(fragment: str) -> str:
 
 
 def duration_to_minutes(text: str | None) -> int | None:
-    """``"55:23"`` -> 55, ``"1:02:03"`` -> 62 (whole minutes, seconds dropped).
+    """Clock duration -> ``NormalizedMetadata.runtime`` (whole minutes).
 
-    ``NormalizedMetadata.runtime`` is a bare ``int``; the Core's NFO-facing
-    convention is minutes. Anything not shaped like a clock duration -> ``None``
-    (a missing runtime is a partial field, never an error).
+    ``"55:23"`` -> 55, ``"1:02:03"`` -> 62, ``"55:59"`` -> 55: the seconds are
+    **truncated**, never rounded (unit frozen at Phase 3 Entry C0-04, see
+    ``docs/specifications/FC2_METADATA_CORE_CONTRACT.md``; Kodi's ``<runtime>``
+    is minutes only). Anything not shaped like an ASCII clock duration ->
+    ``None`` (a missing runtime is a partial field, never an error).
     """
     if not text:
         return None
-    match = _DURATION_RE.match(text)
+    if len(text) > _MAX_DURATION_TEXT_CHARS:  # checked before strip(): no copy of a huge string
+        return None
+    match = _DURATION_RE.fullmatch(text.strip())
     if match is None:
         return None
-    hours = int(match.group(1) or 0)
-    return hours * 60 + int(match.group(2))
+    hours_text, minutes_text, seconds_text = match.groups()
+    if int(seconds_text) > 59:
+        return None  # "55:75" is not a clock duration
+    if hours_text is not None and (len(minutes_text) != 2 or int(minutes_text) > 59):
+        return None  # h:mm:ss needs two-digit minutes below 60 ("1:2:03", "1:75:00")
+    return int(hours_text or 0) * 60 + int(minutes_text)
 
 
 def digits_of(number: str) -> str:

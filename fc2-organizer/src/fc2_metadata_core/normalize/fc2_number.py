@@ -28,7 +28,9 @@ string such as a filename)::
   ``-``/``_`` separators, or none at all. This covers ``FC2-PPV-1234567``,
   ``FC2PPV-1234567``, ``FC2PPV1234567``, ``FC2-1234567`` and
   ``FC2_1234567``.
-- ``DIGITS`` must be a contiguous run of 5 to 8 digits (``_MIN_DIGITS`` /
+- ``DIGITS`` must be a contiguous run of 5 to 8 **ASCII** digits ``[0-9]``
+  (Unicode digits such as fullwidth or Arabic-Indic ones are not FC2 digits;
+  C0-01) (``_MIN_DIGITS`` /
   ``_MAX_DIGITS`` below). FC2 PPV numbers in circulation today are 6-7
   digits; the 5-8 window gives headroom for growth while still rejecting
   implausible digit blobs (dates glued together, resolutions, hashes) that
@@ -71,15 +73,26 @@ __all__ = [
 MIN_FC2_DIGITS = 5
 MAX_FC2_DIGITS = 8
 
+# Digits are ASCII ``[0-9]`` everywhere in this module, deliberately *not*
+# ``\d``: in Python 3 ``str`` patterns ``\d`` matches every Unicode decimal
+# digit (fullwidth ``１２３``, Arabic-Indic ``٤٨٢``, ...). Those are not FC2
+# numbers, and one that slipped through as "canonical" would be interpolated
+# into a request URL by a source adapter. The ``(?<!\d)`` / ``(?!\d)``
+# guards below are the one place ``\d`` is used on purpose: a digit run that
+# is glued to a *non-ASCII* digit is not a clean token either, so it is
+# refused rather than silently truncated at the ASCII part.
 _FC2_TOKEN_PATTERN = (
-    r"(?<![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])(?<!\d)"
     r"FC2[-_]*(?:PPV[-_]*)?"
-    rf"(\d{{{MIN_FC2_DIGITS},{MAX_FC2_DIGITS}}})"
-    r"(?![A-Za-z0-9])"
+    rf"([0-9]{{{MIN_FC2_DIGITS},{MAX_FC2_DIGITS}}})"
+    r"(?![A-Za-z0-9])(?!\d)"
 )
 _FC2_TOKEN_RE = re.compile(_FC2_TOKEN_PATTERN, re.IGNORECASE)
 
-CANONICAL_FC2_PATTERN = rf"^FC2-\d{{{MIN_FC2_DIGITS},{MAX_FC2_DIGITS}}}$"
+# Anchored with ``\A``/``\Z``, never ``^``/``$``: ``$`` also matches just
+# before a trailing newline, so ``"FC2-1234567"`` plus a newline used to
+# count as canonical.
+CANONICAL_FC2_PATTERN = rf"\AFC2-[0-9]{{{MIN_FC2_DIGITS},{MAX_FC2_DIGITS}}}\Z"
 _CANONICAL_FC2_RE = re.compile(CANONICAL_FC2_PATTERN)
 
 
@@ -155,4 +168,4 @@ def is_valid_fc2_number(value: object) -> bool:
     """
     if not isinstance(value, str):
         return False
-    return _CANONICAL_FC2_RE.match(value) is not None
+    return _CANONICAL_FC2_RE.fullmatch(value) is not None

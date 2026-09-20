@@ -16,8 +16,8 @@ Code Review Candidate (FINAL_PHASE2_CODE_HEAD):
 Review range:
 e6472f948f885c52e6f4c62cf29383e9dcd3d4e3..3a23e6fa9a351b5c3bc6d2159028177616f98371
 
-Current Docs Head:
-reported externally after this docs commit
+Phase 2 Reviewed Docs Head:
+4e7883e87bd6195080d1eb5afcefda0a8897600d
 
 Branch:
 claude/phase-0-amane-integration-fnvhpq
@@ -25,6 +25,20 @@ claude/phase-0-amane-integration-fnvhpq
 
 **This is a review candidate, not a PASS declaration.** Phase 3 (aggregation)
 has not been started.
+
+> **Corrections applied at Phase 3 Entry C0-05** (facts only, after the
+> independent Phase 2 review returned PASS WITH NON-BLOCKING NOTES; nothing
+> else in this document was rewritten):
+> 1. the header no longer says the Docs Head was "reported externally" (a
+>    self-reference placeholder) — it now records the reviewed Docs Head;
+> 2. the "all my commits are local / nothing pushed" line was wrong once
+>    Phase 2 was pushed and has been replaced (see *Local workspace notes*);
+> 3. the live near-misses for `FC2-4824605` are `FC2-1824605` and
+>    `FC2-4724605` (an earlier draft wrote `FC2-1825061`, which is the near-miss
+>    for `FC2-4825061`);
+> 4. the test count is recorded as 309 collected / 309 passed, and the
+>    "80 new offline tests" wording in the `45be2b7` commit message is noted as
+>    a rough historical description (history is not amended).
 
 ## What Phase 2 delivers
 
@@ -91,7 +105,7 @@ re-run at `3a21c4b` and passed. Both passes are in the JSON.
    `fc2db_net` + `av123` alone (2 sources), but with only one Japanese-title
    source.
 2. **`javdb` search is fuzzy.** The adapter accepts only the hit whose number
-   equals the request; near-misses (`FC2-1825061`, `FC2-4724605` for
+   equals the request; near-misses (`FC2-1824605`, `FC2-4724605` for
    `4824605`) give `NOT_FOUND`. Tested offline against the real fuzzy page
    and live (`FC2-4824605` → `NOT_FOUND`).
 3. **`NormalizedMetadata.runtime` unit.** The Core contract only says
@@ -143,7 +157,7 @@ Offline suite (no network):
 ```text
 cd fc2-organizer
 python -m pytest -q
-309 passed
+309 collected / 309 passed
 ```
 
 Breakdown of the change from the 228 at the WIP checkpoint: **+76** new tests in
@@ -152,8 +166,10 @@ registration 3), **+1** in `tests/unit/sources/test_base.py`, and **+4**
 because `tests/contract/test_core_independent_of_amane.py` is parametrized
 over every module in the package and therefore automatically covers the four
 new modules (`_common`, `fc2db_net`, `av123`, `javdb`) — so none of them
-imports Amane. (My `45be2b7` commit message says "80 new offline tests"; the
-precise numbers are the ones above.)
+imports Amane. (The `45be2b7` commit message says "80 new offline tests"; that
+is only a rough description in a historical commit message, which is
+deliberately not amended. The numbers above are the record: 309 collected /
+309 passed.)
 
 Adapter tests use fixtures under `tests/fixtures/sources/`, each a *verbatim
 excerpt of a real response* (provenance comment at the top of each file);
@@ -205,7 +221,9 @@ python tools/probe_sources.py adapter --source av123     FC2-4825061 FC2-4979299
   a `PytestCacheWarning`; all tests pass. Minimal fix (elevated PowerShell,
   this directory only):
   `takeown /f .pytest_cache /r /d y; icacls .pytest_cache /reset /t; Remove-Item -Recurse -Force .pytest_cache`.
-- All my commits are local; nothing after `948fc23` has been pushed.
+- Push status: Phase 2 (through Docs Head `4e7883e87bd6195080d1eb5afcefda0a8897600d`)
+  has been pushed to `origin/claude/phase-0-amane-integration-fnvhpq` and
+  independently reviewed (PASS WITH NON-BLOCKING NOTES).
 
 ## Phase 3 NOT started
 

@@ -12,6 +12,11 @@ or accepting a `set`/`frozenset` in a hash-seed-dependent order. §2.1 below
 is updated to the R2-frozen contract (`Sequence[str]`, not `Iterable[str]`),
 and now also documents that a misbehaving *accepted* Sequence's exception is
 wrapped rather than leaked. See `docs/review/PHASE1_R2_HANDOFF.md`.
+**Revision note (Phase 3 Entry C0):** §4 now freezes the canonical digit
+semantics as strictly ASCII `[0-9]` with full-string matching (C0-01), and
+§2.1b freezes the unit of `runtime` as whole minutes (C0-04). See
+`docs/review/PHASE3_ENTRY_C0_HANDOFF.md`.
+
 Everything else in this document is unchanged from the original Phase 1
 submission.
 
@@ -87,7 +92,7 @@ validated in `__post_init__` and any violation is rejected immediately as
 | Field group | Required runtime shape | Rejected examples |
 |---|---|---|
 | `number`, `title`, `studio`, `publisher`, `release`, `plot` | `str \| None` | `title=123` |
-| `runtime` | `int \| None`, `bool` excluded, `>= 0` | `runtime=True`, `runtime=-1`, `runtime="1"` |
+| `runtime` | `int \| None`, `bool` excluded, `>= 0`; unit = whole minutes (§2.1b) | `runtime=True`, `runtime=-1`, `runtime="1"` |
 | `actors`, `tags`, `poster_urls`, `thumb_urls`, `fanart_urls`, `extrafanart`, `source_urls` | an ordered `collections.abc.Sequence[str]` (see §2.1a — **not** merely `Iterable[str]`) | `actors=[123]`, `actors="John"` (bare str rejected), `tags=123` (not a Sequence) |
 | `external_ids` | mapping of `str` key to `str` value | `{123: "x"}`, `{"x": 123}`, a `list` instead of a mapping |
 | `field_sources` | mapping of `str` key to an ordered `Sequence[str]` value (same §2.1a rule as above, applied per value) | `{123: [...]}`, `{"title": [123]}`, `{"title": 123}`, `{"title": {"a", "b"}}` |
@@ -101,6 +106,30 @@ or an actual `NormalizedMetadata` instance, or construction is rejected
 with `SourceResultContractError` — a caller passing e.g. `metadata=123`
 cannot get as far as `metadata.meets_minimum_success()` raising
 `AttributeError` (`tests/unit/core/test_source_result.py::TestMetadataTypeGuard`).
+
+### 2.1b `runtime` unit: whole minutes (frozen at Phase 3 Entry C0-04)
+
+```text
+runtime: int | None
+unit     = whole minutes
+range    = >= 0
+```
+
+Seconds are **truncated** (not rounded) when a source reports a clock
+duration: `"55:23"` -> `55`, `"55:59"` -> `55`, `"1:02:03"` -> `62`. A value
+that is not an ASCII clock duration (`mm:ss` / `h:mm:ss`) becomes `None`
+(a missing runtime is a partial field, never an error). The reference
+implementation is `fc2_metadata_core.sources.adapters._common.duration_to_minutes`.
+
+Rationale: the end goal includes Kodi Movie NFO, whose `<runtime>` element is
+minutes only. Phase 1 froze only the *type* (`int >= 0`, §2.1) and did **not**
+fix a unit; the unit was frozen at Phase 3 Entry C0. Every adapter shipped in
+Phase 2 already emitted whole minutes, so no adapter behaviour changed.
+Phase 3 may therefore merge `runtime` values across sources without a unit
+conversion.
+
+Enforced by `tests/unit/sources/adapters/test_adapter_common.py` and
+`tests/unit/sources/adapters/test_runtime_minutes.py`.
 
 ### 2.1a Collection input contract is `Sequence[str]`, not `Iterable[str]` (R2-01 / reviewer finding F1)
 
@@ -273,6 +302,11 @@ FC2 [-_]* (PPV [-_]*)? DIGITS{5,8}
 - `FC2` and the optional `PPV` literal may be joined by zero or more
   `-`/`_` separators, or none. Covers `FC2-PPV-1234567`, `FC2PPV-1234567`,
   `FC2PPV1234567`, `FC2-1234567`, `FC2_1234567`.
+- Digits are **ASCII `[0-9]` only** (frozen at Phase 3 Entry C0-01). Python's
+  `\d` and `$` are wider than this grammar (`\d` matches every Unicode
+  decimal digit; `$` also matches before a trailing newline), so they are
+  not used: fullwidth (`１２３`) and Arabic-Indic (`٤٨٢`) digits are not FC2
+  digits, and a digit run glued to one is not a clean token either.
 - The digit run must be 5 to 8 digits long (`MIN_FC2_DIGITS` /
   `MAX_FC2_DIGITS` in `fc2_number.py`). Current real FC2 PPV numbers are
   6-7 digits; 5-8 gives headroom while still rejecting implausible digit
@@ -288,8 +322,17 @@ FC2 [-_]* (PPV [-_]*)? DIGITS{5,8}
 - The canonical output is always `FC2-<digits>` (uppercase, single dash).
 
 `is_valid_fc2_number(value)` checks whether a string is *already* in that
-exact canonical shape (`^FC2-\d{5,8}$`); it does not extract from noisy
-text. This is what `NormalizedMetadata.has_valid_canonical_number()` uses.
+exact canonical shape, as a **full-string** match of `FC2-[0-9]{5,8}` (no
+trailing newline or other trailing/leading character accepted); it does not
+extract from noisy text. This is what
+`NormalizedMetadata.has_valid_canonical_number()` and every source adapter's
+`require_canonical_number` use, so a value that fails it never reaches a
+request URL. `"FC2-1234567\n"`, `"FC2-１２３４５６７"`, `"FC2-٤٨٢٤٦٠٥"`,
+`"FC2-1234567XYZ"` and `"XFC2-1234567"` are all rejected
+(`tests/unit/core/test_fc2_number_canonical_boundary.py`,
+`tests/unit/sources/adapters/test_adapter_canonical_boundary.py`).
+`normalize_fc2_number` uses the same ASCII digit semantics, so the two can
+never disagree about what a digit is.
 
 ### Positive regression set (`tests/unit/core/test_normalize_fc2_number.py`)
 

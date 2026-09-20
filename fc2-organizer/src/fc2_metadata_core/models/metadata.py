@@ -217,6 +217,11 @@ class NormalizedMetadata:
     copied at construction time, so mutating them afterwards never reaches
     the constructed instance, and the instance itself exposes no mutable
     attribute, list, or dict to the outside once built.
+
+    ``runtime`` is a non-negative ``int`` number of **whole minutes** (unit
+    frozen at Phase 3 Entry C0-04; see the contract, section 2.1b). Sources
+    that report a clock duration are converted by truncating the seconds
+    (``55:59`` -> 55), never rounding. Before C0 only the *type* was frozen.
     """
 
     number: str | None = None

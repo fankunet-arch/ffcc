@@ -32,6 +32,11 @@ from fc2_metadata_core.sources.adapters._common import (
     unique_in_order,
     with_field_sources,
 )
+from fc2_metadata_core.sources.adapters._scan import (
+    inner_until,
+    iter_open_tags,
+    open_tag_containing,
+)
 from fc2_metadata_core.sources.base import (
     SourceAdapter,
     require_canonical_number,
@@ -40,27 +45,76 @@ from fc2_metadata_core.sources.base import (
 
 __all__ = ["Fc2dbNetAdapter", "parse_fc2db_work_page"]
 
-_H1_RE = re.compile(r"<h1[^>]*>\s*\[FC2-PPV-(\d+)\]\s*(.*?)\s*</h1>", re.DOTALL)
-_LD_JSON_RE = re.compile(
-    r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE
-)
-_TAG_LINK_RE = re.compile(r'<a[^>]+href="[^"]*/work-tags/[^"]*"[^>]*>(.*?)</a>', re.DOTALL)
+# The heading text is "[FC2-PPV-N] Title" (ASCII digits only -- C0-01).
+_HEADING_RE = re.compile(r"\[FC2-PPV-([0-9]{1,12})\]")
+_MAX_HEADING_CHARS = 2000
+_MAX_JSON_LD_CHARS = 200_000
+_MAX_TAG_LINK_HITS = 400
+_MAX_TAG_TEXT_CHARS = 500
+
+
+def _heading(html_text: str) -> tuple[str, str] | None:
+    """``(digits, title)`` from the first *closed* ``<h1>[FC2-PPV-N] ...</h1>``.
+
+    An ``<h1>`` that is never closed within ``_MAX_HEADING_CHARS`` is ignored
+    (it is "not found"), so a broken page can neither be read as a giant
+    title nor make the scan super-linear.
+    """
+    for tag in iter_open_tags(html_text, "h1", limit=20):
+        inner = inner_until(html_text, tag.end, "</h1>", _MAX_HEADING_CHARS)
+        if inner is None:
+            continue
+        text = clean_text(inner)
+        match = _HEADING_RE.match(text)
+        if match is not None:
+            return match.group(1), text[match.end() :].strip()
+    return None
 
 
 def _video_object(html_text: str) -> dict[str, Any]:
     """The page's schema.org ``VideoObject`` block, or ``{}``.
 
-    Malformed JSON-LD is ignored rather than fatal: it only carries optional
-    fields, and number/title come from the visible ``<h1>``.
+    Malformed (or absurdly nested) JSON-LD is ignored rather than fatal: it
+    only carries optional fields, and number/title come from the visible
+    ``<h1>``.
     """
-    for raw in _LD_JSON_RE.findall(html_text):
+    pos = 0
+    for _ in range(10):
+        hit = html_text.find("application/ld+json", pos)
+        if hit < 0:
+            break
+        pos = hit + 1
+        tag = open_tag_containing(html_text, hit)
+        if tag is None or tag.name != "script":
+            continue
+        body = inner_until(html_text, tag.end, "</script>", _MAX_JSON_LD_CHARS)
+        if body is None:
+            continue
         try:
-            data = json.loads(raw)
-        except ValueError:
+            data = json.loads(body)
+        except (ValueError, RecursionError):
             continue
         if isinstance(data, dict) and data.get("@type") == "VideoObject":
             return data
     return {}
+
+
+def _tags(html_text: str) -> tuple[str, ...]:
+    """Texts of ``<a href=".../work-tags/...">`` links (bounded number of hits)."""
+    found: list[str] = []
+    pos = 0
+    for _ in range(_MAX_TAG_LINK_HITS):
+        hit = html_text.find("/work-tags/", pos)
+        if hit < 0:
+            break
+        pos = hit + 1
+        tag = open_tag_containing(html_text, hit)
+        if tag is None or tag.name != "a":
+            continue
+        inner = inner_until(html_text, tag.end, "</a>", _MAX_TAG_TEXT_CHARS)
+        if inner is not None:
+            found.append(clean_text(inner))
+    return unique_in_order(found)
 
 
 def _named(items: Any) -> list[str]:
@@ -77,16 +131,15 @@ def parse_fc2db_work_page(html_text: str, number: str, page_url: str, source_id:
     Returns ``(metadata, None)`` on success or ``(None, (status, detail))`` when
     the page is not the requested work / has no usable title.
     """
-    match = _H1_RE.search(html_text)
-    if match is None:
-        return None, (SourceStatus.PARSE_ERROR, f"{source_id}: no '[FC2-PPV-N] title' heading found")
-    page_digits, raw_title = match.group(1), match.group(2)
+    heading = _heading(html_text)
+    if heading is None:
+        return None, (SourceStatus.PARSE_ERROR, f"{source_id}: no closed '[FC2-PPV-N] title' heading found")
+    page_digits, title = heading
     if page_digits != digits_of(number):
         return None, (
             SourceStatus.INVALID_RESPONSE,
             f"{source_id}: page is for FC2-{page_digits}, requested {number}",
         )
-    title = clean_text(raw_title)
     if not title:
         return None, (SourceStatus.PARSE_ERROR, f"{source_id}: heading for {number} has an empty title")
 
@@ -96,7 +149,7 @@ def parse_fc2db_work_page(html_text: str, number: str, page_url: str, source_id:
     release = video.get("uploadDate") if isinstance(video.get("uploadDate"), str) else None
     thumb = video.get("thumbnailUrl") if isinstance(video.get("thumbnailUrl"), str) else None
     duration = video.get("duration") if isinstance(video.get("duration"), str) else None
-    tags = unique_in_order(clean_text(t) for t in _TAG_LINK_RE.findall(html_text))
+    tags = _tags(html_text)
 
     metadata = with_field_sources(
         source_id,
