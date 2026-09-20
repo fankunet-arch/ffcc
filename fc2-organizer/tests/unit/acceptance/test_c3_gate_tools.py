@@ -1,4 +1,4 @@
-"""Phase 3 C3: the acceptance tooling (candidate-pool builder, deterministic selector, 50-ID gate runner).
+"""Phase 3 C3: the 50-ID gate runner (the pool builder and selector have their own v2 test modules).
 
 Fully offline. Guards what makes the gate trustworthy: the selection is deterministic and cannot see engine
 results; the pool builder is engine-independent; the runner's metric counts PARTIAL-with-metadata as covered,
@@ -11,7 +11,6 @@ import ast
 import asyncio
 import importlib.util
 import json
-import random
 import tempfile
 from pathlib import Path
 
@@ -35,8 +34,6 @@ def load(name):
     return module
 
 
-pool_tool = load("build_candidate_pool")
-select_tool = load("select_50id_set")
 gate = load("run_50id_coverage_gate")
 
 N = "FC2-4979299"
@@ -61,181 +58,6 @@ def test_pool_builder_and_selector_are_engine_independent(tool):
     mods = imported_modules(TOOLS / f"{tool}.py")
     banned = [m for m in mods if m.startswith(("fc2_metadata_core.aggregation", "fc2_metadata_core.sources", "fc2_metadata_core.http"))]
     assert banned == [], f"{tool} must not import the engine / adapters / transport: {banned}"
-
-
-# ---- candidate pool builder ---------------------------------------------------------------------------------------------------------------------
-
-
-SUKEBEI_PAGE = """
-<table><tbody>
-<tr class="default"><td><a href="/view/101" title="FC2-PPV-2304688 素人 title A">x</a></td></tr>
-<tr class="default"><td><a href="/view/102" title="FC2PPV_2304688 mirror">x</a></td></tr>
-<tr class="default"><td><a href="/view/103" title="[1080p] FC2 PPV 2305735 B">x</a></td></tr>
-<tr class="default"><td><a href="/view/104" title="FC2-PPV-83654 old six digit">x</a></td></tr>
-<tr class="default"><td><a href="/view/105" title="FC2-PPV-23047 too short? no five digits">x</a></td></tr>
-<tr class="default"><td><a href="/view/106" title="no fc2 here 2399999">x</a></td></tr>
-<tr class="default"><td><a href="/view/107" title="FC2-PPV-12345678901 too long">x</a></td></tr>
-</tbody></table>
-FC2-PPV-2311111 outside any row title must be ignored
-"""
-
-
-def test_sukebei_ids_come_from_torrent_names_only_and_are_counted():
-    counts = pool_tool.sukebei_torrent_ids(SUKEBEI_PAGE)
-    assert counts["2304688"] == 2 and counts["2305735"] == 1 and counts["83654"] == 1 and counts["23047"] == 1
-    assert "2399999" not in counts and "2311111" not in counts and "12345678901" not in counts
-
-
-def test_prefix_candidates_keep_only_seven_digit_ids_with_the_prefix_ascending():
-    counts = pool_tool.sukebei_torrent_ids(SUKEBEI_PAGE)
-    assert pool_tool.prefix_candidates(counts, "23") == ["2304688", "2305735"]
-    assert pool_tool.prefix_candidates(counts, "99") == []
-
-
-def test_pick_per_prefix_is_an_even_deterministic_stride():
-    ids = [str(2_000_000 + i) for i in range(10)]
-    assert pool_tool.pick_per_prefix(ids, 4) == [ids[1], ids[3], ids[6], ids[8]]
-    assert pool_tool.pick_per_prefix(ids, 4) == pool_tool.pick_per_prefix(list(ids), 4)
-    assert pool_tool.pick_per_prefix(ids[:3], 4) == ids[:3]
-    assert pool_tool.pick_per_prefix([], 4) == []
-
-
-def netflav_page(*codes):
-    docs = [{"code": c, "title": "t"} for c in codes]
-    payload = {"props": {"initialState": {"search": {"docs": docs}}}}
-    return f'<html><script id="__NEXT_DATA__" type="application/json">{json.dumps(payload)}</script></html>'
-
-
-def test_netflav_needs_an_exact_code_match_not_a_fuzzy_neighbour():
-    page = netflav_page("fc2-ppv 4825061", "FC2-PPV-1825061")
-    assert pool_tool.netflav_exact_hit(page, "4825061") is True
-    assert pool_tool.netflav_exact_hit(page, "1825061") is True
-    assert pool_tool.netflav_exact_hit(page, "4825062") is False
-    assert pool_tool.netflav_exact_hit(netflav_page("FC2-PPV-1825061"), "4825061") is False, "fuzzy neighbour must not corroborate"
-    assert pool_tool.netflav_exact_hit(netflav_page("abc 4825061"), "4825061") is False
-
-
-@pytest.mark.parametrize("html", ["", "<html></html>", '<script id="__NEXT_DATA__">{not json</script>', '<script id="__NEXT_DATA__">{"props":{}}</script>',
-                                  '<script id="__NEXT_DATA__">{"props":{"initialState":{"search":{"docs":"x"}}}}</script>'])
-def test_netflav_malformed_pages_are_simply_not_a_hit(html):
-    assert pool_tool.netflav_exact_hit(html, "4825061") is False
-
-
-def test_references_treat_any_failure_as_not_confirmed_and_never_raise():
-    calls = []
-
-    def handler(request):
-        calls.append(str(request.url))
-        if "netflav" in request.url.host:
-            return httpx.Response(503, text="down")
-        raise httpx.ConnectError("boom", request=request)
-
-    async def scenario():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            refs = pool_tool.References(client, 0.0)
-            return await refs.sukebei("FC2-PPV-23*"), await refs.netflav("2304688"), refs.failures
-
-    assert asyncio.run(scenario()) == ({}, False, 2)
-
-
-def test_pool_entry_records_sources_and_never_a_body():
-    entry = pool_tool._entry("2304688", torrents=2, netflav=True, origin="enumerated", phase2_note=None, today="2026-09-20")
-    assert entry["number"] == "FC2-2304688" and entry["band"] == "middle" and entry["external_reference_count"] == 2
-    assert entry["validation_date"] == "2026-09-20" and len(entry["validity_sources"]) == 2
-    single = pool_tool._entry("2304688", torrents=1, netflav=False, origin="enumerated", phase2_note=None, today="d")
-    assert single["external_reference_count"] == 1 and "single-source validation" in single["validity_note"]
-    none = pool_tool._entry("1", torrents=0, netflav=False, origin="phase2_frozen", phase2_note="p2", today="d")
-    assert none["external_reference_count"] == 0 and any("Phase 2" in s for s in none["validity_sources"])
-
-
-# ---- deterministic selector ---------------------------------------------------------------------------------------------------------------------
-
-
-PHASE2_SEVEN = ("FC2-4825061", "FC2-4824605", "FC2-4979299", "FC2-4976588", "FC2-1042815", "FC2-4978035", "FC2-4972767")
-
-
-def test_the_phase2_frozen_ids_are_the_same_seven_everywhere():
-    assert select_tool.MANDATORY == PHASE2_SEVEN == pool_tool.PHASE2_FROZEN_IDS
-    assert sum(q for *_, q in select_tool.BANDS) + len(select_tool.MANDATORY) == select_tool.TOTAL == 50
-
-
-def synthetic_pool(*, older=40, middle=50, recent=40, single_source_every=5):
-    entries = []
-
-    def add(n, refs):
-        entries.append({"number": f"FC2-{n}", "external_reference_count": refs, "validity_sources": ["a", "b"][:refs] or ["p2"],
-                        "validity_note": "n", "validation_date": "2026-09-20", "origin": "enumerated"})
-
-    for i in range(older):
-        add(1_000_000 + i * 20_000, 1 if i % single_source_every == 0 else 2)
-    for i in range(middle):
-        add(2_000_001 + i * 30_000, 1 if i % single_source_every == 0 else 2)
-    for i in range(recent):
-        add(4_000_003 + i * 20_000, 1 if i % single_source_every == 0 else 2)
-    for number in select_tool.MANDATORY:
-        add(int(number.split("-")[1]), 0)
-    return entries
-
-
-def test_selector_yields_exactly_50_with_the_frozen_quotas_and_all_mandatory_ids():
-    chosen = select_tool.select(synthetic_pool())
-    numbers = [c["number"] for c in chosen]
-    assert len(numbers) == 50 == len(set(numbers))
-    assert set(select_tool.MANDATORY) <= set(numbers)
-    sampled = [c for c in chosen if c["selection_origin"].startswith("sampled:")]
-    assert {b: sum(1 for c in sampled if c["selection_origin"] == f"sampled:{b}") for b in ("older", "middle", "recent")} == {"older": 14, "middle": 15, "recent": 14}
-    assert numbers == sorted(numbers, key=lambda n: int(n.split("-")[1]))
-
-
-def test_selection_is_deterministic_and_independent_of_input_order_and_duplicates():
-    pool = synthetic_pool()
-    baseline = [c["number"] for c in select_tool.select(pool)]
-    for seed in range(5):
-        shuffled = pool + pool[:7]  # duplicates too
-        random.Random(seed).shuffle(shuffled)
-        assert [c["number"] for c in select_tool.select(shuffled)] == baseline
-
-
-def test_single_reference_entries_are_never_sampled_but_mandatory_ids_are_kept_regardless():
-    chosen = select_tool.select(synthetic_pool())
-    for c in chosen:
-        if c["selection_origin"].startswith("sampled:"):
-            assert c["external_reference_count"] >= 2
-    assert {c["number"] for c in chosen if c["selection_origin"] == "phase2_frozen"} == set(select_tool.MANDATORY)
-
-
-def test_the_selection_spans_older_middle_and_recent_ranges():
-    chosen = select_tool.select(synthetic_pool())
-    digits = [int(c["number"].split("-")[1]) for c in chosen]
-    assert sum(d < 2_000_000 for d in digits) >= 14 and sum(2_000_000 <= d < 4_000_000 for d in digits) >= 15 and sum(d >= 4_000_000 for d in digits) >= 14
-    assert max(digits) - min(digits) > 3_000_000
-
-
-def test_an_insufficient_band_is_an_error_never_a_silent_shift():
-    with pytest.raises(select_tool.SelectionError, match="older"):
-        select_tool.select(synthetic_pool(older=10))
-    with pytest.raises(select_tool.SelectionError, match="lacks Phase 2 frozen"):
-        select_tool.select([e for e in synthetic_pool() if e["number"] != "FC2-4825061"])
-    with pytest.raises(select_tool.SelectionError, match="non-canonical"):
-        select_tool.select(synthetic_pool() + [{"number": "not-a-number", "external_reference_count": 2}])
-
-
-def test_the_selector_ignores_everything_but_the_pool_no_clock_no_randomness():
-    text = (TOOLS / "select_50id_set.py").read_text(encoding="utf-8")
-    body = text[text.index("def select("):text.index("def build_set_document")]
-    assert "random" not in body and "datetime" not in body and "time." not in body
-
-
-def test_set_document_has_the_required_fields_and_no_response_data():
-    pool_doc = {"entries": synthetic_pool()}
-    document = select_tool.build_set_document(pool_doc, "0" * 64, created_at="2026-09-20T00:00:00+00:00")
-    assert {"schema_version", "created_at", "selection_method", "ids"} <= set(document)
-    assert len(document["ids"]) == 50
-    for item in document["ids"]:
-        assert {"number", "validity_sources", "validity_note", "validation_date"} <= set(item)
-    dumped = json.dumps(document).lower()
-    for forbidden in ("cookie", "authorization", "token", "password", "<html", "set-cookie"):
-        assert forbidden not in dumped
 
 
 # ---- the gate runner ---------------------------------------------------------------------------------------------------------------------------------
