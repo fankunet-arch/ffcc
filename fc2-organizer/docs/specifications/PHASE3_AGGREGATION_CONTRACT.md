@@ -119,8 +119,8 @@ Factories other than classes remain supported.
   source outcome stops another source.
 - **Cancellation.** `asyncio.CancelledError` (the caller cancelling the aggregate
   lookup), `KeyboardInterrupt` and `SystemExit` are **never** turned into a
-  source result: they propagate, and in-flight sibling executions are cancelled
-  (`asyncio.TaskGroup`).
+  source result: they propagate (the *original* exception object, unwrapped), and
+  in-flight sibling executions are cancelled (`asyncio.TaskGroup`).
 - **Fail closed.** Whatever an adapter returns goes through
   `validate_source_result(slot_id, number, candidate)`: a non-`SourceResult`, a
   result labelled with a different `source_id`, or a `SUCCESS` whose

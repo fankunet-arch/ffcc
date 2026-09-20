@@ -337,8 +337,10 @@ def test_keyboard_interrupt_and_system_exit_are_never_swallowed_as_source_failur
     async def raises(number, client):
         raise exc_type()
 
-    with pytest.raises((exc_type, BaseExceptionGroup)):
+    # the ORIGINAL object propagates (not wrapped in a BaseExceptionGroup)
+    with pytest.raises(exc_type) as info:
         execute([target("x", raises), target("good", instant("good"))])
+    assert type(info.value) is exc_type
 
 
 def test_cancelled_error_raised_by_an_outer_wait_for_still_propagates():
