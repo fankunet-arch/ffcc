@@ -42,6 +42,7 @@ _MAX_DURATION_TEXT_CHARS = 64
 # Only ever reads the first couple of KB: a Cloudflare interstitial is a tiny
 # page whose <title> is this literal, whereas a real metadata page that merely
 # *mentions* the phrase deep in its body must not be misread as blocked.
+_CHALLENGE_SCAN_CHARS = 4000
 _CHALLENGE_TITLE_RE = re.compile(
     r"<title[^>]*+>\s*+(just a moment|attention required)", re.IGNORECASE
 )
@@ -83,13 +84,17 @@ def classify_page_response(
     ``None`` means "a normal 200 page: go on and parse it". Never returns a
     success -- HTTP 200 alone never proves a lookup worked.
 
-    - 404 -> ``NOT_FOUND``; 429 -> ``RATE_LIMITED``; 403 -> ``BLOCKED``
-    - a Cloudflare-style interstitial (``cf-mitigated: challenge`` header, or
-      the well-known "Just a moment..." page even under a 200) -> ``BLOCKED``.
-      Nothing here tries to solve or bypass it.
+    Checked in this order (first match wins):
+
+    - ``cf-mitigated: challenge`` header -> ``BLOCKED``.
     - a redirect that ended on one of ``blocked_url_markers`` (e.g. a login or
       age-verification page) -> ``BLOCKED``: the site wants a private
       session we deliberately do not have.
+    - a Cloudflare-style interstitial *body* (a ``<title>`` of "Just a moment..." /
+      "Attention required" near the top) **under any HTTP status** -- 200, 403, 429,
+      5xx ... -> ``BLOCKED`` (C3-E01). Nothing here tries to solve or bypass a
+      challenge, and a ``BLOCKED`` result is never retried.
+    - 404 -> ``NOT_FOUND``; 429 -> ``RATE_LIMITED``; 403 -> ``BLOCKED``
     - HTTP 500-599 -> ``INVALID_RESPONSE`` with ``error_kind=HTTP_SERVER_ERROR``:
       still an operational failure for aggregation, but structurally a *server-side*
       failure, the only ``INVALID_RESPONSE`` the retry policy treats as transient
@@ -117,6 +122,18 @@ def classify_page_response(
                 elapsed_ms=elapsed,
             )
 
+    # Status-independent (Phase 3 C3-E01, closes C2 review M1): an interstitial is
+    # frequently served with 403/429/503 and *without* a cf-mitigated header. Checked
+    # before the status classification so it can never be downgraded to a retryable
+    # HTTP_SERVER_ERROR (or to RATE_LIMITED / NOT_FOUND): a challenge is BLOCKED, once.
+    if _CHALLENGE_TITLE_RE.search(response.text[:_CHALLENGE_SCAN_CHARS]):
+        return failure_result(
+            source_id,
+            SourceStatus.BLOCKED,
+            f"{source_id}: anti-bot interstitial (HTTP {response.status_code}) for {number}; not bypassed",
+            elapsed_ms=elapsed,
+        )
+
     hinted = classify_http_status(response.status_code)
     if hinted is not None:
         return failure_result(
@@ -143,13 +160,6 @@ def classify_page_response(
             elapsed_ms=elapsed,
         )
 
-    if _CHALLENGE_TITLE_RE.search(response.text[:4000]):
-        return failure_result(
-            source_id,
-            SourceStatus.BLOCKED,
-            f"{source_id}: anti-bot interstitial served with HTTP 200 for {number}",
-            elapsed_ms=elapsed,
-        )
     return None
 
 
