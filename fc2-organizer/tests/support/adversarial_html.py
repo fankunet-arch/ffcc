@@ -79,17 +79,33 @@ def build_cases() -> list[tuple[str, str, str, str]]:
     # A *valid* page followed by adversarial tails: every later extraction stage
     # (JSON-LD, tag links, info rows, item list) runs on hostile input while the
     # heading is genuine, so the time cost of those stages is exercised too.
+    # C0-R1-01 lesson: "each primitive is capped" is not "the parser is bounded".
+    # These are the *combinatorial* analogues for the other two parsers -- many
+    # opening tags each carrying ~1.4 KB of one-character attribute tokens that
+    # spell the markers the parser searches for (measured ~13 ms worst; kept as
+    # a guard so a future refactor cannot introduce a marker x tag multiplication).
+    soup = ("a " * 30 + "watch__title watch__info-row chip ") * 30
+    soup = soup[:1400]
+    dense_h1_openers = "".join("<h1 %s>" % soup for _ in range(25))
+    dense_rows = "".join("<div %s>" % soup for _ in range(60))
+    dense_chips = "".join("<a %s>x</a>" % soup for _ in range(80))
+    dense_tag_links = "".join("<a href=\"/work-tags/x\" %s>t</a>" % soup[:300] for _ in range(450))
     tails = {
         "fc2db_net": [
             ("ld+json unclosed + spaces", "<script type=\"application/ld+json\">" + " " * BIG),
             ("ld+json marker spam", _fill("application/ld+json ")),
             ("'/work-tags/' spam", _fill("<a href=\"/work-tags/x\">")),
             ("deeply nested json", "<script type=\"application/ld+json\">" + "[" * 100_000 + "</script>"),
+            ("dense-attribute /work-tags/ links x450", dense_tag_links),
+            ("dense-attribute <h1> openers x25", dense_h1_openers),
         ],
         "av123": [
             ("'watch__info-row' spam", _fill("<div class=\"watch__info-row\"><dt>")),
             ("unclosed dd + spaces", "<div class=\"watch__info-row\"><dt>Genres</dt><dd>" + " " * BIG),
             ("'chip' spam", "<div class=\"watch__info-row\"><dt>Genres</dt><dd>" + _fill("<a class=\"chip\">")),
+            ("dense-attribute row markers x60", dense_rows),
+            ("dense-attribute chips x80 in Genres", "<div class=\"watch__info-row\"><dt>Genres</dt><dd>" + dense_chips + "</dd></div>"),
+            ("dense-attribute title markers x25", dense_h1_openers.replace("<h1", "<p")),
         ],
         "javdb": [
             ("'video-title' spam", _fill("<div class=\"video-title\"><strong>")),

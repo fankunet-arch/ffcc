@@ -39,14 +39,32 @@ a count of HTML chunks.
 
 Matching is by whole CSS class token, so extra classes (``class="item x"``,
 ``class="video-title is-x"``) do not break it; a *renamed* class does, and is
-reported as ``INVALID_RESPONSE`` rather than guessed around. All scanning goes
-through :mod:`._scan` (bounded cost, C0-02).
+reported as ``INVALID_RESPONSE`` rather than guessed around.
+
+Total parse cost is bounded by construction (C0-02, C0-R1-01)
+--------------------------------------------------------------
+The parse makes **one** pass over the class attributes
+(:func:`._scan.collect_class_hits`) and then gives each item a *fixed* number
+of bounded lookups. Nothing is located per marker *occurrence* and no opening
+tag is parsed twice, so the total is
+
+    <= _MAX_CLASS_PROBES small anchored matches            (one pass)
+     + _MAX_ITEMS x (a constant number of windows, each <= _MAX_ITEM_CHARS /
+                     _MAX_TITLE_REGION_CHARS / MAX_TAG_CHARS)
+
+whatever the page contains. The caps were sized from a real result page (8
+items: 31 KB, ~780 chars and ~25 ``class`` attributes per item) with >= 5x
+headroom for ``_MAX_ITEMS`` items, so they do not affect normal coverage.
+If the scan stops at a cap (page longer than ``_MAX_SCAN_CHARS`` still holding
+``class`` attributes, more than ``_MAX_CLASS_PROBES`` of them, or more than
+``_MAX_ITEMS`` items) the parser has not seen the whole page, so "no exact
+hit" is reported as ``INVALID_RESPONSE`` -- never as ``NOT_FOUND``.
 """
 
 from __future__ import annotations
 
 import html
-import re
+from bisect import bisect_left
 from typing import NamedTuple
 
 from fc2_metadata_core.http.client import HttpTransportError, SourceHttpClient
@@ -59,9 +77,10 @@ from fc2_metadata_core.sources.adapters._common import (
     with_field_sources,
 )
 from fc2_metadata_core.sources.adapters._scan import (
+    collect_class_hits,
+    first_open_tag,
     inner_until,
-    iter_class_tags,
-    iter_open_tags,
+    open_tag_containing,
     parse_attrs,
 )
 from fc2_metadata_core.sources.base import (
@@ -72,16 +91,21 @@ from fc2_metadata_core.sources.base import (
 
 __all__ = ["JavdbAdapter", "parse_javdb_search_page"]
 
+_WANTED_CLASS_TOKENS = frozenset({"movie-list", "empty-message", "item", "video-title", "meta"})
+# Scan window and probe budget for the one class-attribute pass. A real result
+# page is ~30 KB with ~1000 ``class`` words; these are >= 15x / >= 5x that.
+_MAX_SCAN_CHARS = 512 * 1024
+_MAX_CLASS_PROBES = 8000
 _MAX_ITEMS = 200
 _MAX_ITEM_CHARS = 8000
 _MAX_TITLE_REGION_CHARS = 3000
 _MAX_META_CHARS = 500
-
-# <strong>CODE</strong>: the item's number. Bounded code length; lazy body and
-# the trailing \s*+ cannot overlap because the body excludes '<' and is capped.
-_STRONG_RE = re.compile(r"<strong[^>]*+>\s*+([^<]{1,40}?)\s*+</strong>")
-_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
-_DETAIL_PATH_RE = re.compile(r"/v/[A-Za-z0-9]{1,32}")
+_MAX_CODE_CHARS = 40
+# Tags examined per item for the anchor / cover lookups, and attributes parsed per tag.
+_MAX_ANCHOR_TAGS = 3
+_MAX_IMG_TAGS = 3
+_MAX_ATTRS_PER_TAG = 16
+_STRONG_CLOSE = "</strong>"
 
 
 class _Item(NamedTuple):
@@ -92,47 +116,111 @@ class _Item(NamedTuple):
     detail_path: str | None
 
 
-def _parse_item(region: str) -> _Item | None:
-    """One result item, or ``None`` if no candidate number can be read from it."""
-    title_tag = next(iter_class_tags(region, "video-title", limit=20), None)
-    if title_tag is None:
-        return None
-    inner = inner_until(region, title_tag.end, "</div>", _MAX_TITLE_REGION_CHARS)
-    if inner is None:
-        return None
-    strong = _STRONG_RE.search(inner)
+def _is_detail_path(value: str) -> bool:
+    if not value.startswith("/v/") or not 4 <= len(value) <= 35:
+        return False
+    return value[3:].isascii() and value[3:].isalnum()
+
+
+def _is_date(value: str) -> bool:
+    return (
+        len(value) == 10
+        and value[4] == "-"
+        and value[7] == "-"
+        and value[:4].isascii()
+        and (value[:4] + value[5:7] + value[8:]).isdigit()
+        and (value[:4] + value[5:7] + value[8:]).isascii()
+    )
+
+
+def _first_between(sorted_positions: list[int], low: int, high: int) -> int | None:
+    """First position ``p`` with ``low < p < high`` (positions are sorted)."""
+    index = bisect_left(sorted_positions, low + 1)
+    if index < len(sorted_positions) and sorted_positions[index] < high:
+        return sorted_positions[index]
+    return None
+
+
+def _code_and_rest(inner: str) -> tuple[str, str] | None:
+    """``(CODE, text after </strong>)`` from ``<strong>CODE</strong> ...``."""
+    strong = first_open_tag(inner, "strong", start=0, end=len(inner))
     if strong is None:
         return None
-    code = clean_text(strong.group(1))
-    if not code:
+    close = inner.find(_STRONG_CLOSE, strong.end, strong.end + _MAX_CODE_CHARS * 2)
+    if close < 0:
         return None
-    text_title = clean_text(inner[strong.end() :])
+    raw_code = inner[strong.end : close]
+    if "<" in raw_code:
+        return None
+    code = clean_text(raw_code)
+    if not code or len(code) > _MAX_CODE_CHARS:
+        return None
+    return code, inner[close + len(_STRONG_CLOSE) :]
+
+
+def _parse_item(
+    page: str,
+    item_pos: int,
+    region_end: int,
+    title_positions: list[int],
+    meta_positions: list[int],
+) -> _Item | None:
+    """One result item, or ``None`` if no candidate number can be read from it.
+
+    A fixed number of bounded lookups; each opening tag is parsed at most once.
+    """
+    title_pos = _first_between(title_positions, item_pos, region_end)
+    if title_pos is None:
+        return None
+    title_tag = open_tag_containing(page, title_pos)
+    if title_tag is None:
+        return None
+    inner = inner_until(page, title_tag.end, "</div>", _MAX_TITLE_REGION_CHARS)
+    if inner is None:
+        return None
+    parsed = _code_and_rest(inner)
+    if parsed is None:
+        return None
+    code, rest = parsed
+    text_title = clean_text(rest)
 
     href: str | None = None
     attr_title = ""
-    for anchor in iter_open_tags(region, "a", limit=10):
-        attrs = parse_attrs(anchor.attrs)
-        if _DETAIL_PATH_RE.fullmatch(attrs.get("href", "")):
+    scan_from = item_pos
+    for _ in range(_MAX_ANCHOR_TAGS):
+        anchor = first_open_tag(page, "a", start=scan_from, end=region_end)
+        if anchor is None:
+            break
+        attrs = parse_attrs(anchor.attrs, max_attrs=_MAX_ATTRS_PER_TAG)
+        if _is_detail_path(attrs.get("href", "")):
             href = attrs["href"]
             # Historical behaviour kept as-is (double unescape is a tracked
-            # LOW backlog item, P2-R-10, not part of C0).
+            # LOW backlog item, P2-R-10, not part of C0 / C0-R1).
             attr_title = clean_text(html.unescape(attrs.get("title", "")))
             break
+        scan_from = anchor.end
 
     cover: str | None = None
-    for img in iter_open_tags(region, "img", limit=5):
-        src = parse_attrs(img.attrs).get("src", "")
+    scan_from = item_pos
+    for _ in range(_MAX_IMG_TAGS):
+        img = first_open_tag(page, "img", start=scan_from, end=region_end)
+        if img is None:
+            break
+        src = parse_attrs(img.attrs, max_attrs=_MAX_ATTRS_PER_TAG).get("src", "")
         if src.startswith(("http://", "https://")):
             cover = src
             break
+        scan_from = img.end
 
     release: str | None = None
-    meta_tag = next(iter_class_tags(region, "meta", limit=20), None)
-    if meta_tag is not None:
-        meta_inner = inner_until(region, meta_tag.end, "</div>", _MAX_META_CHARS)
-        if meta_inner is not None:
-            candidate = clean_text(meta_inner)
-            release = candidate if _DATE_RE.fullmatch(candidate) else None
+    meta_pos = _first_between(meta_positions, item_pos, region_end)
+    if meta_pos is not None:
+        meta_tag = open_tag_containing(page, meta_pos)
+        if meta_tag is not None:
+            meta_inner = inner_until(page, meta_tag.end, "</div>", _MAX_META_CHARS)
+            if meta_inner is not None:
+                candidate = clean_text(meta_inner)
+                release = candidate if _is_date(candidate) else None
 
     return _Item(code, attr_title or text_title, release, cover, href)
 
@@ -144,26 +232,38 @@ def parse_javdb_search_page(
 
     Returns ``(metadata, None)`` on an exact hit, else ``(None, (status, detail))``.
     """
-    list_tag = next(iter_class_tags(html_text, "movie-list", limit=50), None)
-    if list_tag is None:
-        if next(iter_class_tags(html_text, "empty-message", limit=50), None) is not None:
+    hits, truncated = collect_class_hits(
+        html_text,
+        _WANTED_CLASS_TOKENS,
+        max_chars=_MAX_SCAN_CHARS,
+        max_probes=_MAX_CLASS_PROBES,
+    )
+    positions: dict[str, list[int]] = {token: [] for token in _WANTED_CLASS_TOKENS}
+    for hit in hits:
+        for token in hit.tokens:
+            positions[token].append(hit.pos)
+
+    if not positions["movie-list"]:
+        if positions["empty-message"]:
             return None, (SourceStatus.NOT_FOUND, f"{source_id}: search for {number} returned no results")
+        suffix = " (scan budget reached before the whole page was seen)" if truncated else ""
         return None, (
             SourceStatus.INVALID_RESPONSE,
-            f"{source_id}: page has neither a result list nor an empty-result marker",
+            f"{source_id}: page has neither a result list nor an empty-result marker{suffix}",
         )
 
-    item_tags = []
-    for tag in iter_class_tags(html_text, "item", start=list_tag.end):
-        item_tags.append(tag)
-        if len(item_tags) >= _MAX_ITEMS:
-            break
+    list_pos = positions["movie-list"][0]
+    item_positions = [pos for pos in positions["item"] if pos > list_pos]
+    over_item_cap = len(item_positions) > _MAX_ITEMS
+    item_positions = item_positions[:_MAX_ITEMS]
 
     candidates: list[_Item] = []
-    for index, tag in enumerate(item_tags):
-        end = item_tags[index + 1].start if index + 1 < len(item_tags) else len(html_text)
-        region = html_text[tag.end : min(end, tag.end + _MAX_ITEM_CHARS)]
-        item = _parse_item(region)
+    for index, item_pos in enumerate(item_positions):
+        next_pos = item_positions[index + 1] if index + 1 < len(item_positions) else len(html_text)
+        region_end = min(next_pos, item_pos + _MAX_ITEM_CHARS)
+        item = _parse_item(
+            html_text, item_pos, region_end, positions["video-title"], positions["meta"]
+        )
         if item is not None:
             candidates.append(item)
 
@@ -171,11 +271,17 @@ def parse_javdb_search_page(
         return None, (
             SourceStatus.INVALID_RESPONSE,
             f"{source_id}: result list present but no candidate number could be parsed "
-            f"from {len(item_tags)} item element(s) (layout drift?)",
+            f"from {len(item_positions)} item element(s) (layout drift?)",
         )
 
     exact = next((c for c in candidates if c.code == number), None)
     if exact is None:
+        if truncated or over_item_cap:
+            return None, (
+                SourceStatus.INVALID_RESPONSE,
+                f"{source_id}: {len(candidates)} candidate number(s) parsed, none exact, but the "
+                "scan budget was reached before the whole page was seen; cannot conclude not found",
+            )
         return None, (
             SourceStatus.NOT_FOUND,
             f"{source_id}: search for {number} listed {len(candidates)} other number(s), none exact",
