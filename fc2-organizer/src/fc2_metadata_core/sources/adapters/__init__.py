@@ -1,6 +1,6 @@
 """Concrete, real-site source adapters.
 
-Empty until a candidate provider clears the Phase 2 research process:
+Populated only by candidates that cleared the Phase 2 research process:
 
     candidate search -> live probe -> recorded evidence -> ADOPT/REJECT
 
@@ -18,8 +18,15 @@ one import + one append here, never a growing if/elif chain elsewhere.
 
 from __future__ import annotations
 
+from fc2_metadata_core.sources.adapters.av123 import Av123Adapter
+from fc2_metadata_core.sources.adapters.fc2db_net import Fc2dbNetAdapter
+from fc2_metadata_core.sources.adapters.javdb import JavdbAdapter
 from fc2_metadata_core.sources.base import SourceAdapter
 
-ALL_ADAPTER_CLASSES: list[type[SourceAdapter]] = []
+ALL_ADAPTER_CLASSES: list[type[SourceAdapter]] = [
+    Fc2dbNetAdapter,
+    Av123Adapter,
+    JavdbAdapter,
+]
 
 __all__ = ["ALL_ADAPTER_CLASSES"]

@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -73,6 +74,22 @@ _ANTI_BOT_BODY_HINTS = (
     "attention required",
     "verify you are human",
 )
+
+
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
+def _page_title(response: HttpResponse) -> str | None:
+    """The page's ``<title>``, whitespace-collapsed and cut to 100 chars.
+
+    Recorded for raw probes only so the evidence file says *what kind* of
+    200/403/404 it was ("Just a moment...", "FC2 - 404 Error", ...) without
+    ever storing a response body.
+    """
+    match = _TITLE_RE.search(response.text[:20000])
+    if match is None:
+        return None
+    return " ".join(match.group(1).split())[:100] or None
 
 
 def _build_registry() -> SourceRegistry:
@@ -140,6 +157,10 @@ class ProbeRecord:
     fields_present: list[str] = field(default_factory=list)
     title_excerpt: str | None = None
     transport_error: str | None = None
+    # raw probes only (absent in records written before these were added)
+    page_title: str | None = None
+    server_header: str | None = None
+    cf_mitigated: str | None = None
 
 
 _METADATA_FIELD_NAMES = (
@@ -205,6 +226,9 @@ async def _run_raw(urls: list[str], delay_seconds: float) -> list[ProbeRecord]:
                         elapsed_ms=response.elapsed_ms,
                         anti_bot_hint=_looks_like_anti_bot_challenge(response),
                         cookie_configured=False,
+                        page_title=_page_title(response),
+                        server_header={k.lower(): v for k, v in response.headers.items()}.get("server"),
+                        cf_mitigated={k.lower(): v for k, v in response.headers.items()}.get("cf-mitigated"),
                     )
                 )
             except HttpTransportError as exc:
