@@ -246,10 +246,15 @@ outcome of one source's attempt to resolve one FC2 number:
 `SourceStatus` (7 members, per spec): `SUCCESS`, `NOT_FOUND`, `BLOCKED`,
 `RATE_LIMITED`, `NETWORK_ERROR`, `PARSE_ERROR`, `INVALID_RESPONSE`.
 
-`SourceErrorKind` mirrors the six non-success statuses one-to-one. It is a
-separate type from `SourceStatus` so a later phase can add finer-grained
-sub-kinds without touching the status vocabulary, and so it reads as
-meaningless (and is forbidden) on a successful result.
+`SourceErrorKind` began as a one-to-one mirror of the six non-success statuses.
+**Revision (Phase 3 C2):** it is widened with finer-grained kinds (`TIMEOUT`,
+`CONNECTION_ERROR`, `DECODE_ERROR`, `REDIRECT_ERROR`, `SOURCE_DEADLINE`,
+`HTTP_SERVER_ERROR`, `RESPONSE_TOO_LARGE`, `ADAPTER_EXCEPTION`,
+`RESULT_CONTRACT_MISMATCH`), as this paragraph anticipated: the status vocabulary is
+untouched, the six generic kinds are kept (so every earlier result still validates) and
+the allowed status/kind pairs are frozen in `ALLOWED_ERROR_KINDS` (see
+`PHASE3_RESILIENCE_CONTRACT.md` section 1). It remains meaningless (and forbidden) on a
+successful result.
 
 ### Invariants (all enforced in `__post_init__`, all tested)
 
@@ -260,7 +265,7 @@ meaningless (and is forbidden) on a successful result.
 | `metadata` must be `None` or an actual `NormalizedMetadata` instance (R1-01/F1) | `TestMetadataTypeGuard` |
 | `status == SUCCESS` requires `metadata` present **and** `metadata.meets_minimum_success()` | `TestSuccessInvariants` |
 | `status == SUCCESS` forbids `error_kind`/`error_detail` | `TestSuccessInvariants` |
-| every non-success status requires `error_kind == <matching SourceErrorKind>` | `TestErrorKindAndDetailConsistency` |
+| every non-success status requires an `error_kind` **allowed for that status** (C2: `ALLOWED_ERROR_KINDS`; the generic kind matching the status is always allowed) | `TestErrorKindAndDetailConsistency` |
 | every non-success status requires a non-empty `error_detail` | `TestErrorKindAndDetailConsistency` |
 | `NOT_FOUND` / `BLOCKED` / `RATE_LIMITED` / `NETWORK_ERROR` must **not** carry `metadata` | `TestNoMetadataFailureStatuses` |
 | `PARSE_ERROR` / `INVALID_RESPONSE` **may** carry partial `metadata`, but not one that already meets minimum success (that would mean the status should have been `SUCCESS`) | `TestPartialMetadataAllowedStatuses` |

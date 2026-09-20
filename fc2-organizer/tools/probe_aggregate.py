@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 3 C1 live aggregate smoke: run the real MultiSourceEngine on real numbers.
+"""Phase 3 C1/C2 live aggregate smoke: run the real MultiSourceEngine on real numbers.
 
     python tools/probe_aggregate.py FC2-4825061 FC2-4824605 FC2-4979299
 
@@ -7,8 +7,11 @@ Runs the default configuration (the three Phase 2 VERIFIED sources, in the
 configured priority order) through **one shared** ``HttpxTransport``, one
 canonical number at a time, and prints one JSON object per number: the
 aggregate status, the chosen title and which source it came from, every
-source's outcome, the merged collections' sizes, ``field_sources`` and the
-resolved conflicts.
+source's FINAL outcome plus (C2) its ``attempt_count`` and every attempt
+(status, structured error kind, timings, backoff pause), the merged
+collections' sizes, ``field_sources`` and the resolved conflicts. A source
+that failed transiently and then succeeded is reported as a success with
+``retried: true`` and its first-attempt failure visible under ``attempts``.
 
 Safety / politeness (same rules as ``probe_sources.py``):
 
@@ -18,7 +21,10 @@ Safety / politeness (same rules as ``probe_sources.py``):
 - never prints or stores a response body, cookie, or authorization value --
   only the summary fields below (titles are short human-readable excerpts);
 - sequential across numbers, ``--delay-seconds`` (default 3.0) between them;
-  each number issues exactly one request per enabled source;
+  each number issues one request per enabled source, plus at most
+  ``--max-attempts - 1`` retries of a source whose failure is transient
+  (timeout / connection / decode / HTTP 5xx ...). BLOCKED, RATE_LIMITED
+  (HTTP 429) and NOT_FOUND are never retried; no Retry-After handling;
 - no Cloudflare / CAPTCHA bypass: a challenge is just that source's ``BLOCKED``.
 
 This tool does **not** run the 50-ID acceptance gate; it is a smoke check.
@@ -38,6 +44,7 @@ from fc2_metadata_core.aggregation import (  # noqa: E402
     AggregationConfig,
     AggregationConfigError,
     MultiSourceEngine,
+    RetryPolicy,
     SourceConfig,
     default_aggregation_config,
 )
@@ -50,23 +57,44 @@ def _excerpt(text: str | None, limit: int = 70) -> str | None:
     return None if text is None else (text if len(text) <= limit else text[:limit] + "...")
 
 
+def _attempt_entry(attempt) -> dict:
+    """Only status / structured kind / timings: never a body, header, cookie or error text."""
+    return {
+        "sequence": attempt.sequence,
+        "status": attempt.status.value,
+        "error_kind": None if attempt.error_kind is None else attempt.error_kind.value,
+        "elapsed_ms": round(attempt.elapsed_ms),
+        "backoff_before_seconds": attempt.backoff_before_seconds,
+        "completed": attempt.completed,
+    }
+
+
+def _source_entry(final, trace) -> dict:
+    entry: dict = {
+        "source_id": final.source_id,
+        "status": final.status.value,
+        "error_kind": None if final.error_kind is None else final.error_kind.value,
+        "elapsed_ms": round(final.elapsed_ms),
+        "error_detail": _excerpt(final.error_detail, 100),
+    }
+    if trace is not None:
+        entry["attempt_count"] = trace.attempt_count
+        entry["retried"] = trace.retried
+        entry["deadline_exceeded"] = trace.deadline_exceeded
+        entry["attempts"] = [_attempt_entry(a) for a in trace.attempts]
+    return entry
+
+
 def summarize(result) -> dict:
     metadata = result.metadata
+    traces = {t.source_id: t for t in result.source_execution_traces}
     summary: dict = {
         "number": result.number,
         "aggregate_status": result.status.value,
         "elapsed_ms": round(result.elapsed_ms),
         "source_order": list(result.source_order),
         "contributing_source_ids": list(result.contributing_source_ids),
-        "sources": [
-            {
-                "source_id": r.source_id,
-                "status": r.status.value,
-                "elapsed_ms": round(r.elapsed_ms),
-                "error_detail": _excerpt(r.error_detail, 100),
-            }
-            for r in result.source_results
-        ],
+        "sources": [_source_entry(r, traces.get(r.source_id)) for r in result.source_results],
     }
     if metadata is not None:
         summary.update(
@@ -112,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--delay-seconds", type=float, default=3.0, help="Delay between numbers (default 3.0s)")
     parser.add_argument("--order", default=None, help="Comma-separated source ids: configuration order = default field priority")
     parser.add_argument("--max-concurrency", type=int, default=3)
+    parser.add_argument("--max-attempts", type=int, default=2, help="Attempts per source incl. the first (1 = no retry; default 2)")
     parser.add_argument("--deadline-seconds", type=float, default=20.0, help="Per-source wall-clock deadline")
     parser.add_argument("--out", default=None, help="Also write the summary JSON to this file (nothing is recorded otherwise)")
     args = parser.parse_args(argv)
@@ -124,18 +153,21 @@ def main(argv: list[str] | None = None) -> int:
         numbers.append(normalized.canonical)
 
     try:
+        retry_policy = RetryPolicy(max_attempts=args.max_attempts)
         if args.order:
             config = AggregationConfig.create(
                 [SourceConfig(sid.strip(), deadline_seconds=args.deadline_seconds) for sid in args.order.split(",")],
                 max_concurrency=args.max_concurrency,
+                retry_policy=retry_policy,
             )
         else:
             base = default_aggregation_config(max_concurrency=args.max_concurrency)
             config = AggregationConfig.create(
                 [SourceConfig(s.source_id, deadline_seconds=args.deadline_seconds) for s in base.sources],
                 max_concurrency=args.max_concurrency,
+                retry_policy=retry_policy,
             )
-    except AggregationConfigError as exc:
+    except (AggregationConfigError, ValueError) as exc:
         raise SystemExit(f"invalid configuration: {exc}")
 
     summaries = asyncio.run(_run(numbers, config, args.delay_seconds))

@@ -1,10 +1,20 @@
 # FC2 Metadata Core — Phase 3 / C1 Aggregation Contract
 
-Status: **frozen at Phase 3 C1** (candidate; independent review pending).
+Status: **frozen at Phase 3 C1**; **revised at Phase 3 C2** (see the revision note below).
+
+> **Revision note (Phase 3 C2).** Retry / backoff, the fine-grained failure taxonomy and
+> attempt diagnostics are specified in `PHASE3_RESILIENCE_CONTRACT.md`. C2 changed this
+> document in exactly the places marked "(C2)": section 1 (`retry_policy`, strict direct
+> constructor, engine client shape), section 3 (the deadline is a *total* budget including
+> retries; adapter-raised `CancelledError`; fatal `BaseException`; `error_kind` of the
+> isolation / fail-closed results), section 4 (`source_execution_traces`; the invariant list
+> is narrowed to what is actually enforced) and section 7 (P2-R-12 is closed, not deferred).
+> Everything else is unchanged and its tests still pass.
 Scope: multi-source execution + deterministic field-level aggregation
 (`fc2_metadata_core.aggregation`). Explicitly **out of scope** here, and not
-implemented: HTTP retry / backoff, circuit breaker, batch jobs, NFO, images,
+implemented: circuit breaker, batch jobs, NFO, images,
 filesystem organisation, the Amane adapter (later Phase 3 subphases / Phases 4-5).
+(C2 added source-local retry / backoff; see `PHASE3_RESILIENCE_CONTRACT.md`.)
 
 Every rule below is enforced by an automated offline test under
 `tests/unit/aggregation/` (and `tests/unit/sources/test_registry_create_boundary.py`);
@@ -38,8 +48,19 @@ any network request**, and rejected with `AggregationConfigError`:
 | `deadline_seconds` | not a number, `bool`, `<= 0`, `nan`, `inf`, `> 600` |
 | `max_concurrency` | not an `int`, `bool`, outside `1..64` |
 | `enabled` | not a real `bool` |
+| `retry_policy` (C2) | not a `RetryPolicy` (on a `SourceConfig`, `None` means "use the aggregation default") |
 | `base_url` | see §1.1 |
 | `field_priority` | unknown / non-overridable field (including `number`, `field_sources`); a source that is not configured; a duplicate id in one override; an empty override; a bare `str` |
+
+**Direct constructor (C2, LOW-3).** `AggregationConfig(...)` is exactly as strict as
+`create(...)`: `field_priority` must be `tuple[tuple[str, tuple[str, ...]], ...]`; a list,
+dict, nested list, non-`str` / unhashable field name or malformed entry is an
+`AggregationConfigError` (never a `TypeError`), and later mutation of anything the caller still
+holds cannot change the config.
+
+**Client shape (C2, LOW-4).** `MultiSourceEngine(config, registry, client)` requires
+`client.get` to be an `async` callable (`is_async_get`), decided without issuing a request; a
+synchronous `get` is an `AggregationConfigError` at construction.
 
 **Registered?** Whether a `source_id` exists in the registry is checked when the
 `MultiSourceEngine` is built (unknown ids are all listed in one
@@ -91,9 +112,11 @@ Factories other than classes remain supported.
 
 ## 3. Source execution (`execution.py`) — `test_agg_execution.py`, `test_agg_engine.py`
 
-`execute_sources(number, targets, client, *, max_concurrency=3)` calls
-`adapter.fetch(number, shared_client)` for every target and returns exactly one
-`SourceResult` per target.
+`execute_sources_traced(number, targets, client, *, max_concurrency=3)` (C2) calls
+`adapter.fetch(number, shared_client)` for every target -- retrying per
+`PHASE3_RESILIENCE_CONTRACT.md` -- and returns exactly one `SourceExecutionTrace`
+(every attempt + the final `SourceResult`) per target; `execute_sources` returns only the
+final `SourceResult`s.
 
 - **Shared client.** Every adapter receives the *same* `SourceHttpClient` object;
   the engine creates no transport of its own.
@@ -103,36 +126,50 @@ Factories other than classes remain supported.
   real (peak active `<= limit`) and the run is not serial (peak `== limit` when
   enough sources exist). Default 3, configurable `1..64`.
 - **Wall-clock deadline (closes P2-R-09 on the scheduler path).** Each source's
-  whole `fetch` runs under `asyncio.timeout(deadline_seconds)` *at this
-  boundary* (adapters unchanged; httpx's per-phase timeout is not relied on).
-  The deadline starts when the source starts executing, not while it waits for a
-  concurrency slot. On expiry **only that source** becomes
-  `NETWORK_ERROR` with `error_detail` `"<id>: source execution deadline exceeded
+  whole execution runs under **one** `asyncio.timeout(deadline_seconds)` *at this
+  boundary* (adapters unchanged; httpx's per-phase timeout is not relied on). **(C2)** That
+  budget covers attempt 1 + every backoff pause + every retry; it is never multiplied by
+  `max_attempts`. The deadline starts when the source starts executing, not while it waits
+  for a concurrency slot. On expiry **only that source** becomes
+  `NETWORK_ERROR` / `SOURCE_DEADLINE` (C2) with `error_detail` `"<id>: source execution deadline exceeded
   (<n>s wall clock, <m> ms elapsed)"` and a real `elapsed_ms` (not 0). A builtin
   `TimeoutError` raised *by the adapter itself* is not mistaken for the deadline
   (`scope.expired()` decides). Limitation: an adapter that swallows
   `CancelledError` cannot be interrupted; the adopted adapters do not.
 - **Isolation.** Any ordinary `Exception` an adapter leaks becomes that source's
-  `INVALID_RESPONSE` with `error_detail` = `"<id>: unexpected adapter exception
+  `INVALID_RESPONSE` / `ADAPTER_EXCEPTION` (C2) with `error_detail` = `"<id>: unexpected adapter exception
   <ExceptionType>"` — the *message is never included* (it may carry a URL or a
   secret). Every non-success `SourceStatus` from an adapter is just data; no
   source outcome stops another source.
-- **Cancellation.** `asyncio.CancelledError` (the caller cancelling the aggregate
-  lookup), `KeyboardInterrupt` and `SystemExit` are **never** turned into a
-  source result: they propagate (the *original* exception object, unwrapped), and
-  in-flight sibling executions are cancelled (`asyncio.TaskGroup`).
+- **Cancellation (C2, LOW-2; full table in `PHASE3_RESILIENCE_CONTRACT.md` section 4).** The
+  caller cancelling the aggregate task propagates `CancelledError` (siblings cancelled,
+  nothing left running). A `CancelledError` an adapter raises *on its own* (no cancellation
+  requested) is isolated as that source's `INVALID_RESPONSE` / `ADAPTER_EXCEPTION` and the
+  other sources carry on. `KeyboardInterrupt`, `SystemExit`, `GeneratorExit` and any custom
+  non-`Exception` `BaseException` are fatal: the **original object** is re-raised (never a
+  `BaseExceptionGroup`, never a source result). Known limit: an adapter that swallows
+  cancellation cannot be interrupted.
 - **Fail closed.** Whatever an adapter returns goes through
   `validate_source_result(slot_id, number, candidate)`: a non-`SourceResult`, a
   result labelled with a different `source_id`, or a `SUCCESS` whose
-  `metadata.number != requested number` becomes an `INVALID_RESPONSE` for that slot
-  and contributes **nothing**. The result is labelled by the slot it was executed
+  `metadata.number != requested number` becomes an `INVALID_RESPONSE` /
+  `RESULT_CONTRACT_MISMATCH` (C2) for that slot and contributes **nothing**. The result is labelled by the slot it was executed
   for, never by what it claims.
 - A non-canonical number is a caller bug: `InvalidCanonicalNumberInputError`
   before any source is called.
 
 ## 4. `AggregationResult` (`models.py`) — `test_agg_guards.py`, `test_agg_merge.py`
 
-Frozen, validated at construction (an inconsistent result cannot be built):
+Frozen and validated at construction. **(C2)** The precise list of what `__post_init__`
+enforces -- and what it does not -- is the module docstring of `aggregation/models.py`;
+the C1 claim "an inconsistent result cannot be built" is narrowed to that list. In short:
+unique ids; `successful_source_ids` = the `SUCCESS` ids; `FAILED` has no metadata and no
+contributors; `SUCCESS`/`PARTIAL` have min-success metadata for the requested number and
+`contributing_source_ids == successful_source_ids` exactly; `disabled_source_ids` distinct and
+disjoint from the results; every `FieldConflict` names a conflict-capable field and refers
+only to contributing sources; `source_execution_traces` is empty or aligned one-to-one with
+`source_results`. **Not** verified (it would mean re-running the merge): that the metadata
+values, `field_sources` and the conflict list are what the merge rules would produce.
 
 ```text
 number                    requested canonical number
@@ -143,6 +180,7 @@ contributing_source_ids   sources whose data participated (SUCCESS + valid), def
 conflicts                 resolved disagreements (FieldConflict), deterministic order
 disabled_source_ids       configured-but-disabled sources (never executed)
 elapsed_ms                wall time of the whole aggregate lookup
+source_execution_traces   (C2) one SourceExecutionTrace per enabled source: every attempt + final result
 ```
 
 ### 4.1 Status semantics (frozen)
@@ -165,6 +203,8 @@ Consequences (all tested): `SUCCESS` + `NOT_FOUND` + `NOT_FOUND` → `SUCCESS`;
 `__post_init__` enforces: `FAILED` ⇒ no metadata and no contributors;
 `SUCCESS`/`PARTIAL` ⇒ min-success metadata whose `number` is the requested one,
 ≥ 1 contributor, and (`SUCCESS`: no operational failure / `PARTIAL`: at least one).
+Only a source's **final** result counts (C2): a source that failed once and then
+succeeded on a retry is a success; its first failure stays visible in its trace.
 Only `SUCCESS`-status results contribute: partial metadata attached to a
 `PARSE_ERROR` / `INVALID_RESPONSE` is never used.
 
@@ -232,11 +272,12 @@ repetition, reversed completion order, and random priority permutations).
 
 ## 7. What C1 deliberately does not do
 
-- No retry, backoff or circuit breaking. **P2-R-12** (5xx currently maps to
-  `INVALID_RESPONSE`; some decoding errors to `NETWORK_ERROR`) was re-evaluated and
-  is **re-deferred to the Phase 3 resilience/retry subphase**: C1 only isolates and
-  aggregates `SourceStatus`; it makes no retry decision from a status, so the Phase 2
-  failure vocabulary was not rewritten.
+- ~~No retry, backoff or circuit breaking.~~ **(C2)** Source-local retry and deterministic
+  backoff now exist (`PHASE3_RESILIENCE_CONTRACT.md`). **P2-R-12 is CLOSED** there: a
+  structured `SourceErrorKind` taxonomy (HTTP 5xx -> `INVALID_RESPONSE` /
+  `HTTP_SERVER_ERROR`, transport exceptions -> `TIMEOUT` / `CONNECTION_ERROR` /
+  `DECODE_ERROR` / `REDIRECT_ERROR` / `RESPONSE_TOO_LARGE`), and the retry decision reads only
+  that kind. **Circuit breaking is still not implemented** (it belongs with batch scheduling).
 - No batch engine, no 50-ID acceptance run (the ≥ 90 % `number + title` gate on the
   frozen 50-ID set is still to be run in a later live-coverage subphase; nothing here
   claims it).
