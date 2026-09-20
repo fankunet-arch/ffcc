@@ -55,9 +55,9 @@ existing result changes status), and nothing was received to judge.
 | HTTP 500–599 | `INVALID_RESPONSE` / `HTTP_SERVER_ERROR` | **yes** |
 | transport timeout | `NETWORK_ERROR` / `TIMEOUT` | **yes** |
 | DNS / connect / TLS / protocol error | `NETWORK_ERROR` / `CONNECTION_ERROR` | **yes** |
-| body decode / decompress error | `NETWORK_ERROR` / `DECODE_ERROR` | **yes** |
+| body decode / decompress error, **including** a server-chosen `charset` that is a non-text codec (`rot13`, `base64`, `hex`, `zlib`, `bz2`, `uu`…), an unusable one (`idna`, `undefined`, `punycode`) or a malformed name (embedded NUL) — since C3-E02 | `NETWORK_ERROR` / `DECODE_ERROR` | **yes** |
 | generic transport failure (older adapters, legacy `transport_error_result`) | `NETWORK_ERROR` / `NETWORK_ERROR` | **yes** |
-| HTTP 403, or a Cloudflare challenge (`cf-mitigated`, "Just a moment…" page, login/verification redirect) | `BLOCKED` / `BLOCKED` | no |
+| HTTP 403, or a Cloudflare challenge (`cf-mitigated` header, a "Just a moment…" / "Attention required" `<title>` near the top of the body **under any HTTP status** — 200, 403, 429, 5xx… — since C3-E01, or a login/verification redirect) | `BLOCKED` / `BLOCKED` | **never** |
 | HTTP 404 / "not in this source's catalogue" | `NOT_FOUND` / `NOT_FOUND` | no |
 | HTTP 429 | `RATE_LIMITED` / `RATE_LIMITED` | no |
 | other non-200 (e.g. 301, 418) | `INVALID_RESPONSE` / `INVALID_RESPONSE` | no |
@@ -70,6 +70,22 @@ helpers the three adopted adapters now use. The pre-C2 `classify_transport_error
 `transport_error_result` are **unchanged** (coarse), kept for older adapters and their tests.
 The production reachability of every transport row is tested with a real `HttpxTransport` over
 `httpx.MockTransport` (httpx exception → transport exception → adapter `SourceResult`).
+
+**C3 hardening of this table** (`tests/unit/aggregation/test_agg_c3_challenge_any_status.py`,
+`tests/unit/http/test_httpx_transport_decode_c3.py`):
+
+* **Challenge precedence (C3-E01, closes C2 review M1).** In `classify_page_response` the challenge
+  checks come *before* any status classification: `cf-mitigated: challenge` → `blocked_url_markers` →
+  challenge `<title>` in the first 4000 chars (any status). A `503` + "Just a moment…" body without a
+  `cf-mitigated` header is therefore `BLOCKED` with exactly **one** attempt, never a retried
+  `HTTP_SERVER_ERROR`; a challenge under 404/429 is likewise `BLOCKED`. An ordinary 5xx (no challenge
+  `<title>` at the top) is unchanged: `HTTP_SERVER_ERROR`, retried once.
+* **Decode boundary (C3-E02, closes C2 review L1).** `HttpxTransport` converts every body-to-text
+  failure (`LookupError` / `UnicodeError` / `ValueError`, from the final decode *and* from httpx's
+  own charset probing) into `HttpDecodingError` → `DECODE_ERROR` → retried per §2.1. A charset name
+  Python does not know at all (`charset=nonsense`) is not a failure: httpx falls back to UTF-8 and the
+  page decodes with replacement characters, exactly as before. The error message names the charset
+  (truncated) and never the body.
 
 ## 2. `RetryPolicy` (`retry.py`) — `test_agg_retry_policy.py`
 
@@ -143,6 +159,7 @@ problems; `SOURCE_DEADLINE` means the time budget is already spent. (`test_agg_r
 | The aggregate task is cancelled by the **caller** (during an attempt or during a backoff pause) | `asyncio.CancelledError` propagates unchanged; every sibling is cancelled; **no background task is left**; no further attempt starts; the backoff sleep is interrupted at once; cancellation is never a retryable failure |
 | An **adapter itself** raises `CancelledError` while no cancellation was requested for its task (`task.cancelling() == 0`) | that source → `INVALID_RESPONSE`/`ADAPTER_EXCEPTION` (detail: source id + `CancelledError`, no message); **other sources continue**; not retried; the aggregate is not cancelled |
 | `KeyboardInterrupt`, `SystemExit`, `GeneratorExit`, or any custom non-`Exception` `BaseException` from an adapter | fatal control flow: siblings are cancelled first, then the **original exception object** is re-raised (identity-tested) — never a `BaseExceptionGroup`/`ExceptionGroup`, never a `SourceResult` |
+| **several** children raise *different* fatal `BaseException`s at (nearly) the same time | **simultaneous fatal signals: one fatal is propagated; the implementation does not preserve multiple fatal exceptions.** The first fatal the engine selects is re-raised as the original object (no exception group is built) and the others are discarded — a caller cannot inspect all of them. Deterministic for a given scheduling order; pinned by `tests/unit/aggregation/test_agg_c3_simultaneous_fatal.py`. (Documented in C3, review C2-L5; not redesigned.) |
 | an ordinary `Exception` from an adapter | isolated: `INVALID_RESPONSE`/`ADAPTER_EXCEPTION`, message never included |
 
 **Known limitation (documented, not solved; no thread/process isolation in C2):** a plugin adapter

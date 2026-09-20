@@ -1,23 +1,35 @@
-"""Phase 3 / C1: multi-source execution and deterministic field-level aggregation.
+"""Phase 3 (C1 + C2): multi-source execution, source-local retry, and deterministic
+field-level aggregation for **one** FC2 number.
 
 ::
 
     canonical FC2 number
             |
-    ordered SourceConfig  (order = default field priority)
+    ordered SourceConfig  (order = default field priority; each source has its own
+            |              total wall-clock deadline)  + one RetryPolicy
             |
-    execute_sources        bounded fan-out, per-source wall-clock deadline,
-            |              isolation, fail-closed result validation
-    SourceResult[]         one per enabled source, in configuration order
+    execute_sources_traced  bounded fan-out (per aggregate() call); per source, inside
+            |               ONE concurrency slot and ONE total-deadline budget:
+            |                 attempt -> [structured error_kind retryable? -> backoff
+            |                 -> attempt] ... (default max_attempts = 2)
+            |               isolation, fail-closed result validation, cancellation and
+            |               fatal-exception handling
+    SourceExecutionTrace[]  final SourceResult + every SourceAttempt, config order
             |
-    merge_source_results   PURE: scalars first-non-empty by priority,
-            |              collections ordered-unique union, external_ids
-            |              first-wins, provenance recomputed
-    AggregationResult      SUCCESS | PARTIAL | FAILED + every SourceResult
+    merge_source_results    PURE, over the FINAL results only: scalars first-non-empty
+            |               by priority, collections ordered-unique union, external_ids
+            |               first-wins, provenance recomputed
+    AggregationResult       SUCCESS | PARTIAL | FAILED + every SourceResult + traces
 
-The contract lives in ``docs/specifications/PHASE3_AGGREGATION_CONTRACT.md``.
-Out of scope here (later Phase 3 subphases): retry/backoff, circuit breaking,
-batch jobs. Nothing in this package imports ``amane``.
+Retry (``retry.py``) is decided from the structured ``SourceErrorKind`` only, never
+from ``error_detail`` text or a provider name; ``BLOCKED`` (incl. anti-bot
+challenges), ``RATE_LIMITED`` and ``NOT_FOUND`` are never retried.
+
+Contracts: ``docs/specifications/PHASE3_AGGREGATION_CONTRACT.md`` (C1) and
+``docs/specifications/PHASE3_RESILIENCE_CONTRACT.md`` (C2/C3).
+Out of scope here (later Phase 3 subphases): cross-item scheduling and any global
+concurrency budget (``max_concurrency`` is per ``aggregate()`` call), circuit
+breaking, batch jobs. Nothing in this package imports ``amane``.
 """
 
 from fc2_metadata_core.aggregation.config import (

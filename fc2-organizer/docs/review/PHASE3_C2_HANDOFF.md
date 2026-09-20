@@ -139,6 +139,13 @@ edited except the test support helpers (additive: `failed(..., error_kind=)`, `a
 `request_count`). New C2 tests: taxonomy, retry policy, retry execution (deadline A–D, matrix,
 cancellation, concurrency), production-path HTTP, classification, LOW-1..4, and the probe summary.
 
+> **Correction (added in Phase 3 C3, finding C2-L4; the original text above is left as written).**
+> "The base commit has 732 tests" is wrong. The C1 base commit (`c2a749e`) itself collects **731**
+> tests. The 732 figure came from running that C1-base *test tree* inside the C2 *source tree*:
+> the F4 contract test auto-discovers every module under `src/`, so the new `aggregation/retry.py`
+> adds one module-parametrized case (731 + 1 = 732). Consequently "731 pass, 1 fails" is the C1 tests
+> against C2 source, where the single failure is the intentionally replaced C1 no-retry guard.
+
 Test-isolation note (unchanged from C1): import core classes at module top in tests — the F4 contract
 test re-imports the package.
 
