@@ -1,0 +1,3543 @@
+{
+  "schema_version": 1,
+  "run_kind": "primary",
+  "started_at_utc": "2026-09-20T23:21:40+00:00",
+  "finished_at_utc": "2026-09-20T23:25:41+00:00",
+  "code_head": "bb05b46e8ed896843d6f501bac09e892c676d031",
+  "worktree_clean": true,
+  "set_file": "docs/acceptance/PHASE3_50_ID_SET.json",
+  "set_file_sha256": "dc6f4af58b3af3df0fe84c6e704be38ae048ecb286333df929fbcd484a78c9a8",
+  "set_last_commit": "bb05b46e8ed896843d6f501bac09e892c676d031",
+  "config": {
+    "source_order": [
+      "fc2db_net",
+      "javdb",
+      "av123"
+    ],
+    "max_concurrency": 3,
+    "deadline_seconds": 20.0,
+    "retry_policy": {
+      "max_attempts": 2,
+      "initial_backoff_seconds": 1.0,
+      "backoff_multiplier": 2.0,
+      "max_backoff_seconds": 5.0,
+      "retryable_error_kinds": [
+        "connection_error",
+        "decode_error",
+        "http_server_error",
+        "network_error",
+        "timeout"
+      ]
+    },
+    "delay_between_ids_seconds": 4.0
+  },
+  "summary": {
+    "total": 50,
+    "covered": 49,
+    "not_covered": 1,
+    "coverage_percent": 98.0,
+    "threshold_percent": 90.0,
+    "required_covered_of_50": 45,
+    "numeric_threshold_met": true,
+    "aggregate_status_counts": {
+      "failed": 1,
+      "success": 49
+    },
+    "covered_but_partial": []
+  },
+  "source_statistics": {
+    "av123": {
+      "ids": 50,
+      "final_status_counts": {
+        "success": 44,
+        "not_found": 6,
+        "blocked": 0,
+        "rate_limited": 0,
+        "network_error": 0,
+        "parse_error": 0,
+        "invalid_response": 0
+      },
+      "final_error_kind_counts": {
+        "not_found": 6
+      },
+      "attempts_total": 50,
+      "ids_retried": 0,
+      "engine_elapsed_ms_total": 10342,
+      "deadline_exceeded": 0,
+      "operational_failures": 0,
+      "engine_elapsed_ms_mean": 207
+    },
+    "fc2db_net": {
+      "ids": 50,
+      "final_status_counts": {
+        "success": 27,
+        "not_found": 23,
+        "blocked": 0,
+        "rate_limited": 0,
+        "network_error": 0,
+        "parse_error": 0,
+        "invalid_response": 0
+      },
+      "final_error_kind_counts": {
+        "not_found": 23
+      },
+      "attempts_total": 50,
+      "ids_retried": 0,
+      "engine_elapsed_ms_total": 44750,
+      "deadline_exceeded": 0,
+      "operational_failures": 0,
+      "engine_elapsed_ms_mean": 895
+    },
+    "javdb": {
+      "ids": 50,
+      "final_status_counts": {
+        "success": 40,
+        "not_found": 10,
+        "blocked": 0,
+        "rate_limited": 0,
+        "network_error": 0,
+        "parse_error": 0,
+        "invalid_response": 0
+      },
+      "final_error_kind_counts": {
+        "not_found": 10
+      },
+      "attempts_total": 50,
+      "ids_retried": 0,
+      "engine_elapsed_ms_total": 14189,
+      "deadline_exceeded": 0,
+      "operational_failures": 0,
+      "engine_elapsed_ms_mean": 284
+    }
+  },
+  "retry_statistics": {
+    "live_retries_observed": 0,
+    "events": []
+  },
+  "m1_violations": [],
+  "uncovered": [
+    {
+      "number": "FC2-4493606",
+      "aggregate_status": "failed",
+      "source_final": {
+        "fc2db_net": [
+          "not_found",
+          "not_found",
+          1
+        ],
+        "javdb": [
+          "not_found",
+          "not_found",
+          1
+        ],
+        "av123": [
+          "not_found",
+          "not_found",
+          1
+        ]
+      }
+    }
+  ],
+  "results": [
+    {
+      "number": "FC2-1042815",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 3063,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 3063,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 3063,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 422,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 422,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 219,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 219,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1097500",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 844,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 844,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 844,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 391,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 391,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1261799",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 656,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 656,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 656,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 281,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 281,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 171,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 171,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1395953",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 765,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 765,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 765,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 281,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 281,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1528279",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1094,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1094,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1094,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 188,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 188,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1692217",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 719,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 719,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 719,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 188,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 188,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1713543",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1094,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1094,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1094,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 281,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 281,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 188,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 188,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1737461",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 718,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 718,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 718,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 171,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 171,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1782986",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1156,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1156,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1156,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 328,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 328,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1817510",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 687,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 687,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 687,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1841311",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 703,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 703,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 703,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1858921",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1078,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1078,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1078,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 422,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 422,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 875,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 875,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1879883",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 735,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 735,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 735,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 313,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 313,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 203,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 203,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1940353",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1125,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1125,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1125,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 328,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 328,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 171,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 171,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-1977836",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1218,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1218,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1218,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2050468",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 657,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 657,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 657,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 282,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 282,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 234,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 234,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2086710",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1203,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1203,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1203,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2172250",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 813,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 813,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 813,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 235,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 235,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2278260",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 860,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 860,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 860,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 375,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 375,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 313,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 313,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2570996",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 906,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 906,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 906,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 203,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 203,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2629560",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 781,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 781,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 781,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 188,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 188,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2733270",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 812,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 812,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 812,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2807093",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 734,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 734,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 734,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 188,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 188,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2865991",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 829,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 829,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 829,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2909140",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 719,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 719,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 719,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 281,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 281,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 188,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 188,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-2954603",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 750,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 750,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 750,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-3078940",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 781,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 781,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 781,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 171,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 171,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-3084171",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 828,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 828,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 828,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 281,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 281,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-3119265",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 719,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 719,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 719,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-3178581",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1219,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1219,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1219,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 313,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 313,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4070093",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 781,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 781,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 781,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4134556",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1203,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1203,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1203,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4174411",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1078,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1078,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1078,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4266906",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 656,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 656,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 656,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 281,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 281,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4336025",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 718,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 718,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 718,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4385140",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1125,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1125,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1125,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 297,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 297,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4493606",
+      "aggregate_status": "failed",
+      "covered": false,
+      "title_present": false,
+      "canonical_number_present": false,
+      "number_matches_request": false,
+      "elapsed_ms": 781,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 781,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 781,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 297,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 297,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 203,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 203,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4499275",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1078,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1078,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1078,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4547366",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1219,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1219,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1219,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 313,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 313,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 219,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 219,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4548410",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 1110,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 1110,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 1110,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 282,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 282,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4655045",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 828,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 828,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 828,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4699133",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 656,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 656,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 656,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 187,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 187,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4791899",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 640,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 640,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 640,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 203,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 203,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4824605",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 656,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 656,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 656,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4825061",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 688,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 688,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 688,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4835063",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 657,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 657,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 657,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 250,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 250,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4972767",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 640,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 640,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 640,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4976588",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 657,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 657,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 657,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "not_found",
+          "error_kind": "not_found",
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "not_found",
+              "error_kind": "not_found",
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4978035",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 656,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 656,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 656,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 265,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 265,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 171,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 171,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "FC2-4979299",
+      "aggregate_status": "success",
+      "covered": true,
+      "title_present": true,
+      "canonical_number_present": true,
+      "number_matches_request": true,
+      "elapsed_ms": 657,
+      "sources": [
+        {
+          "source_id": "fc2db_net",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 657,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 657,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "javdb",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 266,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 266,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "source_id": "av123",
+          "final_status": "success",
+          "error_kind": null,
+          "attempt_count": 1,
+          "retried": false,
+          "deadline_exceeded": false,
+          "engine_elapsed_ms": 172,
+          "attempts": [
+            {
+              "sequence": 1,
+              "status": "success",
+              "error_kind": null,
+              "elapsed_ms": 172,
+              "backoff_before_seconds": 0.0,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
