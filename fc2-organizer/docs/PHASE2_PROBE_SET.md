@@ -1,52 +1,26 @@
 # PHASE2_PROBE_SET.md
 
-Status: **SKELETON — not yet populated with verified evidence.**
+Status: **POPULATED** (2026-09-20 UTC).
 
-Per Phase 2 requirements, this document must record at least 5 known-valid
-FC2 numbers used as the live probe set, each with a stated reason for why it
-is believed genuinely valid (never a randomly guessed number whose 404 gets
-misread as "source unavailable"). It must **not** be filled in from memory
-or a search-engine snippet — each entry's "why known-valid" must point at
-independently-checkable evidence gathered during live probing (e.g. the
-number resolving successfully on more than one independent source, or
-independent confirmation found during candidate research), recorded with a
-real timestamp.
+Known-valid FC2 numbers used to judge every candidate. Each row's justification is independently checkable: it names the live source(s) that resolved the number, with timestamps in the JSON evidence file. No number was guessed; a candidate's 404/no-hit was never read as 'source unavailable' without another source resolving the same number.
 
-This session could not populate it: this sandbox's outbound network policy
-currently blocks all non-allowlisted hosts (see
-`docs/review/PHASE2_HANDOFF.md`), so no live request to any FC2 metadata
-site — and therefore no independent verification of any candidate number —
-could be performed. Fabricating "why known-valid" justifications without
-that verification would violate the explicit requirement in spec section 8
-("不要随机猜号码然后把 404 误判成 source 不可用" / do not guess numbers and
-misread a 404 as source-unavailable) and section 40 (no fabricated
-success). Once network access is available, this document must be filled
-in per the template below and the mandatory pre-flight in
-`docs/review/PHASE2_HANDOFF.md` re-run.
+| # | Canonical number | Why believed known-valid (independent evidence) | Resolved by adopted adapter (Gate run 2026-09-20 13:02-13:03 UTC) |
+|---|---|---|---|
+| 1 | `FC2-4825061` | Mandated by the spec **and independently corroborated**: JavDB lists it (`【顔出し】ハーフ美人妻 ...`, 2026-01-02, 176 ratings) and 123AV serves a detail page (release 2026-01-02). FC2 Official cannot corroborate (login wall). fc2db.net answers 404 for it, which is a coverage gap of that source, not evidence of invalidity. | javdb, av123 |
+| 2 | `FC2-4824605` | Mandated by the spec **and independently corroborated**: fc2db.net serves the full page (`※1/11まで初回限定90％OFF※【ハメ撮り】...`, 2026-01-04). Manually also seen as titles on Sukebei torrents, Netflav and Jav Guru (not adapter-recorded). JavDB (only near-misses) and 123AV (404) do not carry it. | fc2db_net |
+| 3 | `FC2-4979299` | Seen on the fc2db.net front-page work list (a 2026-09-19 release); then SUCCESS on all three adopted sources, with the same Japanese title on fc2db_net and javdb. | fc2db_net, javdb, av123 |
+| 4 | `FC2-4976588` | Seen on the fc2db.net front-page work list; SUCCESS on fc2db_net and javdb with matching titles. | fc2db_net, javdb |
+| 5 | `FC2-1042815` | Chosen as an **old-id** control (about 1M range) from the fc2db.net front page; SUCCESS on fc2db_net and javdb (matching JP title); also resolves on fc2cm.com (manual, section 5). | fc2db_net, javdb |
+| 6 | `FC2-4978035` | Seen on the fc2db.net front-page work list; SUCCESS on all three adopted sources. | fc2db_net, javdb, av123 |
+| 7 | `FC2-4972767` | Seen on the fc2db.net front-page work list; SUCCESS on fc2db_net and javdb with matching titles. | fc2db_net, javdb |
 
-## Required entries (template)
+## Deliberately excluded
 
-| # | Canonical number | Why believed known-valid | Probe date/time (UTC) | Used in probes |
-|---|---|---|---|---|
-| 1 | `FC2-4825061` | **Mandated by spec** — must still be independently corroborated during live probing before being trusted as a positive control, not just asserted because it was named in the prompt. | _pending_ | _pending_ |
-| 2 | `FC2-4824605` | **Mandated by spec** — same caveat as above. | _pending_ | _pending_ |
-| 3 | _pending_ | _pending — must be corroborated by at least one independent live source lookup during Phase 2 research, not by search-engine snippet alone_ | _pending_ | _pending_ |
-| 4 | _pending_ | _pending_ | _pending_ | _pending_ |
-| 5 | _pending_ | _pending_ | _pending_ | _pending_ |
+- `FC2-4974437`: resolved only by fc2db.net, whose title for it is the placeholder-like `Searching for Your XXX`; JavDB has no exact hit and 123AV 404s. Not corroborated by a second source, so it is **not** in the probe set (kept in the evidence JSON: fc2db_net run 12:52:57).
+- `FC2-9999999` / `FC2-99999999` / `FC2-4000000`: used only as negative controls to observe each site's 'missing' page format, never as evidence of validity.
 
-## Process once network access is available
+## How the set was built
 
-1. For each candidate provider under investigation (see
-   `docs/SOURCE_STATUS_MATRIX.md`), run
-   `python3 tools/probe_sources.py raw <candidate lookup URL for FC2-4825061 and FC2-4824605>`
-   first, since those two are mandated regardless of provider.
-2. For the additional >=3 numbers, only add a row here once at least one
-   live source lookup (not a snippet, not a memory guess) has returned a
-   plausible, internally-consistent metadata page for it. Record which
-   probe(s) corroborated it.
-3. Re-run every `docs/sources/SOURCE_VIABILITY_<SOURCE_ID>.md` probe pass
-   against the final 5+ IDs in this table, so every candidate is judged
-   against the same number set.
-4. Update this document's status line from **SKELETON** to **POPULATED**
-   only once every row above has a real timestamp and a real, checkable
-   justification.
+1. The two mandated numbers were probed first against every candidate.
+2. Additional numbers were taken from current work lists on fc2db.net's front page (recent works, September 2026) plus one old-id control, then required to be resolved by at least two adopted sources, or (for the mandated two) by at least one independent source other than the prompt.
+3. Every adopted adapter was then run against the whole set in one pass (see each `docs/sources/SOURCE_VIABILITY_<id>.md`).
