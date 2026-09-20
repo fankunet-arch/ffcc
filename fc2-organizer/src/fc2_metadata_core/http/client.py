@@ -57,6 +57,12 @@ class HttpDecodingError(HttpTransportError):
     (nothing usable was received), reported separately so retry policy can
     tell it apart from DNS/connect/TLS failures without knowing which HTTP
     library produced it.
+
+    Covers *every* way a body can fail to become text: a corrupt
+    ``Content-Encoding`` stream, and (Phase 3 C3-E02) a server-chosen ``charset``
+    that is a non-text codec (``rot13``, ``base64``, ``zlib`` ...), an unusable one
+    (``idna``, ``undefined``), or a malformed name. No bare ``LookupError`` /
+    ``UnicodeError`` / ``ValueError`` may cross this boundary.
     """
 
 
