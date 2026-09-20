@@ -15,6 +15,9 @@ from fc2_metadata_core.sources.base import (
 )
 from fc2_metadata_core.sources.registry import (
     DuplicateSourceIdError,
+    InvalidSourceAdapterError,
+    SourceFactoryError,
+    SourceIdMismatchError,
     SourceRegistry,
     SourceRegistryError,
     UnknownSourceIdError,
@@ -30,4 +33,7 @@ __all__ = [
     "SourceRegistryError",
     "DuplicateSourceIdError",
     "UnknownSourceIdError",
+    "SourceFactoryError",
+    "InvalidSourceAdapterError",
+    "SourceIdMismatchError",
 ]

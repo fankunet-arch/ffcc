@@ -22,6 +22,7 @@ from fc2_metadata_core.sources.adapters.av123 import Av123Adapter
 from fc2_metadata_core.sources.adapters.fc2db_net import Fc2dbNetAdapter
 from fc2_metadata_core.sources.adapters.javdb import JavdbAdapter
 from fc2_metadata_core.sources.base import SourceAdapter
+from fc2_metadata_core.sources.registry import SourceRegistry
 
 ALL_ADAPTER_CLASSES: list[type[SourceAdapter]] = [
     Fc2dbNetAdapter,
@@ -29,4 +30,18 @@ ALL_ADAPTER_CLASSES: list[type[SourceAdapter]] = [
     JavdbAdapter,
 ]
 
-__all__ = ["ALL_ADAPTER_CLASSES"]
+
+
+def build_default_registry() -> SourceRegistry:
+    """A fresh registry holding every shipped adapter, in ``ALL_ADAPTER_CLASSES`` order.
+
+    Registration order is *not* priority: the Phase 3 aggregation layer takes its
+    source order and field priorities from configuration, never from here.
+    """
+    registry = SourceRegistry()
+    for adapter_cls in ALL_ADAPTER_CLASSES:
+        registry.register(adapter_cls.source_id, adapter_cls)
+    return registry
+
+
+__all__ = ["ALL_ADAPTER_CLASSES", "build_default_registry"]
