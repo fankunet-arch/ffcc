@@ -46,6 +46,7 @@ class FakeHttpClient:
     def __init__(self) -> None:
         self._responses: dict[str, HttpResponse] = {}
         self._errors: dict[str, Exception] = {}
+        self._sequences: dict[str, list] = {}
         self.requested_urls: list[str] = []
 
     def add_response(self, url: str, response: HttpResponse) -> None:
@@ -53,6 +54,16 @@ class FakeHttpClient:
 
     def add_error(self, url: str, error: Exception) -> None:
         self._errors[url] = error
+
+    def add_sequence(self, url: str, outcomes: list) -> None:
+        """Successive requests for ``url`` get successive outcomes (an ``HttpResponse`` is
+        returned, an ``Exception`` is raised); the **last** outcome repeats forever.
+        Used to script "500 first, then 200" without any real network."""
+        assert outcomes, "need at least one outcome"
+        self._sequences[url] = list(outcomes)
+
+    def request_count(self, url: str) -> int:
+        return self.requested_urls.count(url)
 
     async def get(
         self,
@@ -62,6 +73,12 @@ class FakeHttpClient:
         timeout: float | None = None,
     ) -> HttpResponse:
         self.requested_urls.append(url)
+        if url in self._sequences:
+            queue = self._sequences[url]
+            outcome = queue.pop(0) if len(queue) > 1 else queue[0]
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
         if url in self._errors:
             raise self._errors[url]
         if url in self._responses:

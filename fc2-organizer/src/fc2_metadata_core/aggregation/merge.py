@@ -49,6 +49,7 @@ from fc2_metadata_core.aggregation.models import (
     AggregationInputError,
     AggregationResult,
     FieldConflict,
+    SourceExecutionTrace,
 )
 from fc2_metadata_core.aggregation.policy import (
     COLLECTION_MERGE_FIELDS,
@@ -63,14 +64,25 @@ from fc2_metadata_core.sources.base import require_canonical_number
 __all__ = ["merge_source_results", "validate_source_result", "invalid_response_result"]
 
 
-def invalid_response_result(source_id: str, detail: str, *, elapsed_ms: float = 0.0) -> SourceResult:
-    """The fail-closed replacement for a result that cannot be trusted."""
+def invalid_response_result(
+    source_id: str,
+    detail: str,
+    *,
+    elapsed_ms: float = 0.0,
+    error_kind: SourceErrorKind = SourceErrorKind.RESULT_CONTRACT_MISMATCH,
+) -> SourceResult:
+    """The fail-closed replacement for a result that cannot be trusted.
+
+    ``error_kind`` defaults to ``RESULT_CONTRACT_MISMATCH`` (wrong ``source_id`` /
+    number / type); the execution boundary passes ``ADAPTER_EXCEPTION`` for an
+    adapter that raised. Neither is ever retried.
+    """
     return SourceResult(
         source_id=source_id,
         status=SourceStatus.INVALID_RESPONSE,
         metadata=None,
         elapsed_ms=elapsed_ms,
-        error_kind=SourceErrorKind.INVALID_RESPONSE,
+        error_kind=error_kind,
         error_detail=detail,
     )
 
@@ -196,6 +208,7 @@ def merge_source_results(
     *,
     disabled_source_ids: Sequence[str] = (),
     elapsed_ms: float = 0.0,
+    execution_traces: Sequence[SourceExecutionTrace] | None = None,
 ) -> AggregationResult:
     """Merge one result per enabled source into an :class:`AggregationResult`.
 
@@ -203,7 +216,10 @@ def merge_source_results(
     (that is how a result is tied to the configured source it was executed
     for); a different length is a caller bug (:class:`AggregationInputError`),
     a non-canonical ``number`` raises ``InvalidCanonicalNumberInputError``.
-    Everything else -- including hostile or buggy results -- yields a normal
+    ``execution_traces`` (C2, optional) must be one trace per result, same order,
+    each ``final_result`` equal to the (validated) result -- else
+    :class:`AggregationInputError`. Only the **final** results are merged; retry
+    history never contributes data. Everything else -- including hostile or buggy results -- yields a normal
     ``AggregationResult``.
     """
     require_canonical_number(number)
@@ -217,6 +233,15 @@ def merge_source_results(
         validate_source_result(slot_id, number, candidate)
         for slot_id, candidate in zip(policy.source_order, source_results)
     )
+    traces: tuple[SourceExecutionTrace, ...] = ()
+    if execution_traces is not None:
+        traces = tuple(execution_traces)
+        if len(traces) != len(sanitized) or any(
+            t.source_id != r.source_id or t.final_result != r for t, r in zip(traces, sanitized)
+        ):
+            raise AggregationInputError(
+                "execution_traces must match the (validated) source results one-to-one, in order"
+            )
     by_id: dict[str, NormalizedMetadata] = {
         result.source_id: result.metadata
         for result in sanitized
@@ -233,6 +258,7 @@ def merge_source_results(
             source_results=sanitized,
             disabled_source_ids=tuple(disabled_source_ids),
             elapsed_ms=elapsed_ms,
+            source_execution_traces=traces,
         )
 
     values: dict[str, object] = {"number": number}
@@ -277,4 +303,5 @@ def merge_source_results(
         conflicts=tuple(ordered_conflicts),
         disabled_source_ids=tuple(disabled_source_ids),
         elapsed_ms=elapsed_ms,
+        source_execution_traces=traces,
     )

@@ -27,7 +27,7 @@ def _source(name):
     return (PACKAGE / name).read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("module", ["merge.py", "policy.py", "execution.py", "engine.py", "models.py", "config.py"])
+@pytest.mark.parametrize("module", ["merge.py", "policy.py", "execution.py", "engine.py", "models.py", "config.py", "retry.py"])
 def test_core_aggregation_modules_never_name_a_provider(module):
     text = _source(module)
     for provider in PROVIDER_IDS:
@@ -78,13 +78,64 @@ def _identifiers(tree):
     return names
 
 
-def test_no_retry_backoff_or_circuit_breaker_in_c1():
-    # Identifiers only (docstrings may say what C1 deliberately does NOT do).
+def test_no_circuit_breaker_in_c2():
+    # Identifiers only (docstrings may say what is deliberately NOT implemented yet).
     for path in PACKAGE.glob("*.py"):
         for name in _identifiers(ast.parse(path.read_text(encoding="utf-8"))):
             lowered = name.lower()
-            for forbidden in ("retry", "retries", "backoff", "circuit", "breaker"):
+            for forbidden in ("circuit", "breaker"):
                 assert forbidden not in lowered, (path.name, name)
+
+
+@pytest.mark.parametrize("module", ["retry.py", "execution.py", "merge.py", "engine.py"])
+def test_retry_and_execution_decisions_never_read_error_detail(module):
+    """P2-R-12: retryability comes from the structured error_kind, never from text.
+    ``error_detail=`` as a *keyword when building a result* is fine; reading
+    ``something.error_detail`` (an ast.Attribute) is not."""
+    tree = ast.parse((PACKAGE / module).read_text(encoding="utf-8"))
+    reads = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == "error_detail"]
+    assert not reads, f"{module} reads .error_detail at line(s) {reads}"
+
+
+def test_retry_and_execution_code_contains_no_text_matching_literals():
+    """P2-R-12: no string literal (docstrings excluded) in the retry decision code could be
+    used to sniff error text such as '500', 'timeout' or 'connection'."""
+    banned = ("500", "5xx", "timeout", "time out", "connection", "server error", "reset", "refused", "dns", "http")
+    for module in ("retry.py", "execution.py"):
+        tree = ast.parse((PACKAGE / module).read_text(encoding="utf-8"))
+        docstring_nodes = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant)
+            ):
+                docstring_nodes.add(id(node.body[0].value))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstring_nodes:
+                lowered = node.value.lower()
+                # f-string fragments that build a human message are fine; membership tests are not:
+                assert not any(b == lowered.strip() for b in banned), (module, node.lineno, node.value)
+
+
+def test_no_string_membership_tests_on_results_in_retry_or_execution():
+    """No ``"..." in something`` / ``something.startswith/find/lower`` on result text."""
+    for module in ("retry.py", "execution.py"):
+        tree = ast.parse((PACKAGE / module).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare) and any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
+                if isinstance(node.left, ast.Constant) and isinstance(node.left.value, str):
+                    raise AssertionError(f"{module}:{node.lineno} tests a string literal for membership")
+            if isinstance(node, ast.Attribute) and node.attr in ("startswith", "endswith", "find", "lower", "casefold"):
+                raise AssertionError(f"{module}:{node.lineno} calls a string-sniffing method .{node.attr}")
+
+
+def test_retry_module_does_not_import_the_http_library_or_adapters():
+    tree = ast.parse((PACKAGE / "retry.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        names = [a.name for a in node.names] if isinstance(node, ast.Import) else (
+            [node.module] if isinstance(node, ast.ImportFrom) and node.module else []
+        )
+        for name in names:
+            assert not name.startswith(("httpx", "fc2_metadata_core.sources.adapters", "fc2_metadata_core.http")), name
 
 
 # ---- AggregationResult invariants ----------------------------------------------------------------------

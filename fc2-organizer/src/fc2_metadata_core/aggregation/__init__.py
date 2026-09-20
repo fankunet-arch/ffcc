@@ -28,18 +28,27 @@ from fc2_metadata_core.aggregation.config import (
     validate_base_url,
 )
 from fc2_metadata_core.aggregation.defaults import DEFAULT_SOURCE_ORDER, default_aggregation_config
-from fc2_metadata_core.aggregation.engine import MultiSourceEngine
-from fc2_metadata_core.aggregation.execution import SourceTarget, execute_sources
+from fc2_metadata_core.aggregation.engine import MultiSourceEngine, is_async_get
+from fc2_metadata_core.aggregation.execution import SourceTarget, execute_sources, execute_sources_traced
 from fc2_metadata_core.aggregation.merge import merge_source_results, validate_source_result
 from fc2_metadata_core.aggregation.models import (
+    CONFLICT_FIELDS,
     OPERATIONAL_FAILURE_STATUSES,
     AggregateStatus,
     AggregationContractError,
     AggregationInputError,
     AggregationResult,
     FieldConflict,
+    SourceAttempt,
+    SourceExecutionTrace,
 )
 from fc2_metadata_core.aggregation.policy import AggregationConfigError, AggregationPolicy
+from fc2_metadata_core.aggregation.retry import (
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_RETRYABLE_ERROR_KINDS,
+    RETRY_ELIGIBLE_KINDS,
+    RetryPolicy,
+)
 
 __all__ = [
     "AggregateStatus",
@@ -49,16 +58,25 @@ __all__ = [
     "AggregationInputError",
     "AggregationPolicy",
     "AggregationResult",
+    "CONFLICT_FIELDS",
+    "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_MAX_CONCURRENCY",
     "DEFAULT_SOURCE_DEADLINE_SECONDS",
+    "DEFAULT_RETRYABLE_ERROR_KINDS",
     "DEFAULT_SOURCE_ORDER",
     "FieldConflict",
     "MultiSourceEngine",
     "OPERATIONAL_FAILURE_STATUSES",
+    "RETRY_ELIGIBLE_KINDS",
+    "RetryPolicy",
+    "SourceAttempt",
     "SourceConfig",
+    "SourceExecutionTrace",
     "SourceTarget",
     "default_aggregation_config",
     "execute_sources",
+    "execute_sources_traced",
+    "is_async_get",
     "merge_source_results",
     "validate_base_url",
     "validate_source_result",

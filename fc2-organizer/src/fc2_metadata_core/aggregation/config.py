@@ -26,6 +26,7 @@ from typing import Iterable, Mapping
 from urllib.parse import urlsplit
 
 from fc2_metadata_core.aggregation.policy import AggregationConfigError, AggregationPolicy
+from fc2_metadata_core.aggregation.retry import RetryPolicy
 
 __all__ = [
     "SourceConfig",
@@ -122,9 +123,12 @@ class SourceConfig:
     enabled: bool = True
     base_url: str | None = None
     deadline_seconds: float = DEFAULT_SOURCE_DEADLINE_SECONDS
+    retry_policy: RetryPolicy | None = None  # None = use the AggregationConfig default
 
     def __post_init__(self) -> None:
         _validate_source_id(self.source_id)
+        if self.retry_policy is not None and not isinstance(self.retry_policy, RetryPolicy):
+            raise AggregationConfigError(f"source {self.source_id!r}: retry_policy must be a RetryPolicy or None")
         if not isinstance(self.enabled, bool):
             raise AggregationConfigError(f"source {self.source_id!r}: enabled must be a bool")
         if self.base_url is not None:
@@ -161,8 +165,14 @@ class AggregationConfig:
     sources: tuple[SourceConfig, ...]
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY
     field_priority: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    retry_policy: RetryPolicy = RetryPolicy()
 
     def __post_init__(self) -> None:
+        # Direct construction must be as safe as create(): only immutable shapes are
+        # accepted, so nothing the caller still holds can change this config later.
+        _validate_field_priority_shape(self.field_priority)
+        if not isinstance(self.retry_policy, RetryPolicy):
+            raise AggregationConfigError("retry_policy must be a RetryPolicy")
         if not isinstance(self.sources, tuple) or not all(isinstance(s, SourceConfig) for s in self.sources):
             raise AggregationConfigError("sources must be a tuple of SourceConfig")
         if not self.sources:
@@ -191,11 +201,28 @@ class AggregationConfig:
         *,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         field_priority: Mapping[str, Iterable[str]] | None = None,
+        retry_policy: RetryPolicy | None = None,
     ) -> "AggregationConfig":
-        """Friendly constructor: accepts any iterable of sources and a plain mapping."""
+        """Friendly constructor: accepts any iterable of sources and a plain mapping.
+
+        Everything is copied into immutable tuples; later changes to the objects the
+        caller passed cannot reach the returned config.
+        """
         source_tuple = tuple(sources)
         overrides = _normalize_overrides(field_priority)
-        return cls(source_tuple, max_concurrency, overrides)
+        return cls(
+            source_tuple,
+            max_concurrency,
+            overrides,
+            retry_policy if retry_policy is not None else RetryPolicy(),
+        )
+
+    def retry_policy_for(self, source_id: str) -> RetryPolicy:
+        """The retry policy for ``source_id``: its own override, else the default."""
+        for source in self.sources:
+            if source.source_id == source_id:
+                return source.retry_policy if source.retry_policy is not None else self.retry_policy
+        raise AggregationConfigError(f"source {source_id!r} is not configured")
 
     @property
     def enabled_sources(self) -> tuple[SourceConfig, ...]:
@@ -216,10 +243,9 @@ class AggregationConfig:
         config.
         """
         configured_ids = tuple(source.source_id for source in self.sources)
+        _validate_field_priority_shape(self.field_priority)
         overrides: dict[str, tuple[str, ...]] = {}
         for entry in self.field_priority:
-            if not (isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[1], tuple)):
-                raise AggregationConfigError("field_priority entries must be (field, tuple of source ids) pairs")
             field_name, listed = entry
             if field_name in overrides:
                 raise AggregationConfigError(f"field_priority: duplicate field {field_name!r}")
@@ -232,6 +258,30 @@ class AggregationConfig:
             for field_name, full_order in over_all.field_priority
         )
         return AggregationPolicy(source_order=enabled_ids, field_priority=reduced)
+
+
+def _validate_field_priority_shape(field_priority: object) -> None:
+    """Strictly ``tuple[tuple[str, tuple[str, ...]], ...]`` -- no list, dict or nested list.
+
+    Rejects with :class:`AggregationConfigError` (never ``TypeError`` /
+    ``KeyError`` / ``AttributeError``): a non-tuple container, an entry that is not
+    a 2-tuple, a field name that is not a non-empty ``str`` (``None``, ints and
+    unhashable objects included), or source ids that are not a ``tuple`` of ``str``.
+    """
+    if not isinstance(field_priority, tuple):
+        raise AggregationConfigError(
+            f"field_priority must be a tuple of (field, source_ids) pairs, got {type(field_priority).__name__}"
+        )
+    for entry in field_priority:
+        if not (isinstance(entry, tuple) and len(entry) == 2):
+            raise AggregationConfigError("field_priority entries must be (field, source_ids) 2-tuples")
+        field_name, listed = entry
+        if not isinstance(field_name, str) or not field_name:
+            raise AggregationConfigError(f"field_priority field name must be a non-empty str, got {field_name!r}")
+        if not isinstance(listed, tuple) or not all(isinstance(sid, str) for sid in listed):
+            raise AggregationConfigError(
+                f"field_priority[{field_name!r}] must be a tuple of source id strings, got {type(listed).__name__}"
+            )
 
 
 def _normalize_overrides(field_priority: Mapping[str, Iterable[str]] | None) -> tuple[tuple[str, tuple[str, ...]], ...]:

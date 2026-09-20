@@ -37,14 +37,22 @@ def ok(
     return SourceResult(source_id=source_id, status=SourceStatus.SUCCESS, metadata=metadata, elapsed_ms=elapsed_ms)
 
 
-def failed(source_id: str, status: SourceStatus, *, elapsed_ms: float = 1.0, detail: str | None = None) -> SourceResult:
+def failed(
+    source_id: str,
+    status: SourceStatus,
+    *,
+    elapsed_ms: float = 1.0,
+    detail: str | None = None,
+    error_kind: SourceErrorKind | None = None,
+) -> SourceResult:
+    """A failure result; ``error_kind`` defaults to the generic kind matching ``status``."""
     assert status is not SourceStatus.SUCCESS
     return SourceResult(
         source_id=source_id,
         status=status,
         metadata=None,
         elapsed_ms=elapsed_ms,
-        error_kind=SourceErrorKind(status.value),
+        error_kind=error_kind if error_kind is not None else SourceErrorKind(status.value),
         error_detail=detail or f"{source_id}: scripted {status.value}",
     )
 

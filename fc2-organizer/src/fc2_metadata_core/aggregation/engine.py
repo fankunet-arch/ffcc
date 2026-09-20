@@ -3,8 +3,9 @@
 The engine only *wires* the three separately testable pieces together:
 
 1. ``AggregationConfig`` (validated up front, before any network request),
-2. ``execute_sources``  (bounded fan-out, deadlines, isolation -- ``execution.py``),
-3. ``merge_source_results`` (pure field-level merge -- ``merge.py``).
+2. ``execute_sources_traced`` (bounded fan-out, per-source total deadline, source-local
+   retry, isolation, attempt traces -- ``execution.py``),
+3. ``merge_source_results`` (pure field-level merge of the **final** results -- ``merge.py``).
 
 It owns no HTTP transport: the caller passes **one** shared
 :class:`SourceHttpClient`, so every source runs through the same client
@@ -13,10 +14,11 @@ lifecycle (Phase 2 requirement) and the caller decides when to close it.
 
 from __future__ import annotations
 
+import inspect
 import time
 
 from fc2_metadata_core.aggregation.config import AggregationConfig
-from fc2_metadata_core.aggregation.execution import SourceTarget, execute_sources
+from fc2_metadata_core.aggregation.execution import SourceTarget, execute_sources_traced
 from fc2_metadata_core.aggregation.merge import merge_source_results
 from fc2_metadata_core.aggregation.models import AggregationResult
 from fc2_metadata_core.aggregation.policy import AggregationConfigError, AggregationPolicy
@@ -24,7 +26,25 @@ from fc2_metadata_core.http.client import SourceHttpClient
 from fc2_metadata_core.sources.base import require_canonical_number
 from fc2_metadata_core.sources.registry import SourceRegistry
 
-__all__ = ["MultiSourceEngine"]
+__all__ = ["MultiSourceEngine", "is_async_get"]
+
+
+def is_async_get(client: object) -> bool:
+    """Is ``client.get`` an ``async`` callable (a coroutine function)?
+
+    Decided **without any request**: an ``async def`` function or bound method, a
+    ``functools.partial`` of one, an object whose ``__call__`` is ``async def``, and
+    ``unittest.mock.AsyncMock`` all qualify. A plain ``def get`` (even one that
+    returns a coroutine) does not: the Phase 2 ``SourceHttpClient`` protocol is
+    ``async def get(...)``, and a synchronous ``get`` would only fail later, at
+    ``await`` time, turning every source into ``INVALID_RESPONSE``.
+    """
+    get = getattr(client, "get", None)
+    if not callable(get):
+        return False
+    if inspect.iscoroutinefunction(get):
+        return True
+    return inspect.iscoroutinefunction(getattr(get, "__call__", None))
 
 
 class MultiSourceEngine:
@@ -43,8 +63,12 @@ class MultiSourceEngine:
             raise AggregationConfigError("config must be an AggregationConfig")
         if not isinstance(registry, SourceRegistry):
             raise AggregationConfigError("registry must be a SourceRegistry")
-        if not callable(getattr(client, "get", None)):
-            raise AggregationConfigError("client must provide an async get(url, ...) (SourceHttpClient)")
+        if not is_async_get(client):
+            raise AggregationConfigError(
+                "client.get must be an async function (SourceHttpClient protocol: "
+                "`async def get(url, *, headers=None, timeout=None)`); a synchronous get is rejected "
+                "at construction, before any request"
+            )
 
         enabled = config.enabled_sources
         unknown = [source.source_id for source in enabled if source.source_id not in registry]
@@ -56,7 +80,13 @@ class MultiSourceEngine:
         targets = []
         for source in enabled:
             kwargs = {"base_url": source.base_url} if source.base_url is not None else {}
-            targets.append(SourceTarget(source, registry.create(source.source_id, **kwargs)))
+            targets.append(
+                SourceTarget(
+                    source,
+                    registry.create(source.source_id, **kwargs),
+                    config.retry_policy_for(source.source_id),
+                )
+            )
 
         self._config = config
         self._policy: AggregationPolicy = config.policy()
@@ -81,13 +111,14 @@ class MultiSourceEngine:
         """
         require_canonical_number(number)
         started = time.monotonic()
-        results = await execute_sources(
+        traces = await execute_sources_traced(
             number, self._targets, self._client, max_concurrency=self._config.max_concurrency
         )
         return merge_source_results(
             number,
-            results,
+            [trace.final_result for trace in traces],
             self._policy,
+            execution_traces=traces,
             disabled_source_ids=self._config.disabled_source_ids,
             elapsed_ms=max(0.0, (time.monotonic() - started) * 1000.0),
         )
