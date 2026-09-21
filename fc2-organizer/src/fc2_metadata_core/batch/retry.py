@@ -5,8 +5,9 @@
   ``SUCCESS`` and ``PARTIAL`` items are never selected.
 * :func:`apply_retry` merges a :class:`RetryBatchResult` into the result it was made from and returns a **new**
   :class:`BatchResult` (the inputs are never mutated). It fails closed with :class:`BatchRetryError`, producing
-  nothing, unless the retry demonstrably belongs to that result: right generation, exactly the failed indices,
-  same numbers.
+  nothing, unless the retry demonstrably belongs to that result: **the same lineage** (the opaque identity of the
+  execution chain, created once per ``run()`` and carried by every derived result -- shape comparison alone cannot
+  tell two identical-looking batches apart), right generation, exactly the failed indices, same numbers.
 """
 
 from __future__ import annotations
@@ -38,6 +39,11 @@ def apply_retry(previous: BatchResult, retry: RetryBatchResult) -> BatchResult:
         raise BatchRetryError("apply_retry: previous must be a BatchResult")
     if not isinstance(retry, RetryBatchResult):
         raise BatchRetryError("apply_retry: retry must be a RetryBatchResult")
+    if retry.lineage != previous.lineage:
+        raise BatchRetryError(
+            "apply_retry: the retry was not made from this batch (different lineage); a retry can only be applied "
+            "to the batch execution chain it came from"
+        )
     if retry.generation != previous.generation + 1:
         raise BatchRetryError(
             f"apply_retry: retry generation {retry.generation} does not follow the previous result's "
@@ -57,4 +63,4 @@ def apply_retry(previous: BatchResult, retry: RetryBatchResult) -> BatchResult:
             )
         replacements[item.index] = item
     merged = tuple(replacements.get(item.index, item) for item in previous.items)
-    return BatchResult(merged, generation=retry.generation)
+    return BatchResult(merged, generation=retry.generation, lineage=previous.lineage)

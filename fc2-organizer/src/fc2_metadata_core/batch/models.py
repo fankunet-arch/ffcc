@@ -11,7 +11,9 @@ the derived counts are unambiguous.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import re
+import secrets
+from dataclasses import dataclass, field
 from enum import Enum
 
 from fc2_metadata_core.aggregation import AggregateStatus, AggregationResult
@@ -27,6 +29,7 @@ __all__ = [
     "BatchItemErrorKind",
     "BatchItemResult",
     "BatchItemStatus",
+    "BatchLineage",
     "BatchResult",
     "BatchRetryError",
     "RetryBatchResult",
@@ -90,6 +93,31 @@ def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+_LINEAGE_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
+
+
+@dataclass(frozen=True, slots=True)
+class BatchLineage:
+    """Opaque, immutable identity of ONE batch execution chain (primary run -> retries -> merged results).
+
+    Created once per :meth:`BatchScheduler.run` (128 random bits, hex) and carried unchanged by every
+    :class:`BatchResult` / :class:`RetryBatchResult` derived from that run. ``apply_retry`` accepts a retry only if
+    its lineage equals the previous result's, so a retry made from batch A can never be merged into a
+    different batch B -- even one with identical numbers, failed indices and generation. The identity is by value
+    (so a copy of the same batch still matches); it is an in-memory provenance token, **not** a persistence format.
+    """
+
+    token: str
+
+    def __post_init__(self) -> None:
+        if type(self.token) is not str or _LINEAGE_TOKEN_RE.fullmatch(self.token) is None:
+            raise BatchContractError("BatchLineage.token must be 32 lowercase hex characters")
+
+    @classmethod
+    def new(cls) -> "BatchLineage":
+        return cls(secrets.token_hex(16))
+
+
 @dataclass(frozen=True, slots=True)
 class BatchItemResult:
     """The outcome of one work item.
@@ -115,8 +143,8 @@ class BatchItemResult:
     def __post_init__(self) -> None:
         if not _is_int(self.index) or self.index < 0:
             raise BatchContractError("BatchItemResult.index must be an int >= 0")
-        if not is_valid_fc2_number(self.number):
-            raise BatchContractError("BatchItemResult.number must be a canonical FC2 number")
+        if type(self.number) is not str or not is_valid_fc2_number(self.number):
+            raise BatchContractError("BatchItemResult.number must be a canonical FC2 number (exact str)")
         if not isinstance(self.status, BatchItemStatus):
             raise BatchContractError("BatchItemResult.status must be a BatchItemStatus")
         if not _is_int(self.generation) or self.generation < 0:
@@ -140,7 +168,7 @@ class BatchItemResult:
             raise BatchContractError("an item without an aggregation_result is FAILED")
         if not isinstance(self.error_kind, BatchItemErrorKind):
             raise BatchContractError("an item without an aggregation_result needs a BatchItemErrorKind")
-        if not isinstance(self.error_type, str) or not self.error_type or len(self.error_type) > MAX_ERROR_TYPE_CHARS:
+        if type(self.error_type) is not str or not self.error_type or len(self.error_type) > MAX_ERROR_TYPE_CHARS:
             raise BatchContractError("error_type must be a non-empty class name (<= 256 chars)")
 
 
@@ -161,13 +189,18 @@ class BatchResult:
     ``items[i].index == i`` (contiguous ``0..n-1``). ``generation`` is the latest execution round reflected in
     this result (``0`` for a primary run; each :func:`apply_retry` produces the next one); no item may be newer
     than its batch. Counts and failed views are *derived* (nothing stored can contradict them) and are tuples.
+    ``lineage`` identifies the execution chain this result belongs to (see :class:`BatchLineage`); a result built
+    by hand gets a fresh lineage of its own.
     """
 
     items: tuple[BatchItemResult, ...]
     generation: int = 0
+    lineage: BatchLineage = field(default_factory=BatchLineage.new, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         items = _validate_items_tuple(self.items, "BatchResult")
+        if not isinstance(self.lineage, BatchLineage):
+            raise BatchContractError("BatchResult.lineage must be a BatchLineage")
         if not _is_int(self.generation) or self.generation < 0:
             raise BatchContractError("BatchResult.generation must be an int >= 0")
         if [item.index for item in items] != list(range(len(items))):
@@ -210,15 +243,19 @@ class RetryBatchResult:
     """The outcome of one ``retry_failed`` round: **only** the retried items, in batch order.
 
     Every item carries this round's ``generation`` (``>= 1``) and its **original** ``index``; indices strictly
-    increase. It never replaces anything by itself -- :func:`fc2_metadata_core.batch.apply_retry` produces the
+    increase, and ``lineage`` is the lineage of the batch it was made from. It never replaces anything by itself --
+    :func:`fc2_metadata_core.batch.apply_retry` produces the
     merged, complete :class:`BatchResult`.
     """
 
     items: tuple[BatchItemResult, ...]
     generation: int
+    lineage: BatchLineage = field(compare=False, repr=False)
 
     def __post_init__(self) -> None:
         items = _validate_items_tuple(self.items, "RetryBatchResult")
+        if not isinstance(self.lineage, BatchLineage):
+            raise BatchContractError("RetryBatchResult.lineage must be the BatchLineage of the batch it retries")
         if not _is_int(self.generation) or self.generation < 1:
             raise BatchContractError("RetryBatchResult.generation must be an int >= 1 (0 is the primary run)")
         indices = [item.index for item in items]

@@ -46,6 +46,7 @@ from fc2_metadata_core.batch.models import (
     BatchItemErrorKind,
     BatchItemResult,
     BatchItemStatus,
+    BatchLineage,
     BatchResult,
     RetryBatchResult,
     batch_status_for,
@@ -73,10 +74,16 @@ class _FatalSignal(Exception):
 
     (``KeyboardInterrupt`` / ``SystemExit`` raised inside a task would otherwise be re-raised into the event
     loop itself by asyncio, and a self-cancelled task is silently ignored by ``TaskGroup``.)
+
+    **Metadata-free by construction:** it only *holds* the original object. It never reads its class name,
+    text, args or anything else the raiser controls -- a hostile metaclass / ``__name__`` on a fatal exception
+    must not be able to replace the fatal itself with an error raised from here.
     """
 
+    __slots__ = ("original",)
+
     def __init__(self, original: BaseException) -> None:
-        super().__init__(type(original).__name__)
+        super().__init__()
         self.original = original
 
 
@@ -107,20 +114,31 @@ def _is_async_callable(candidate: object) -> bool:
     return inspect.iscoroutinefunction(getattr(candidate, "__call__", None))
 
 
+_TYPE_NAME_DESCRIPTOR = type.__dict__["__name__"]  # the C-level getter of ``type.__name__``
+
+
 def _type_name(obj: object) -> str:
-    """The class name of ``obj`` -- never its text. Anything odd collapses to ``UnknownType``."""
-    try:
-        name = type(obj).__name__
-        if isinstance(name, str) and name.isidentifier() and len(name) <= _MAX_TYPE_NAME_CHARS:
-            return str(name)
-    except Exception:  # a hostile metaclass; never let error reporting itself raise
-        pass
+    """The class name of ``obj`` -- never its text. **Total**: runs no caller-controlled code, cannot raise.
+
+    ``type(obj)`` returns the real class without consulting ``obj.__class__``; the name is read through
+    ``type.__name__``'s own descriptor, which bypasses any ``__name__`` property a hostile *metaclass* defines. A
+    class whose metaclass is not plain ``type`` is not trusted at all, and neither is a name that is not an exact,
+    short identifier ``str``: all of those collapse to ``UnknownType``. Nothing here may ever turn an ordinary
+    item failure (or an error report) into control flow.
+    """
+    cls = type(obj)
+    if type(cls) is not type:
+        return _UNKNOWN_TYPE
+    name = _TYPE_NAME_DESCRIPTOR.__get__(cls, type)
+    if type(name) is str and name.isidentifier() and len(name) <= _MAX_TYPE_NAME_CHARS:
+        return name
     return _UNKNOWN_TYPE
 
 
 def _short(value: object) -> str:
-    """A bounded, side-effect-free description of a rejected element (never calls its ``repr``)."""
-    if isinstance(value, str):
+    """A bounded, side-effect-free description of a rejected element. Only an exact ``str`` is ever shown (its
+    own ``repr``, of a bounded slice); anything else -- including a ``str`` subclass -- is shown as its class name."""
+    if type(value) is str:
         text = value if len(value) <= _MAX_REPR_CHARS else value[:_MAX_REPR_CHARS] + "..."
         return repr(text)
     return f"<{_type_name(value)}>"
@@ -130,8 +148,10 @@ def validate_batch(numbers: object) -> tuple[str, ...]:
     """Snapshot ``numbers`` and check the input contract; return the canonical numbers as a tuple.
 
     ``BatchInputError`` (zero engine calls) for a non-``Sequence`` / unordered / text-like container or for any
-    element that is not already a canonical FC2 number. No normalisation and no second parser: elements go
-    through the existing ``require_canonical_number`` boundary.
+    element that is not already a canonical FC2 number **held in an exact built-in ``str``**: a ``str`` subclass
+    is rejected even if its value is canonical, and none of its methods (``__repr__``, ``__str__``, slicing, ...)
+    is ever run. No normalisation and no second parser: elements go through the existing
+    ``require_canonical_number`` boundary.
     """
     if isinstance(numbers, (str, bytes, bytearray, memoryview)):
         raise BatchInputError("a batch must be a Sequence of FC2 numbers, not a single text/bytes value")
@@ -143,7 +163,7 @@ def validate_batch(numbers: object) -> tuple[str, ...]:
     invalid: list[tuple[int, str]] = []
     invalid_count = 0
     for index, element in enumerate(snapshot):
-        if isinstance(element, str):
+        if type(element) is str:
             try:
                 require_canonical_number(element)
                 continue
@@ -194,39 +214,47 @@ class BatchScheduler:
     async def run(self, numbers: Sequence[str]) -> BatchResult:
         """Aggregate every number (generation 0). Returns items in **input order**.
 
-        Raises ``BatchInputError`` (before any call) for invalid input and ``BatchBusyError`` if this scheduler
-        already has an active run. Ordinary per-item failures never raise; fatal ``BaseException`` and
-        cancellation propagate (see the module docstring).
+        **Busy-first:** if this scheduler already has an active run, the very first thing that happens is
+        ``BatchBusyError`` -- before any input validation, whatever the argument is (valid, invalid, empty).
+        Otherwise ``BatchInputError`` (before any engine call) for invalid input. Ordinary per-item failures never
+        raise; fatal ``BaseException`` and cancellation propagate (see the module docstring).
         """
-        snapshot = validate_batch(numbers)
-        work = tuple(enumerate(snapshot))
-        items = await self._execute(work, generation=0)
-        return BatchResult(items, generation=0)
+        self._claim()
+        try:
+            snapshot = validate_batch(numbers)
+            work = tuple(enumerate(snapshot))
+            lineage = BatchLineage.new()  # one identity for this run and everything derived from it
+            items = await self._drive(_Run(work, 0, [None] * len(work)))
+            return BatchResult(items, generation=0, lineage=lineage)
+        finally:
+            self._busy = False
 
     async def retry_failed(self, previous: BatchResult) -> RetryBatchResult:
         """Re-run only the ``FAILED`` items of ``previous`` (by original index); return the retry round.
 
-        ``SUCCESS`` / ``PARTIAL`` items are not retried. The round's generation is ``previous.generation + 1``.
-        ``previous`` is not modified; combine the two with :func:`fc2_metadata_core.batch.apply_retry`.
+        Busy-first, like :meth:`run`. ``SUCCESS`` / ``PARTIAL`` items are not retried. The round's generation is
+        ``previous.generation + 1`` and it carries ``previous.lineage``. ``previous`` is not modified; combine the
+        two with :func:`fc2_metadata_core.batch.apply_retry`.
         """
-        work = failed_work(previous)  # BatchRetryError for a non-BatchResult
-        generation = previous.generation + 1
-        items = await self._execute(work, generation=generation)
-        return RetryBatchResult(items, generation=generation)
+        self._claim()
+        try:
+            work = failed_work(previous)  # BatchRetryError for a non-BatchResult
+            generation = previous.generation + 1
+            items = await self._drive(_Run(work, generation, [None] * len(work)))
+            return RetryBatchResult(items, generation=generation, lineage=previous.lineage)
+        finally:
+            self._busy = False
 
     # -- internals -----------------------------------------------------------------------------------------------
 
-    async def _execute(self, work: tuple[tuple[int, str], ...], *, generation: int) -> tuple[BatchItemResult, ...]:
+    def _claim(self) -> None:
+        """Mark the scheduler busy, or raise ``BatchBusyError`` immediately (no other work has happened yet)."""
         if self._busy:
             raise BatchBusyError(
                 "this scheduler already has an active run; use one scheduler per concurrent run "
                 "(independent budgets add up)"
             )
         self._busy = True
-        try:
-            return await self._drive(_Run(work, generation, [None] * len(work)))
-        finally:
-            self._busy = False
 
     async def _drive(self, run: _Run) -> tuple[BatchItemResult, ...]:
         count = len(run.work)
@@ -283,7 +311,8 @@ class BatchScheduler:
                 elapsed_ms=self._elapsed_ms(started),
             )
         elapsed_ms = self._elapsed_ms(started)
-        if not isinstance(candidate, AggregationResult) or candidate.number != number:
+        # exact type: ``isinstance`` would consult ``candidate.__class__``, i.e. run code the engine controls
+        if type(candidate) is not AggregationResult or candidate.number != number:
             return BatchItemResult(
                 index=index,
                 number=number,

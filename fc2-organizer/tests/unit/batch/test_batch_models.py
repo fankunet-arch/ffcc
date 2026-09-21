@@ -11,12 +11,14 @@ from fc2_metadata_core.batch import (
     BatchItemErrorKind,
     BatchItemResult,
     BatchItemStatus,
+    BatchLineage,
     BatchResult,
     RetryBatchResult,
 )
 from support.batch_fakes import agg
 
 N1, N2, N3 = "FC2-1000001", "FC2-1000002", "FC2-1000003"
+LINEAGE = BatchLineage.new()
 S, P, F = BatchItemStatus.SUCCESS, BatchItemStatus.PARTIAL, BatchItemStatus.FAILED
 
 
@@ -184,26 +186,67 @@ def test_generation_rules():
 
 
 def test_a_retry_result_is_a_strictly_increasing_subset_of_one_generation():
-    retry = RetryBatchResult((item(2, N3, "failed", 1), item(7, N1, "success", 1)), generation=1)
+    retry = RetryBatchResult((item(2, N3, "failed", 1), item(7, N1, "success", 1)), generation=1, lineage=LINEAGE)
     assert retry.total == 2 and retry.success_count == 1 and retry.failed_count == 1
     assert retry.failed_indices == (2,)
     assert retry.indices == (2, 7)
     assert isinstance(retry.items, tuple)
-    assert RetryBatchResult((), generation=3).total == 0
+    assert RetryBatchResult((), generation=3, lineage=LINEAGE).total == 0
 
 
 def test_retry_result_validation():
     with pytest.raises(BatchContractError):
-        RetryBatchResult((), generation=0)  # generation 0 is the primary run
+        RetryBatchResult((), generation=0, lineage=LINEAGE)  # generation 0 is the primary run
+    with pytest.raises(BatchContractError):  # wrong item generation
+        RetryBatchResult((item(2, generation=0),), generation=1, lineage=LINEAGE)
+    with pytest.raises(BatchContractError):  # not increasing
+        RetryBatchResult((item(3, generation=1), item(2, generation=1)), generation=1, lineage=LINEAGE)
+    with pytest.raises(BatchContractError):  # duplicate index
+        RetryBatchResult((item(2, generation=1), item(2, generation=1)), generation=1, lineage=LINEAGE)
+    with pytest.raises(BatchContractError):  # a list is mutable
+        RetryBatchResult([item(2, generation=1)], generation=1, lineage=LINEAGE)  # type: ignore[arg-type]
     with pytest.raises(BatchContractError):
-        RetryBatchResult((item(2, generation=0),), generation=1)  # wrong item generation
-    with pytest.raises(BatchContractError):
-        RetryBatchResult((item(3, generation=1), item(2, generation=1)), generation=1)  # not increasing
-    with pytest.raises(BatchContractError):
-        RetryBatchResult((item(2, generation=1), item(2, generation=1)), generation=1)  # duplicate index
-    with pytest.raises(BatchContractError):
-        RetryBatchResult([item(2, generation=1)], generation=1)  # type: ignore[arg-type]
-    with pytest.raises(BatchContractError):
-        RetryBatchResult((), generation=True)  # type: ignore[arg-type]
+        RetryBatchResult((), generation=True, lineage=LINEAGE)  # type: ignore[arg-type]
     with pytest.raises(dataclasses.FrozenInstanceError):
-        RetryBatchResult((), generation=1).generation = 2  # type: ignore[misc]
+        RetryBatchResult((), generation=1, lineage=LINEAGE).generation = 2  # type: ignore[misc]
+
+
+def test_a_retry_needs_a_real_lineage():
+    for bad in (None, "0" * 32, object()):
+        with pytest.raises(BatchContractError):
+            RetryBatchResult((), generation=1, lineage=bad)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        RetryBatchResult((), generation=1)  # type: ignore[call-arg]  # no default: provenance must be explicit
+
+
+# ---- BatchLineage --------------------------------------------------------------------------------------------------
+
+
+def test_lineages_are_opaque_immutable_values_and_distinct_per_creation():
+    a, b = BatchLineage.new(), BatchLineage.new()
+    assert a != b and a == BatchLineage(a.token) and hash(a) == hash(BatchLineage(a.token))
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        a.token = "0" * 32  # type: ignore[misc]
+    for bad in ("", "abc", "G" * 32, "A" * 32, "0" * 31, "0" * 33, None, 5, b"0" * 32):
+        with pytest.raises(BatchContractError):
+            BatchLineage(bad)  # type: ignore[arg-type]
+
+
+def test_a_hand_built_batch_gets_its_own_fresh_lineage_and_lineage_is_not_part_of_equality_or_repr():
+    one, two = BatchResult((item(0),)), BatchResult((item(0),))
+    assert one.lineage != two.lineage
+    assert one == two, "value equality is by content; lineage is provenance, not content"
+    assert "lineage" not in repr(one)
+    with pytest.raises(BatchContractError):
+        BatchResult((item(0),), lineage="x")  # type: ignore[arg-type]
+
+
+def test_an_item_number_must_be_an_exact_str():
+    class Sub(str):
+        pass
+
+    for bad in (Sub(N1),):
+        with pytest.raises(BatchContractError):
+            BatchItemResult(0, bad, S, agg(N1), None, None, 0, 1.0)
+    with pytest.raises(BatchContractError):
+        BatchItemResult(0, N1, F, None, BatchItemErrorKind.ENGINE_EXCEPTION, Sub("X"), 0, 1.0)

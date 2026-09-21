@@ -157,24 +157,39 @@ def test_a_slot_freed_by_a_finished_item_is_reused_immediately():
 
 
 def test_a_second_concurrent_run_on_the_same_scheduler_is_rejected_not_silently_doubled():
+    """Cannot hang even if the guard is removed: only the FIRST run's numbers are gated, the second run's numbers
+    return at once (so a missing guard shows up as "DID NOT RAISE"), every call is bounded by a watchdog, and the
+    held-open run is always released and awaited in ``finally`` (no orphan task). Broader busy-first coverage and a
+    self-test of the failure mode live in ``test_batch_r1_closure.py``."""
+    first_numbers = numbers(4)
     gate = {}
 
     async def behavior(number, seq):
-        await gate["g"].wait()
+        if number in first_numbers:
+            await gate["g"].wait()
         return agg(number)
+
+    async def bounded(awaitable):
+        try:
+            async with asyncio.timeout(5.0):  # watchdog only: a correct guard answers immediately
+                return await awaitable
+        except TimeoutError:
+            raise AssertionError("second run did not answer within the watchdog (busy guard broken?)") from None
 
     async def scenario():
         gate["g"] = Gate()
         sched = scheduler(engine, 2)
-        first = asyncio.create_task(sched.run(numbers(4)))
-        await until(lambda: engine.active == 2)
-        with pytest.raises(BatchBusyError):
-            await sched.run(numbers(3, start=5_000_001))
-        with pytest.raises(BatchBusyError):
-            await sched.run([])  # uniform: busy is busy, even for an empty batch
-        assert engine.active == 2 and len(engine.calls) == 2, "the rejected runs started nothing"
-        gate["g"].release.set()
-        await first
+        first = asyncio.create_task(sched.run(first_numbers))
+        try:
+            await until(lambda: engine.active == 2)
+            with pytest.raises(BatchBusyError):
+                await bounded(sched.run(numbers(3, start=5_000_001)))
+            with pytest.raises(BatchBusyError):
+                await bounded(sched.run([]))  # uniform: busy is busy, even for an empty batch
+            assert engine.active == 2 and len(engine.calls) == 2, "the rejected runs started nothing"
+        finally:
+            gate["g"].release.set()
+            await asyncio.gather(first, return_exceptions=True)
         # released afterwards: the scheduler is reusable
         again = await sched.run(numbers(2, start=6_000_001))
         assert again.total == 2

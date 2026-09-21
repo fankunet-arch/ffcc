@@ -10,6 +10,7 @@ import pytest
 from fc2_metadata_core.batch import (
     BatchConfig,
     BatchItemStatus,
+    BatchLineage,
     BatchResult,
     BatchRetryError,
     BatchScheduler,
@@ -106,7 +107,7 @@ def test_retry_uses_the_bounded_worker_model_and_keeps_batch_order():
 
 def test_retry_failed_rejects_anything_that_is_not_a_batch_result():
     _, engine, sched = make({})
-    for bad in (None, [], (), "x", RetryBatchResult((), generation=1), object()):
+    for bad in (None, [], (), "x", RetryBatchResult((), generation=1, lineage=BatchLineage.new()), object()):
         with pytest.raises(BatchRetryError):
             run(sched.retry_failed(bad))  # type: ignore[arg-type]
     assert engine.calls == []
@@ -228,7 +229,9 @@ def test_apply_retry_rejects_wrong_types():
 def test_apply_retry_rejects_a_stale_or_future_generation(generation):
     _, primary, retry = base_case()
     wrong = RetryBatchResult(
-        tuple(dataclasses.replace(i, generation=generation) for i in retry.items), generation=generation
+        tuple(dataclasses.replace(i, generation=generation) for i in retry.items),
+        generation=generation,
+        lineage=retry.lineage,
     )
     with pytest.raises(BatchRetryError):
         apply_retry(primary, wrong)
@@ -244,7 +247,7 @@ def test_replaying_the_same_retry_twice_is_rejected():
 
 def test_apply_retry_rejects_a_retry_that_misses_a_failed_item():
     _, primary, retry = base_case()
-    partial_retry = RetryBatchResult(retry.items[:1], generation=1)
+    partial_retry = RetryBatchResult(retry.items[:1], generation=1, lineage=retry.lineage)
     with pytest.raises(BatchRetryError):
         apply_retry(primary, partial_retry)
 
@@ -252,7 +255,7 @@ def test_apply_retry_rejects_a_retry_that_misses_a_failed_item():
 def test_apply_retry_rejects_an_extra_index_that_was_not_failed():
     n, primary, retry = base_case()
     extra = dataclasses.replace(primary.items[0], generation=1)  # index 0 was SUCCESS, never retried
-    forged = RetryBatchResult((extra,) + retry.items, generation=1)
+    forged = RetryBatchResult((extra,) + retry.items, generation=1, lineage=retry.lineage)
     with pytest.raises(BatchRetryError):
         apply_retry(primary, forged)
 
@@ -261,7 +264,7 @@ def test_apply_retry_rejects_an_index_outside_the_batch():
     _, primary, retry = base_case()
     outside = dataclasses.replace(retry.items[0], index=99)
     with pytest.raises(BatchRetryError):
-        apply_retry(primary, RetryBatchResult((retry.items[0], outside), generation=1))
+        apply_retry(primary, RetryBatchResult((retry.items[0], outside), generation=1, lineage=retry.lineage))
 
 
 def test_apply_retry_rejects_a_number_mismatch_at_an_index():
@@ -269,7 +272,7 @@ def test_apply_retry_rejects_a_number_mismatch_at_an_index():
     wrong_number = "FC2-7777777"
     swapped = dataclasses.replace(retry.items[0], number=wrong_number, aggregation_result=agg(wrong_number))
     with pytest.raises(BatchRetryError):
-        apply_retry(primary, RetryBatchResult((swapped,) + retry.items[1:], generation=1))
+        apply_retry(primary, RetryBatchResult((swapped,) + retry.items[1:], generation=1, lineage=retry.lineage))
 
 
 def test_a_retry_from_one_batch_cannot_be_applied_to_a_different_batch():
@@ -285,7 +288,7 @@ def test_apply_retry_failure_leaves_previous_untouched():
     _, primary, retry = base_case()
     before = primary.items
     with pytest.raises(BatchRetryError):
-        apply_retry(primary, RetryBatchResult(retry.items[:1], generation=1))
+        apply_retry(primary, RetryBatchResult(retry.items[:1], generation=1, lineage=retry.lineage))
     assert primary.items is before and primary.generation == 0
 
 
