@@ -16,6 +16,6 @@ transport (``http``). Phase 3 C1 adds multi-source execution and deterministic
 field-level aggregation (``aggregation``). Zero dependency on ``amane``.
 """
 
-from fc2_metadata_core import aggregation, errors, http, models, normalize, sources
+from fc2_metadata_core import aggregation, batch, errors, http, models, normalize, sources
 
-__all__ = ["aggregation", "errors", "http", "models", "normalize", "sources"]
+__all__ = ["aggregation", "batch", "errors", "http", "models", "normalize", "sources"]

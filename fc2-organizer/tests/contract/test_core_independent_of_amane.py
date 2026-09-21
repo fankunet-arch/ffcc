@@ -172,6 +172,68 @@ def test_core_public_symbols_usable_with_amane_import_blocked_at_runtime():
         _purge_core_modules()
 
 
+BATCH_MODULES = [
+    "fc2_metadata_core.batch",
+    "fc2_metadata_core.batch.config",
+    "fc2_metadata_core.batch.models",
+    "fc2_metadata_core.batch.retry",
+    "fc2_metadata_core.batch.scheduler",
+]
+
+
+def test_phase3_c4_every_batch_module_is_in_the_f4_discovered_list():
+    """C4: a new package must never become an F4 blind spot. Both scans below are derived from the file
+    tree, so every ``batch/*.py`` is covered by the static AST check and the blocked-import check."""
+    for module in BATCH_MODULES:
+        assert module in CORE_MODULES, f"{module} missing from the discovered module list"
+    batch_files = {p.name for p in _iter_core_source_files() if p.parent.name == "batch"}
+    assert {"__init__.py", "config.py", "models.py", "retry.py", "scheduler.py"} <= batch_files
+
+
+def test_phase3_c4_static_scan_parametrisation_includes_the_batch_files():
+    ids = {str(p.relative_to(CORE_SRC_ROOT)) for p in _iter_core_source_files()}
+    for name in ("config", "models", "retry", "scheduler", "__init__"):
+        assert str(Path("batch") / f"{name}.py") in ids
+
+
+def test_phase3_c4_batch_scheduler_runs_end_to_end_with_amane_import_blocked_at_runtime():
+    """Beyond importing: run a real batch (scheduler + retry + merge) while any `amane` import would raise.
+    Everything is built from the freshly imported package (the purge replaces module/class identities)."""
+    import asyncio
+
+    _purge_core_modules()
+    blocker = _BlockAmaneFinder()
+    sys.meta_path.insert(0, blocker)
+    try:
+        core = importlib.import_module("fc2_metadata_core")
+        batch, aggregation, models = core.batch, core.aggregation, core.models
+        assert batch is importlib.import_module("fc2_metadata_core.batch")
+
+        def build(number):
+            metadata = models.NormalizedMetadata(
+                number=number, title="T", field_sources={"number": ("s",), "title": ("s",)}
+            )
+            source = models.SourceResult(
+                source_id="s", status=models.SourceStatus.SUCCESS, metadata=metadata, elapsed_ms=1.0
+            )
+            return aggregation.merge_source_results(number, [source], aggregation.AggregationPolicy.build(("s",)))
+
+        class Engine:
+            async def aggregate(self, number):
+                if number.endswith("2"):
+                    raise RuntimeError("boom")
+                return build(number)
+
+        scheduler = batch.BatchScheduler(Engine(), batch.BatchConfig(max_in_flight_items=2))
+        result = asyncio.run(scheduler.run(["FC2-1000001", "FC2-1000002", "FC2-1000003"]))
+        assert [i.status.value for i in result.items] == ["success", "failed", "success"]
+        retry = asyncio.run(scheduler.retry_failed(result))
+        assert batch.apply_retry(result, retry).generation == 1
+    finally:
+        sys.meta_path.remove(blocker)
+        _purge_core_modules()
+
+
 def test_amane_is_not_actually_installed_in_this_test_environment():
     """Sanity check that the dynamic test above is meaningful: `amane` isn't
     already absent from sys.modules for some unrelated reason, and importing
