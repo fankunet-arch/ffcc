@@ -460,13 +460,299 @@ anti-TOCTOU rewrite of the scanner, no symlink/junction architecture
 expansion, no extension-policy redesign, and no scope expansion to close a
 LOW finding. They remain open for a future round.
 
-## R1.12 Independent R1 Closure Review
+## R1.12 Independent R1 Closure Review (original round)
 
 ```text
 REQUIRED
 ```
 
-## R1.13 P4-C1
+## R1.13 P4-C1 (original round)
+
+```text
+NOT CLOSED
+```
+
+---
+
+# R2 Closure — P4-C1-R1-01 (HIGH / BLOCKING)
+
+The two sections above (original P4-C1 and R1) are left unmodified for
+history. This section records the R2 incremental-closure round.
+
+## R2.1 Coordinates
+
+```text
+R1 Reviewed-Failed Code Head = 77f928df9e8233ec42f3aa3d5b14291a24c1036a
+Previous Docs Head           = 25013d1fffee717603389511c3ca7b272e62518d
+R2 Code Review Candidate     = 2db3a44d48eb6e9ae36d627c3fd1bb5ed661e34c
+R2 Docs Head                 = <this commit; see git log after commit>
+R2 Code Review Range         = 25013d1fffee717603389511c3ca7b272e62518d..2db3a44d48eb6e9ae36d627c3fd1bb5ed661e34c
+R2 Docs Review Range         = 2db3a44d48eb6e9ae36d627c3fd1bb5ed661e34c..<R2 Docs Head>
+```
+
+```text
+P4-C1-R-01: REMAINS CLOSED (reverified by direct reproduction, R2.7 Repro A)
+```
+
+## R2.2 Finding addressed
+
+```text
+P4-C1-R1-01
+Severity: HIGH / BLOCKING
+```
+
+**Defect:** R1's fix for P4-C1-R-01 absolutized a relative root via
+`os.path.abspath`, which performs a purely lexical normalization
+(collapsing `a/../b` to `b`) *before any filesystem access happens*. For an
+ordinary directory this lexical shortcut is harmless. For
+`link/../mydir` where `link` is a symlink (or, on Windows, a junction),
+it is wrong in general: a filesystem that resolves paths component-by-component
+resolves `..` in the context of wherever `link` actually points, not
+lexically relative to `link`'s own location. The independent reviewer
+reproduced this with a real POSIX symlink:
+
+```text
+base/
+  mydir/
+    BASE.mp4
+  link -> other/subdir
+
+other/
+  subdir/
+  mydir/
+    OTHER.mp4
+
+chdir(base); discover_media("link/../mydir")
+```
+
+R1's `abspath`-based fix scanned `base/mydir` (`BASE.mp4`) even though the
+caller's path, resolved the way a real filesystem resolves it, names
+`other/mydir` (`OTHER.mp4`) -- a silent substitution of *which physical
+directory* gets scanned, i.e. a correctness regression, not merely a
+cosmetic one.
+
+## R2.3 Exact changed files
+
+```text
+fc2-organizer/src/fc2_organizer/discovery/scanner.py                            (M)
+fc2-organizer/tests/unit/discovery/test_discovery_root_absolutization.py        (M)
+fc2-organizer/tests/unit/discovery/test_discovery_symlink_dotdot_identity.py    (new)
+fc2-organizer/docs/review/P4_C1_HANDOFF.md                                       (this section)
+```
+
+`models.py` was **not** touched: the "`source_path` must be absolute"
+invariant added in R1 is correct and unchanged. `PHASE4_DISCOVERY_CONTRACT.md`
+was **not** touched: it already specified "absolute" and never claimed
+"canonicalized/normalized/resolved"; only the implementation had drifted
+from that by using `abspath` internally, an implementation detail the
+contract never mandated.
+
+## R2.4 Absolute-without-identity-change strategy
+
+`scanner._coerce_root` no longer calls `os.path.abspath`, `os.path.normpath`,
+`Path.resolve()`, or `os.path.realpath` on the whole path -- none of those
+are used anywhere in this fix. Instead:
+
+```python
+if not candidate.is_absolute():
+    candidate = Path(os.getcwd()) / candidate
+return candidate
+```
+
+* A **relative** root is absolutized by prefixing the current working
+  directory via a plain `pathlib` join. This join never folds a `..`
+  segment away (verified: `Path("/base") / "link/../mydir"` stays
+  `PurePath("/base/link/../mydir")`, `.." literally present in `.parts`).
+  It does drop a redundant `.` segment (`Path("/base") / "./mydir"` ->
+  `/base/mydir`) -- always lexically safe, since a bare `.` never changes
+  which directory a path names, symlinks or not.
+* An **already-absolute** root -- even one containing `..`, even one
+  R1's `abspath` call would have collapsed -- is returned completely
+  untouched, byte-for-byte.
+* Every path built during the walk (`DiscoveryResult.root`, every
+  `DiscoveredMediaItem.source_path`) is still derived from this `Path` via
+  plain `os.scandir`/`os.DirEntry.path` string concatenation, exactly as
+  in R1 -- so the unresolved `..`/symlink-sensitive segment is carried
+  through into every result path unchanged.
+* Every *real* filesystem call made along the way (`os.stat` in
+  `_check_root`, `os.scandir` in `_list_directory_sorted`) still receives
+  that same literal, unresolved string, so **the OS's own path resolution**
+  -- not any in-process string rewrite -- decides which physical directory
+  gets scanned. On a filesystem where the kernel resolves `..` component-by-
+  component honoring symlinks (POSIX), this correctly reproduces the
+  caller's actual intended target. This is the concrete meaning of the R2
+  brief's Requirement B ("filesystem 自己按正常路径解析语义处理").
+
+## R2.5 Windows: verified platform limit, not a residual defect
+
+Independently of this package's code, `ctypes`-calling `GetFullPathNameW`
+(the Win32 API kernel32 uses internally to convert a DOS path to an NT path
+before `CreateFileW`/`FindFirstFileW` -- which every `os.stat`/`os.scandir`
+call on Windows ultimately goes through) on a **nonexistent** path
+(`C:\some\base\link\..\mydir`) returns `C:\some\base\mydir` -- proving the
+`..` collapse happens as a pure string operation, with zero filesystem I/O
+and zero reparse-point awareness, *before* the filesystem/junction layer is
+ever consulted. This is identical to how `cmd.exe`, PowerShell, and Windows
+Explorer resolve such a path (`cd link\..\mydir` behaves the same way) --
+a native Windows path-resolution characteristic that predates and is
+external to `fc2_organizer.discovery`, not something introduced by, or
+fixable from within, this package (short of hand-rolling raw NT-native
+path calls, explicitly out of scope per the R2 brief).
+
+Consequently, for a Windows junction specifically, the *correct*,
+native-Windows interpretation of `link\..\mydir` **is** the
+lexically-collapsed `base\mydir` -- R1's `abspath` and R2's cwd-prefix-only
+`_coerce_root` produce the **identical, correct** result for this specific
+case. There is no Windows-side regression to fix: P4-C1-R1-01 is
+specifically about the POSIX symlink case, where the kernel's real
+per-component resolution genuinely differs from a naive lexical collapse,
+and R2's fix addresses exactly that.
+
+## R2.6 Relative root / ordinary `..` (must not regress)
+
+Reverified unchanged from R1: `discover_media("mydir")`,
+`discover_media("./mydir")`, and an ordinary (no-symlink) `discover_media("foo/../mydir")`
+all still yield an absolute `DiscoveryResult.root`, an absolute
+`DiscoveredMediaItem.source_path`, the correct `relative_path`, and
+correct file identity (content read back matches). Covered by the
+pre-existing `test_discovery_root_absolutization.py` tests plus the new
+`test_ordinary_dotdot_root_identity_is_unaffected` (adds an explicit
+content check, per the R2 brief's note that the plain-directory `..` case
+and the symlink/junction `..` case are not the same semantic test and both
+must be covered).
+
+## R2.7 Symlink + `..` identity (POSIX)
+
+`test_discovery_symlink_dotdot_identity.py::test_posix_symlink_dotdot_root_preserves_caller_path_identity`
+builds the reviewer's exact structure (`base/link -> other/subdir`,
+`base/mydir/BASE.mp4`, `other/mydir/OTHER.mp4`) and asserts
+`discover_media("link/../mydir")` discovers `OTHER.mp4` with content
+`"other-content"`, not `BASE.mp4`. On this host it `pytest.skip`s with the
+concrete reason (`os.symlink` fails: `WinError 1314`, no
+`SeCreateSymbolicLinkPrivilege` / Developer Mode) -- the same limitation
+already documented for the original P4-C1 symlink tests, not faked as
+passing. On a host that can create a real directory symlink (a POSIX CI
+runner, or an elevated/Developer-Mode Windows host), it runs for real with
+no code change required.
+
+## R2.8 Windows junction + `..` identity
+
+```text
+PASS -- ran for real on this host (junction creation needs no elevation)
+```
+
+`test_discovery_symlink_dotdot_identity.py::test_windows_junction_dotdot_root_matches_native_win32_path_resolution`
+builds the equivalent structure with a real NTFS junction
+(`_winapi.CreateJunction`), first independently reconfirms the
+`GetFullPathNameW` lexical-collapse behavior via `ctypes` (§R2.5), then
+asserts `discover_media("link/../mydir")` discovers `BASE.mp4` with content
+`"base-content"` -- the correct-for-Windows, native outcome, not the
+POSIX-symlink outcome (which is not achievable on Windows through any
+ordinary Win32 file API, per §R2.5). Not a "Windows junction + .. identity
+test NOT RUN" case: the environment can and does create the junction, so
+this ran for real and its actual (platform-correct) result is reported
+honestly rather than assumed to mirror the POSIX case.
+
+## R2.9 Model absolute invariant
+
+Unchanged. `DiscoveredMediaItem.__post_init__`'s `os.path.isabs(source_path)`
+check (added in R1) was not touched, not weakened, and not removed.
+Reverified directly (R2.10 Repro A) that a relative `source_path` is still
+rejected with `DiscoveryContractError`.
+
+## R2.10 Direct reproduction — Repro A (original P4-C1-R-01 bug, must not regress)
+
+```text
+mkdir mydir; create mydir/a.mp4; chdir to parent; discover_media("mydir")
+
+source_path: C:\Users\Ctg\AppData\Local\Temp\tmpwkjgwcnq\mydir\a.mp4
+os.path.isabs(source_path) == True
+result.root: C:\Users\Ctg\AppData\Local\Temp\tmpwkjgwcnq\mydir  (absolute)
+relative_path == "a.mp4"
+-> Repro A: PASS (P4-C1-R-01 remains CLOSED)
+
+Direct DiscoveredMediaItem(source_path="relative/a.mp4", ...)
+-> DiscoveryContractError: "DiscoveredMediaItem.source_path must be an
+   absolute path, got 'relative/a.mp4'"  (model invariant still enforced)
+```
+
+## R2.11 Direct reproduction — Repro B (P4-C1-R1-01, this round's fix)
+
+```text
+base/mydir/BASE.mp4, other/mydir/OTHER.mp4, base/link -> junction -> other/subdir
+chdir(base); discover_media("link/../mydir")
+
+caller root string:      link\..\mydir
+result.root (observed):  <tmp>\base\link\..\mydir   (absolute; literal ".." preserved, not pre-collapsed by our code)
+observed relative_path:  BASE.mp4
+observed content:        base-content
+
+Expected physical file per POSIX-symlink-style resolution
+  (NOT achievable on Windows via any ordinary Win32 API): other/mydir/OTHER.mp4
+Expected physical file per native Windows GetFullPathNameW resolution
+  (independently verified via ctypes, see R2.5):          base/mydir/BASE.mp4
+Observed physical file this run:                           base/mydir/BASE.mp4
+
+-> matches native Windows resolution exactly; no in-process lexical
+   pre-collapse was performed by fc2_organizer.discovery's own code
+   (independently confirmed by the platform-independent
+   test_coerce_root_does_not_lexically_collapse_dotdot_in_* unit tests,
+   which do not depend on any real symlink/junction being present).
+```
+
+## R2.12 Targeted tests
+
+```text
+114 passed, 4 skipped
+```
+
+(109 prior P4-C1(+R1) tests + 5 new, all green; 4 skips = the 3 pre-existing
+real-directory-symlink-privilege skips + 1 new one for
+`test_posix_symlink_dotdot_root_preserves_caller_path_identity`, same root
+cause.)
+
+## R2.13 Full suite
+
+```text
+2475 passed, 4 skipped
+```
+
+`2470 (R1 full-suite baseline) + 5 (new) = 2475`. No pre-existing test was
+modified, newly failing, or newly skipped for a different reason than
+before.
+
+## R2.14 `git diff --check`
+
+```text
+clean (no output)
+```
+
+## R2.15 `git status --porcelain`
+
+Clean after the R2 code commit; clean again after this R2 docs commit
+(verify with `git status --porcelain`).
+
+## R2.16 Carried non-blocking findings (unchanged, not addressed by R2)
+
+```text
+P4-C1-R-02  MEDIUM  -- CARRIED / non-blocking
+P4-C1-R-03  LOW     -- CARRIED / non-blocking
+P4-C1-R-04  LOW     -- CARRIED / non-blocking
+P4-C1-R-05  LOW     -- CARRIED / non-blocking
+```
+
+None closed, upgraded, or removed by R2. Per the R2 brief: no anti-TOCTOU
+scanner rewrite, no symlink/junction architecture expansion, no
+extension-policy redesign, and no fd-relative scanner rewrite were
+undertaken to close P4-C1-R1-01. They remain open for a future round.
+
+## R2.17 Independent R2 Closure Review
+
+```text
+REQUIRED
+```
+
+## R2.18 P4-C1
 
 ```text
 NOT CLOSED
