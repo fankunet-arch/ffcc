@@ -311,3 +311,161 @@ Phase 4: NOT CLOSED
 
 No later package (NFO renderer, image download, executor, CLI, persistence, Amane
 adapter) was started.
+
+---
+
+# Final Closure -- P4-C3
+
+```text
+Phase:
+4
+
+Package:
+P4-C3 Metadata Publication Boundary Hardening
+
+Status:
+CLOSED
+
+Final Level:
+Level 1 PASS
+
+Final Reviewed Code Head:
+1e66ab40dc66c5ea6edb6f623b15d1f6e4fe817f
+
+Previous Docs Head:
+3b16908a167259117140308f72e6310b216aea20
+```
+
+This section is appended by a docs-only final closure commit. Everything above it
+is the unchanged developer handoff history. No code, test or contract file is
+touched by this closure.
+
+## Independent review evidence
+
+```text
+Independent Level 1 = PASS
+
+Context Handshake = PASS
+Scope = PASS
+
+Publication boundary = PASS
+Identity correlation = PASS
+Diagnostic exclusion = PASS
+
+P4-C2 metadata identity gap = CLOSED
+C2-L2 = CLOSED
+P2-R-10 = CLOSED
+
+Targeted (reviewer's explicit review set):
+246 passed / 0 failed / 0 skipped
+
+Developer-equivalent targeted set:
+411 passed / 0 failed / 0 skipped
+
+Full Suite:
+2924 passed / 14 skipped / 0 failed
+
+Direct independent probes:
+56 / 56 PASS
+
+git diff --check:
+clean
+```
+
+All blocking P4-C3 findings are closed.
+
+P4-C3-R-01 and P4-C3-R-02 are explicitly carried as LOW / non-blocking.
+
+## Closure targets
+
+```text
+P4-C2 metadata identity gap = CLOSED
+C2-L2 = CLOSED
+P2-R-10 = CLOSED
+```
+
+## New reviewer findings (carried)
+
+```text
+P4-C3-R-01
+Severity: LOW
+Status: CARRIED / non-blocking
+```
+
+Some test names cited in the contract / this handoff have drifted from the
+actual pytest test names. The actual tests are still collected and run
+normally by pytest, so correctness is not affected. This is a traceability /
+documentation-quality issue. Not changed in this closure (no test or contract
+edits).
+
+```text
+P4-C3-R-02
+Severity: LOW
+Status: CARRIED / non-blocking
+```
+
+The built-in positive controls of the publication no-side-effect tests do not
+individually cover every trap category or every rejection path. The
+independent reviewer additionally verified that all 11 trap categories are
+genuinely effective and that all 6 rejection paths perform no I/O. Current
+runtime behaviour is therefore correct; this is a test-strength /
+future-regression-resistance issue. Not changed in this closure (no test edits).
+
+## Carried debts
+
+```text
+P4-C3-R-01 = LOW / CARRIED / non-blocking
+P4-C3-R-02 = LOW / CARRIED / non-blocking
+
+P2-R-07 = CARRIED
+
+P4-C2-R1-02 -- LOW
+OrganizePlan operation-graph hardening
+overwrite executor semantics = frozen NEVER
+extended Windows reserved names
+
+P4-C1-R-02..R-05
+
+P2-R-05
+P2-R-06
+P2-R-07
+
+C3-N1..N4
+C4-N1
+C4-R1-N1..N3
+
+F3
+F5
+C5-R1-L1
+```
+
+C2-L2, P2-R-10 and the P4-C2 metadata identity gap are CLOSED and are no longer
+carried.
+
+## Future entry notes (not addressed by this closure)
+
+```text
+P2-R-07 remains LOW / CARRIED.
+  Future diagnostics publication must use engine-measured
+  SourceAttempt.elapsed_ms rather than assuming adapter failure
+  SourceResult.elapsed_ms is a trustworthy elapsed duration.
+
+OrganizePlan operation-graph hardening
+  remains an executor-entry gate.
+
+overwrite = NEVER
+  remains a frozen global executor semantic.
+```
+
+## Scope of this closure
+
+This closes **P4-C3** only. It does not close Phase 4 and does not start any
+later package; each later package needs its own frozen contract and review cycle.
+
+## Final status
+
+```text
+P4-C3: CLOSED
+Phase 4: NOT CLOSED
+Next Package: NOT STARTED
+```
