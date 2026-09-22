@@ -386,3 +386,327 @@ NOT CLOSED
 ```text
 NOT CLOSED
 ```
+
+---
+
+# R1 Closure -- P4-C2-GOV-01, P4-C2-GOV-02, P4-C2-GOV-03
+
+The section above is the original, as-reviewed P4-C2 submission and is
+left unmodified for history. This section records the R1 incremental-
+closure round.
+
+## R1.1 Coordinates
+
+```text
+Reviewed-Failed Code Head = 1a4ca88bf9d10ca94f2a8a640b734c96c558a8a8
+Previous Docs Head        = e8ebd153b2160f3dfc812668c34cc8e382614ee4
+R1 Code Review Candidate  = d43608645a960401c0cf0cc03d56418bdfa760be
+R1 Docs Head              = <this commit; see git log after commit>
+R1 Code Review Range      = e8ebd153b2160f3dfc812668c34cc8e382614ee4..d43608645a960401c0cf0cc03d56418bdfa760be
+R1 Docs Review Range      = d43608645a960401c0cf0cc03d56418bdfa760be..<R1 Docs Head>
+```
+
+## R1.2 Governance context
+
+Two independent Level 1 reviews conflicted on finding severity. Per the
+issuing instruction, this round does not build against either reviewer's
+own finding numbering; it builds solely against the three GOV findings the
+instruction itself specified as the arbitrated, authoritative closure
+scope:
+
+```text
+P4-C2-GOV-01   HIGH / BLOCKING            -- vacuous synthetic-gate network-isolation test
+P4-C2-GOV-02   MEDIUM / CLOSURE-REQUIRED  -- legitimate absolute roots wrongly judged "escaped"
+P4-C2-GOV-03   MEDIUM / CLOSURE-REQUIRED  -- ambiguous Windows rooted-but-driveless library_root
+```
+
+## R1.3 Findings addressed
+
+### P4-C2-GOV-01 -- CLOSED
+
+**Defect:** `test_planning_synthetic_gate.py::test_synthetic_gate_no_network_import_reachable`
+computed its production-source directory as
+`Path(__file__).resolve().parents[2] / "src" / "fc2_organizer" / "planning"`.
+This file lives at `tests/unit/planning/test_planning_synthetic_gate.py`;
+`parents[2]` from there is `tests/` (one directory too shallow -- the value
+`2` was copied from `tests/contract/test_planning_architecture.py`, which
+*is* one directory shallower, where `parents[2]` correctly resolves to the
+repo root). The computed path was therefore the nonexistent
+`tests/src/fc2_organizer/planning`; `rglob("*.py")` silently returned an
+empty list, and the `for path in ...: assert ...` loop body never executed
+-- a vacuous test that always passed regardless of what the production code
+actually imported.
+
+**Repair:** fixed the index to `parents[3]` (verified directly, R1.5 Repro
+A). Added `test_synthetic_gate_planning_src_root_resolves_and_has_production_files`,
+which asserts the resolved directory exists, `rglob("*.py")` returns a
+non-empty file list, and that list contains every known production module
+by name (`__init__.py`, `errors.py`, `models.py`, `paths.py`, `planner.py`,
+`policy.py`) -- so a future accidental re-introduction of the same
+off-by-one is caught by an explicit assertion, not merely by the guard
+"happening" to scan the right files. Extracted the AST-walking scan itself
+into a small, reusable, pure function (`_scan_forbidden_imports`), then
+added two planted-import proof tests
+(`test_network_guard_fails_on_planted_import_statement`,
+`test_network_guard_fails_on_planted_import_from_form`) that write `import
+socket` / `from urllib import request` into an isolated `tmp_path` file
+(never a production file) and assert the scanner detects it -- proving the
+guard can actually FAIL, not just proving it PASSes on whatever happens to
+be clean today. Added a fourth test
+(`test_network_guard_does_not_false_positive_on_ordinary_stdlib_imports`)
+proving the same scanner does not flag ordinary allowed imports this very
+package uses (`os`, `pathlib`, `dataclasses`, `enum`).
+
+**No production code was changed to make this pass** -- both original
+independent reviewers already confirmed `fc2_organizer.planning` has no
+real network dependency; this was purely a test-evidence defect, exactly
+as the issuing instruction characterized it.
+
+### P4-C2-GOV-02 -- CLOSED
+
+**Defect:** `fc2_organizer.planning.paths.is_contained_within` computed
+segments via `os.path.normpath(candidate_or_root).split(os.sep)`. A bare
+drive root (`C:\`) or a bare UNC share root (`\\server\share\`) normalizes
+to a string *ending* in the separator; splitting that on `os.sep` produces
+a spurious trailing empty string segment, inflating the root's part count.
+The containment check's early-exit guard
+(`len(candidate_parts) <= len(root_parts): return False`) then fired for a
+*genuine* child (`C:\library-child` under `C:\`) purely because of that
+extra phantom segment -- a false "target escapes root" verdict for a
+perfectly legitimate absolute root.
+
+**Repair:** `is_contained_within` now computes segments via
+`pathlib.Path(...).parts` instead of `os.path.normpath(...).split(os.sep)`.
+`pathlib` collapses a drive-and-root (`C:\` -> `('C:\\',)`) or a
+UNC-share-and-root (`\\server\share\` -> `('\\\\server\\share\\',)`) into a
+*single* anchor part with no trailing-empty-segment artifact, regardless of
+whether the string carries a trailing separator or not. This is still
+purely lexical (`Path` construction and `.parts` perform zero filesystem
+access -- no `stat`/`exists`/`resolve`) and still segment-based, not
+`str.startswith` (so `C:\library2` still correctly compares as *not*
+contained under `C:\library` -- verified unchanged,
+`test_prefix_collision_without_separator_boundary_is_not_contained` and the
+new `test_no_string_startswith_false_positive_on_drive_root`).
+
+Directly reproduced and fixed (R1.5 Repro C): `C:\` now correctly contains
+`C:\FC2-1234567` and `C:\FC2-1234567\poster.jpg`; `D:\FC2-1234567` is
+correctly excluded from `C:\`; `\\server\share\` correctly contains
+`\\server\share\FC2-1234567`; `\\server\other\FC2-1234567` is correctly
+excluded.
+
+### P4-C2-GOV-03 -- CLOSED
+
+**Governance decision (frozen by this round, per the issuing instruction):**
+`library_root` for P4-C2 v1.0 must be an **unambiguous, fully-qualified
+absolute path**. A Windows *rooted-but-driveless* form (`\lib`, `/lib`) is
+rejected fail-closed, never silently bound to whichever drive happens to be
+current, and never decided by relying on `os.path.isabs()`'s own
+cross-Python-version treatment of that form.
+
+**Repair:** added `fc2_organizer.planning.paths.is_fully_qualified_absolute_root`
+as the single, centralized library-root qualification boundary (contract
+section 11a):
+
+* **Windows** (`os.name == "nt"`): accepted only if `os.path.splitdrive`
+  finds a real drive with a root (`C:\lib`, `C:/lib`) or a UNC share
+  (`\\server\share`, `\\server\share\lib`, with or without a trailing
+  separator -- a bare share is already unambiguous, unlike a bare drive
+  letter `C:` alone, which means "current directory on that drive" and is
+  rejected). Rejected: `library`, `.\library`, `..\library`, `C:library`,
+  `\library`, `/library`.
+* **POSIX** (anything else, chosen by the *current runtime OS*, never by
+  guessing from the string's shape): plain `os.path.isabs(path)` --
+  `/library` remains legal, `library` remains rejected.
+
+Wired into both `planner.py` (`InvalidLibraryRootError`, replacing the bare
+`os.path.isabs()` call) and `models.py`'s redundant model-layer check on
+`OrganizePlan.library_root` (`OrganizePlanContractError`), mirroring the
+existing dual-layer pattern already used for target containment
+(section 11) and for `DiscoveredMediaItem.source_path` in P4-C1-R-01.
+
+Directly reproduced (R1.5 Repro D): `\lib` and `/lib` both rejected by
+`is_fully_qualified_absolute_root` and by `build_organize_plan` itself
+(raises `InvalidLibraryRootError`); `C:\lib` and `\\server\share\lib` both
+accepted; `build_organize_plan(..., library_root="C:\\")` (the exact
+GOV-02/GOV-03 boundary case) succeeds end-to-end and produces
+`target_directory == "C:\\FC2-1234567"`.
+
+## R1.4 Exact changed files
+
+**R1 Code Review Candidate (`d436086`), 8 files, all modified (no new
+files, no renames):**
+
+```text
+fc2-organizer/docs/specifications/PHASE4_ORGANIZE_PLAN_CONTRACT.md    (M)
+fc2-organizer/src/fc2_organizer/planning/models.py                    (M)
+fc2-organizer/src/fc2_organizer/planning/paths.py                     (M)
+fc2-organizer/src/fc2_organizer/planning/planner.py                   (M)
+fc2-organizer/tests/unit/planning/test_planning_models.py             (M)
+fc2-organizer/tests/unit/planning/test_planning_paths.py              (M)
+fc2-organizer/tests/unit/planning/test_planning_planner.py            (M)
+fc2-organizer/tests/unit/planning/test_planning_synthetic_gate.py     (M)
+```
+
+No file under `fc2_metadata_core/**` or `fc2_organizer/discovery/**` was
+touched. No new source file was added (the brief permitted a new
+path/root helper "if necessary, minimized" -- `is_fully_qualified_absolute_root`
+was added as a new *function* inside the already-existing, already-central
+`paths.py`, not as a new module).
+
+**R1 Docs Head (this commit), 1 file:**
+
+```text
+fc2-organizer/docs/review/P4_C2_HANDOFF.md   (M -- this section)
+```
+
+## R1.5 Direct reproductions (outside pytest)
+
+```text
+Repro A -- network guard scans real production files:
+  planning src root resolved correctly (parents[3], not parents[2])
+  production file count: 6 (__init__.py, errors.py, models.py, paths.py,
+  planner.py, policy.py)
+  -> PASS
+
+Repro B -- planted 'import socket' causes guard FAIL:
+  planted into an isolated tempfile.TemporaryDirectory() file (never a
+  repo file); _scan_forbidden_imports([planted], ...) returned one
+  violation naming 'socket'
+  -> PASS (guard detects a real violation, not just passes on clean code)
+  temp directory auto-cleaned by the context manager; git status
+  confirmed clean immediately after (no leftover modification)
+
+Repro C -- Windows drive-root / UNC containment:
+  is_contained_within(r"C:\FC2-1234567", r"C:\\")                -> True
+  is_contained_within(r"C:\library-child", r"C:\\")               -> True  (exact GOV-02 repro)
+  is_contained_within(r"D:\FC2-1234567", r"C:\\")                  -> False
+  is_contained_within(r"\\server\share\FC2-1234567", r"\\server\share\\") -> True
+  is_contained_within(r"\\server\other\FC2-1234567", r"\\server\share\\") -> False
+  -> PASS
+
+Repro D -- Windows rooted-but-driveless root fails closed:
+  is_fully_qualified_absolute_root(r"\lib")          -> False
+  is_fully_qualified_absolute_root("/lib")            -> False
+  is_fully_qualified_absolute_root(r"C:\lib")         -> True
+  is_fully_qualified_absolute_root(r"\\server\share\lib") -> True
+  build_organize_plan(..., library_root=r"\lib")      -> raises InvalidLibraryRootError
+  build_organize_plan(..., library_root="C:\\")       -> succeeds;
+    target_directory.absolute_path == "C:\\FC2-1234567"
+  -> PASS
+```
+
+This host is Windows (win32, Python 3.12.10), so Repros A-D above all ran
+for real. The POSIX-side unit coverage added in R1 (`is_fully_qualified_absolute_root`
+POSIX-absolute-accepted / relative-rejected / dot-relative-rejected, and
+`build_organize_plan`'s `test_posix_absolute_root_still_accepted`) is
+present and correct but **NOT RUN** on this host (`pytest.mark.skipif(os.name
+== "nt", ...)`); per the issuing instruction's explicit allowance for this
+case, the coverage exists and is platform-gated correctly rather than
+being executed here.
+
+## R1.6 Targeted tests
+
+```text
+212 passed, 4 skipped
+```
+
+Command: `python -m pytest tests/unit/planning tests/contract/test_planning_architecture.py -q`
+(179 prior P4-C2 tests + 33 new passing + 4 new POSIX-only skips, all
+green; the 4 skips are the new POSIX-gated tests, correctly inert on this
+Windows host -- not the same skips as the full suite's pre-existing
+P4-C1 symlink-privilege skips, see R1.7).
+
+## R1.7 Full suite
+
+```text
+2692 passed, 8 skipped
+```
+
+Command: `python -m pytest -q`. `2659 (original P4-C2 submission baseline)
++ 33 (new R1 tests, passing on this host) = 2692`; `4 (pre-existing P4-C1
+symlink-privilege skips) + 4 (new R1 POSIX-gated skips on this Windows
+host) = 8`. No pre-existing test was modified, newly failing, or newly
+skipped for a different reason than before.
+
+## R1.8 P4-C1 frozen protection
+
+No file under `src/fc2_organizer/discovery/**` or `src/fc2_metadata_core/**`
+was read for the purpose of modification, and none was touched. The full
+suite's unchanged P4-C1 test count and pass status (section R1.7) is the
+behavioral proof; `git status --porcelain` after the R1 commit (section
+R1.11) is the file-level proof.
+
+## R1.9 Preserved behaviors (not regressed)
+
+Verified via the unmodified, still-100%-green pre-R1 test files (`test_planning_models.py`'s
+immutability tests, `test_planning_planner.py`'s canonical-number/metadata/
+source-identity/default-layout/title-isolation/policy/collision/overwrite/
+determinism tests, `test_planning_no_mutation.py`, `test_planning_architecture.py`'s
+dependency-boundary tests) plus the full-suite regression count: Deep
+Immutability, Canonical Number Boundary, Metadata minimum-success
+validation, Source Identity, Default Layout, Title Isolation, `OutputPolicy`
+artifact naming, Collision = FAIL CLOSED, Overwrite = NEVER (frozen, no new
+field/parameter added -- re-verified directly,
+`test_overwrite_policy_is_frozen_never_and_not_a_caller_knob` still passes
+unmodified), Windows component validation, no filesystem mutation,
+filesystem-state independence, architecture boundary, package import
+safety, determinism -- all unchanged, none weakened, none re-scoped.
+
+## R1.10 Carried findings (explicitly not addressed this round)
+
+```text
+metadata.number != canonical_number identity gap
+  -> CARRIED (frozen contract section 9 defines metadata as validation-only;
+     no cross-check added; must close before OrganizePlan/metadata/NFO
+     publication binding)
+
+OrganizePlan operation-graph model-level hardening
+  -> CARRIED (executor-entry hardening, deferred to when an executor
+     actually consumes an arbitrary OrganizePlan)
+
+overwrite executor semantics
+  -> frozen NEVER (unchanged); a future executor must enforce it;
+     not a P4-C2 plan-field defect, no field/parameter added this round
+
+CON.txt / COM(super-1).jpg style contract-external Windows edge cases
+  -> not addressed (out of the frozen contract's scope, per the issuing
+     instruction; not touched)
+
+All prior carried debts unchanged:
+P4-C1-R-02, P4-C1-R-03, P4-C1-R-04, P4-C1-R-05,
+C2-L2, P2-R-05, P2-R-06, P2-R-07, P2-R-10,
+C3-N1, C3-N2, C3-N3, C3-N4,
+C4-N1, C4-R1-N1, C4-R1-N2, C4-R1-N3,
+F3, F5, C5-R1-L1
+```
+
+## R1.11 `git diff --check`
+
+```text
+clean (no output)
+```
+
+## R1.12 `git status --porcelain`
+
+Clean after the R1 code commit; clean again after this R1 docs commit
+(verify with `git status --porcelain`). No stray files (`_tmp_probe*.py`,
+`_tmp_repro.py` used during development were deleted before either commit
+and never staged).
+
+## R1.13 Independent R1 Closure Review
+
+```text
+REQUIRED
+```
+
+## R1.14 P4-C2
+
+```text
+NOT CLOSED
+```
+
+## R1.15 Phase 4
+
+```text
+NOT CLOSED
+```
