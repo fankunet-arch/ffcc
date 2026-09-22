@@ -8,8 +8,11 @@ Scope so far (see ``docs/specifications/PHASE4_IMAGE_ACQUISITION_CONTRACT.md``):
 immutable value models, the failure vocabulary, the acquisition policy, a pure
 candidate-URL safety gate (substep 1) and a binary HTTP transport with manual,
 re-validated redirects, a streamed size cap and one total deadline (substep 2),
-JPEG-only content validation (substep 3). There is **no** acquisition
-orchestration (``acquire_images``, candidate / role iteration) here yet.
+JPEG-only content validation (substep 3) and the ``acquire_images``
+orchestration (substep 4, ``fc2_organizer.images.acquisition``). The
+acquisition module depends on ``transport`` (httpx) and ``fc2_organizer.publication``,
+so it is **not** imported here; import it explicitly:
+``from fc2_organizer.images.acquisition import acquire_images``.
 
 Dependency direction: this package ``__init__`` and the foundation modules are
 standard library only. ``fc2_organizer.images.transport`` is the single module

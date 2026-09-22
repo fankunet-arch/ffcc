@@ -1,17 +1,19 @@
 # FC2 Organizer -- Phase 4 / P4-C5 Image Acquisition Contract
 
-Status: **draft, substeps 1-3 of P4-C5** (foundation + binary transport + JPEG validation frozen; independent review pending).
-Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`, `transport.py`, `jpeg.py`).
+Status: **draft, substeps 1-4 of P4-C5** (foundation + binary transport + JPEG validation + acquisition orchestration frozen; independent review pending).
+Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`, `transport.py`, `jpeg.py`, `acquisition.py`).
 Frozen Base: `97f6aeba8d11d9bc8a29d5397b9a1e1711d36cd6`
 Substep 1 Head: `a961dda486bc8377bd2cec8ae9dd107f5379eba4`
 Substep 2 Head: `d7c1bd9173cb88be399368a4a7a9083f52f73e72`
+Substep 3 Head: `4c780a88dd97613e97fe6a0f139deddcbfb40066`
 Branch: `claude/phase4-c5-image-acquisition`
 
 Sections marked **IMPLEMENTED IN SUBSTEP 2** describe the binary HTTP transport
 (section 12); **IMPLEMENTED IN SUBSTEP 3** marks the JPEG-only content policy,
-structural validation and dimension caps (section 13). Sections marked
-**PENDING IN LATER P4-C5 SUBSTEP** describe work that is *not* implemented.
-Nothing in this document claims acquisition orchestration exists yet.
+structural validation and dimension caps (section 13); **IMPLEMENTED IN
+SUBSTEP 4** marks the `acquire_images` orchestration (section 14). Sections
+marked **PENDING IN LATER P4-C5 SUBSTEP** describe work that is *not*
+implemented: the synthetic image gate and the final P4-C5 closure handoff.
 
 ## 1. Scope
 
@@ -42,10 +44,15 @@ dimension extraction from the SOF header, the dimension caps, the exact-bytes /
 exact-str boundary and hostile-input semantics, plus the pure
 `validate_acquired_image` helper.
 
-**Not yet implemented** (section 11): `acquire_images`, HTTP-status ->
-failure-kind mapping in the acquisition result, candidate fallback and
-orchestration, role isolation, candidate-count / extrafanart / total-bytes
-runtime enforcement, synthetic gate, final handoff, filesystem writes of any kind.
+**Substep 4 delivers only** (section 14, IMPLEMENTED IN SUBSTEP 4):
+`acquire_images` -- role mapping, candidate ordering and fallback, failure
+mapping, candidate-count cap, extrafanart cap, total-result cap, artifact
+construction, failure ordering, cancellation semantics and sensitive-data
+exclusion.
+
+**Not yet implemented** (section 11): the synthetic image gate and the final
+P4-C5 closure handoff. Out of P4-C5 scope entirely: writing images to disk,
+path mapping, overwrite checks, resize / crop / transcode.
 
 ## 2. Roles
 
@@ -60,8 +67,9 @@ class ImageRole(Enum):
 Exactly the four artwork roles of the frozen v1.0 organize layout
 (`poster.jpg` / `fanart.jpg` / `thumb.jpg` / `extrafanart/`,
 PHASE4_ORGANIZE_PLAN_CONTRACT). The mapping from role to metadata URL list
-(`poster_urls` / `fanart_urls` / `thumb_urls` / `extrafanart`) and to plan paths
-is **PENDING IN LATER P4-C5 SUBSTEP**.
+(`poster_urls` / `fanart_urls` / `thumb_urls` / `extrafanart`) is
+**IMPLEMENTED IN SUBSTEP 4** (section 14.2). Mapping roles to plan paths / files
+is outside P4-C5 (no filesystem work here).
 
 ## 3. Model rules (all models)
 
@@ -88,7 +96,7 @@ is **PENDING IN LATER P4-C5 SUBSTEP**.
 The model checks shape only. The JPEG validator and dimension caps exist
 (section 13, IMPLEMENTED IN SUBSTEP 3); building every `AcquiredImage` from a
 `validate_acquired_image` result (so `width` / `height` always come from the
-SOF header) is the acquisition layer's job -- **PENDING IN LATER P4-C5 SUBSTEP**.
+SOF header) is done by `acquire_images` -- **IMPLEMENTED IN SUBSTEP 4** (14.6).
 
 ## 5. Failure vocabulary: `ImageFailureKind` and `ImageCandidateFailure`
 
@@ -99,8 +107,8 @@ HTTP_STATUS  TOO_LARGE  TOTAL_BYTES_LIMIT
 CONTENT_TYPE_MISMATCH  INVALID_JPEG  INVALID_DIMENSIONS
 ```
 
-The words are frozen. In substep 1 only `INVALID_URL` / `UNSAFE_URL` are
-reachable (via `ImageUrlError.failure_kind`); the rest are reserved vocabulary.
+The words are frozen. Since substep 4 every kind is produced by
+`acquire_images` (mapping: section 14.5).
 
 `ImageCandidateFailure(role, candidate_index, kind, http_status=None)`:
 
@@ -127,7 +135,8 @@ exception or traceback.
 All-empty (`ImageAcquisitionResult()`) is legal. `total_bytes` is a pure
 property: the sum of `size_bytes` over every acquired image. Enforcing that it
 stays within `max_total_bytes`, and that `len(extrafanart) <= max_extrafanart`,
-is **PENDING IN LATER P4-C5 SUBSTEP** (orchestration).
+is enforced by `acquire_images` -- **IMPLEMENTED IN SUBSTEP 4** (14.7, 14.9).
+The model itself does not know the policy.
 
 ## 7. `ImageAcquisitionPolicy`
 
@@ -143,8 +152,10 @@ is **PENDING IN LATER P4-C5 SUBSTEP** (orchestration).
 Cross-field: `max_image_bytes <= max_total_bytes`. Violations raise
 `ImagePolicyError`. `frozen=True, slots=True`.
 
-Substep 1 validates values only. **Runtime enforcement of every cap is
-PENDING IN LATER P4-C5 SUBSTEP.**
+Runtime enforcement: `request_deadline_seconds`, `max_redirects` and
+`max_image_bytes` by the transport (section 12, IMPLEMENTED IN SUBSTEP 2);
+`max_total_bytes`, `max_candidates_per_role` and `max_extrafanart` by
+`acquire_images` (section 14, IMPLEMENTED IN SUBSTEP 4).
 
 ## 8. URL safety gate: `validate_image_url(url) -> str`
 
@@ -303,13 +314,14 @@ meta-path level; public API contains no deferred entry point).
 | per-request total deadline | IMPLEMENTED IN SUBSTEP 2 (12.7) |
 | Content-Type extraction (no policy) | IMPLEMENTED IN SUBSTEP 2 (12.8) |
 | transport error mapping, cancellation, lifecycle | IMPLEMENTED IN SUBSTEP 2 (12.9-12.10) |
-| HTTP status -> `HTTP_STATUS` failure mapping in the acquisition result | PENDING IN LATER P4-C5 SUBSTEP |
+| HTTP status -> `HTTP_STATUS` failure mapping in the acquisition result | IMPLEMENTED IN SUBSTEP 4 (14.5) |
 | JPEG-only rule, Content-Type accept / reject policy | IMPLEMENTED IN SUBSTEP 3 (13.1-13.2) |
 | JPEG structural validation, dimension extraction, dimension caps | IMPLEMENTED IN SUBSTEP 3 (13.3-13.4) |
 | exact-bytes / exact-str boundary, hostile input semantics | IMPLEMENTED IN SUBSTEP 3 (13.6) |
-| total 64 MiB result cap, candidate-count and extrafanart runtime enforcement | PENDING IN LATER P4-C5 SUBSTEP |
+| total 64 MiB result cap, candidate-count and extrafanart runtime enforcement | IMPLEMENTED IN SUBSTEP 4 (14.7-14.9) |
 | connection-time resolved-address check / DNS rebinding | NOT ADDRESSED (see 8.5, 12.11) |
-| `acquire_images`, candidate fallback / orchestration, candidate limit, role isolation | PENDING IN LATER P4-C5 SUBSTEP |
+| `acquire_images` API, role mapping, candidate ordering / fallback, role isolation | IMPLEMENTED IN SUBSTEP 4 (14.1-14.4, 14.10) |
+| failure mapping and ordering, artifact construction, cancellation, sensitive-data exclusion | IMPLEMENTED IN SUBSTEP 4 (14.5-14.6, 14.10-14.12) |
 | synthetic acquisition gate | PENDING IN LATER P4-C5 SUBSTEP |
 | final P4-C5 handoff | PENDING IN LATER P4-C5 SUBSTEP |
 
@@ -401,7 +413,7 @@ Only a final `200` enters body streaming. Every other final status (`204`,
 `206`, `304`, `403`, `404`, `429`, `500`, `503`, ...) returns
 `ImageHttpResponse(status_code, content_type, b"")` **without reading the
 body**. Mapping a non-200 status to `HTTP_STATUS` is the acquisition layer's job
-(PENDING). A status outside `100..599` -> `ImageTransportError`.
+(section 14.5, IMPLEMENTED IN SUBSTEP 4). A status outside `100..599` -> `ImageTransportError`.
 
 ### 12.6 Streaming `max_bytes` bound and `Content-Length`
 
@@ -438,7 +450,7 @@ surrounding whitespace trimmed, case preserved. `None` when the header is
 absent, empty, longer than 127 characters or contains anything but printable
 ASCII. No `image/jpeg` / `image/png` / `application/octet-stream` judgement
 happens in the transport; the policy is section 13.2 (IMPLEMENTED IN SUBSTEP 3),
-applied by the acquisition layer (PENDING). The header mapping is never returned.
+applied by the acquisition layer (section 14.4, IMPLEMENTED IN SUBSTEP 4). The header mapping is never returned.
 
 ### 12.9 Error mapping and cancellation
 
@@ -474,7 +486,8 @@ untouched. Only ordinary `Exception`s are mapped.
 * No retry / backoff / `Retry-After`, no HTTP/2, no caching.
 * The transport itself makes no Content-Type or JPEG judgement (that is
   section 13, applied by the acquisition layer); no role / candidate
-  orchestration, no result-level total-bytes cap (PENDING).
+  orchestration and no result-level total-bytes cap in the transport (those
+  are section 14).
 
 ### 12.12 Offline tests
 
@@ -584,7 +597,7 @@ must be one of the 13 frame markers.
 
 Frozen order: (0) exact types of both arguments, (1) Content-Type policy,
 (2) JPEG structure, (3) dimension caps. Pure: no HTTP, role, candidate
-iteration or I/O. Wiring it into acquisition is PENDING.
+iteration or I/O. Wired into acquisition by section 14.4 (IMPLEMENTED IN SUBSTEP 4).
 
 ### 13.6 Hostile input semantics
 
@@ -610,5 +623,164 @@ Mutation-checked during development: accepting `C4`/`C8`/`CC` as SOF, dropping
 the EOI check, dropping the segment-length lower bound, dropping the bounds
 check, dropping the pixel cap, or using `isinstance` instead of the exact-type
 check each makes `test_image_jpeg.py` fail.
+
+## 14. Acquisition orchestration -- IMPLEMENTED IN SUBSTEP 4
+
+Module: `fc2_organizer.images.acquisition` (imported explicitly; not re-exported
+from `fc2_organizer.images`, whose import stays free of `httpx` /
+`fc2_metadata_core`). Tests: `tests/unit/images/test_image_acquisition.py`.
+
+### 14.1 API
+
+```python
+async def acquire_images(
+    record: PublicationRecord,
+    client: ImageHttpClient,
+    *,
+    policy: ImageAcquisitionPolicy | None = None,
+) -> ImageAcquisitionResult
+```
+
+* `type(record) is PublicationRecord`, else `ImageInputError`.
+* `policy=None` -> `ImageAcquisitionPolicy()`; otherwise it must be an exact
+  `ImageAcquisitionPolicy` (`ImageInputError`).
+* `client` is always injected (anything with a callable `get`, else
+  `ImageInputError`); `acquire_images` never constructs `HttpxImageClient` or
+  any other client, and never closes the injected one.
+* Input errors are raised **before any request**. Every per-candidate problem
+  becomes an `ImageCandidateFailure`; no candidate failure raises.
+
+### 14.2 Role mapping and candidate shape
+
+| role | metadata field | wins |
+|---|---|---|
+| `POSTER` | `metadata.poster_urls` | first valid JPEG |
+| `FANART` | `metadata.fanart_urls` | first valid JPEG |
+| `THUMB` | `metadata.thumb_urls` | first valid JPEG |
+| `EXTRAFANART` | `metadata.extrafanart` | every valid JPEG, up to `max_extrafanart` |
+
+No cross-role fallback: a role only ever reads its own field, and a success in
+one role is never promoted to another.
+
+All four collections are checked before any request: each must be an exact
+`tuple` and every item an exact `str`. A `list` / `set` / `frozenset` /
+generator / bare `str` / `None` / `tuple` subclass, or a non-`str` / `str`
+subclass item (only reachable through forged metadata), raises
+`ImageInputError` naming the field only -- never a value. `record.metadata`
+is trusted as far as `PublicationRecord` guarantees it (`isinstance`
+`NormalizedMetadata`); a hostile metadata *subclass* is the carried
+P4-C4-R-01 class of finding and is not addressed here.
+
+### 14.3 Candidate ordering (frozen)
+
+Roles are processed `POSTER -> FANART -> THUMB -> EXTRAFANART`; within a role,
+candidates in tuple order. Strictly sequential: one `await client.get(...)` at a
+time (no `gather`, task group or background task), so at most one request is in
+flight per `acquire_images` call. Each candidate is requested **at most once**
+(no same-URL retry); the same URL listed twice is two candidates.
+
+### 14.4 Per-candidate flow (frozen order)
+
+1. `validate_image_url(url)` -- failing URLs are never requested.
+2. `client.get(url, deadline_seconds=policy.request_deadline_seconds,
+   max_redirects=policy.max_redirects, max_bytes=policy.max_image_bytes)`.
+3. The response must be an exact `ImageHttpResponse`; `status_code == 200`.
+4. Content-Type policy (13.2). 5. JPEG structure (13.3). 6. Dimensions (13.4)
+   -- steps 4-6 via `validate_acquired_image`.
+7. Total-result cap (14.7).
+8. `AcquiredImage` construction (14.6).
+
+Any failing step records exactly one failure for that candidate and moves on to
+the next candidate of the same role.
+
+### 14.5 Failure mapping (by exception type / structured kind, never message text)
+
+| cause | `kind` |
+|---|---|
+| `ImageUrlError` (step 1, or raised by the client) | its `failure_kind`: `INVALID_URL` / `UNSAFE_URL` |
+| `ImageRedirectError` | its `failure_kind`: `INVALID_URL` / `UNSAFE_URL`, or `TRANSPORT_ERROR` without a usable `Location` |
+| `ImageTimeoutError` | `TIMEOUT` |
+| `ImageConnectionError` | `CONNECTION_ERROR` |
+| `ImageRedirectLimitError` | `REDIRECT_LIMIT` |
+| `ImageResponseTooLargeError` | `TOO_LARGE` |
+| any other `ImageTransportError` (incl. `ImageClientClosedError`), any other ordinary `Exception` from a client breaking the protocol, or a response that is not an exact `ImageHttpResponse` | `TRANSPORT_ERROR` |
+| final status `!= 200` | `HTTP_STATUS` with `http_status=<actual>` |
+| `ImageContentTypeError` | `CONTENT_TYPE_MISMATCH` |
+| `ImageJpegError` | `INVALID_JPEG` |
+| `ImageDimensionError` | `INVALID_DIMENSIONS` |
+| role has more than `max_candidates_per_role` candidates | `CANDIDATE_LIMIT` (14.8) |
+| accepting the image would exceed `max_total_bytes` | `TOTAL_BYTES_LIMIT` (14.7) |
+
+Content failures are never folded into `TRANSPORT_ERROR`.
+
+### 14.6 Artifact construction
+
+`AcquiredImage(role, candidate_index, content, width, height, size_bytes,
+sha256)` with `content` the exact response bytes, `width` / `height` copied
+from the `JpegInfo` of the SOF header, `size_bytes = len(content)` and
+`sha256 = hashlib.sha256(content).hexdigest()`. The URL, Content-Type, HTTP
+status, headers and the response object are not kept. No deduplication: equal
+bytes in different roles, or repeated in extrafanart, are all kept.
+
+### 14.7 Total-result cap
+
+`current_total` is the sum of accepted images. A new valid JPEG of `new_size`
+is accepted iff `current_total + new_size <= max_total_bytes` (the exact
+boundary is accepted). Otherwise a `TOTAL_BYTES_LIMIT` failure is recorded for
+that candidate, the payload is **not** added, and the whole `acquire_images`
+call stops: no further request of any role, no further failure recorded; the
+result carries the previously accepted images plus the failures so far.
+Invalid payloads (non-200, wrong media type, invalid JPEG / dimensions) never
+count. Transient memory is bounded by `current_total + max_image_bytes`.
+
+### 14.8 Candidate-count limit
+
+If `len(candidates) > max_candidates_per_role`, that role sends **zero**
+requests and records one failure `CANDIDATE_LIMIT` with
+`candidate_index = max_candidates_per_role` (the first index not allowed into
+processing). No silent truncation. Other roles continue. Exactly
+`max_candidates_per_role` candidates are processed normally.
+
+### 14.9 Extrafanart limit
+
+After `max_extrafanart` successful extrafanart images, extrafanart processing
+completes normally: later candidates are neither requested nor recorded (this
+is **not** `CANDIDATE_LIMIT`). Failed candidates do not count towards the limit.
+
+### 14.10 Role isolation and failure ordering
+
+A failure in one role never clears a success in another; each single role keeps
+its first success, extrafanart keeps its successes in candidate order.
+`failures` is in actual processing order (role order, then candidate order).
+With the same record, policy and scripted client answers, `acquire_images`
+returns an equal result (same request order, failures, extrafanart order,
+candidate indices, digests and dimensions).
+
+### 14.11 Cancellation and fatal exceptions
+
+`asyncio.CancelledError` (a caller's cancellation, or raised by the client)
+propagates unchanged; it is never recorded as a failure and no further
+candidate is tried. `KeyboardInterrupt`, `SystemExit`, `GeneratorExit` and every
+other non-`Exception` `BaseException` propagate untouched. Only ordinary
+`Exception`s from the client become failures.
+
+### 14.12 Sensitive-data exclusion and side effects
+
+The `ImageAcquisitionResult` graph holds only `AcquiredImage` /
+`ImageCandidateFailure` values of builtin types: no URL (tested with a
+`?token=SUPERSECRET` candidate), no `ImageHttpResponse`, httpx object,
+exception, traceback, header or cookie. A failure is exactly
+`(role, candidate_index, kind, http_status)`. Input-error messages name a field,
+never a value. The input record, its metadata and the policy are not mutated.
+`acquisition.py` performs no filesystem operation (memory only) and imports
+only `__future__`, `hashlib`, the images modules (incl. the `transport`
+Protocol / response model) and `fc2_organizer.publication`; never `httpx`,
+`fc2_metadata_core`, `amane`, `asyncio` task fan-out or any filesystem module.
+
+Mutation-checked during development: not stopping after `TOTAL_BYTES_LIMIT`,
+an off-by-one total cap, silent candidate truncation, no extrafanart limit,
+catching `BaseException`, skipping the URL pre-check, mapping timeouts to
+`TRANSPORT_ERROR`, accepting tuple subclasses, and continuing a single role
+after its first success each makes `test_image_acquisition.py` fail.
 
 P4-C5: **NOT CLOSED**. Phase 4: **NOT CLOSED**.

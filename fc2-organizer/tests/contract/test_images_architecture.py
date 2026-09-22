@@ -37,6 +37,21 @@ CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 _FOUNDATION_MODULES = {"__init__.py", "errors.py", "models.py", "policy.py", "urls.py", "jpeg.py"}
 _JPEG_ALLOWED = {"__future__", "dataclasses", "enum", "fc2_organizer.images.errors"}
 _TRANSPORT_MODULE = "transport.py"
+_ACQUISITION_MODULE = "acquisition.py"
+# Substep 4: acquisition.py may use the images modules, the transport Protocol / response model,
+# and the publication *public* package -- nothing else (no httpx, fc2_metadata_core, amane, fs).
+_ACQUISITION_ALLOWED = {
+    "__future__", "hashlib",
+    "fc2_organizer.images.errors", "fc2_organizer.images.jpeg", "fc2_organizer.images.models",
+    "fc2_organizer.images.policy", "fc2_organizer.images.transport", "fc2_organizer.images.urls",
+    "fc2_organizer.publication",
+}
+_ACQUISITION_FORBIDDEN_CALL_NAMES = {
+    "open", "stat", "lstat", "exists", "is_file", "is_dir", "resolve", "realpath", "mkdir", "makedirs",
+    "rename", "replace", "remove", "unlink", "read_bytes", "read_text", "write", "write_bytes", "write_text",
+    "move", "copy", "copyfile", "copytree", "getcwd", "chdir", "getenv", "print", "gather", "create_task",
+    "TaskGroup", "wait", "as_completed", "HttpxImageClient", "AsyncClient", "sleep", "retry",
+}
 _TRANSPORT_ALLOWED = {
     "__future__", "asyncio", "dataclasses", "math", "re", "types", "typing", "urllib.parse", "httpx",
 }
@@ -82,9 +97,11 @@ def _foundation_files() -> list[Path]:
 
 
 def test_images_package_has_exactly_the_foundation_plus_transport_modules():
-    """Substep 2 added transport.py, substep 3 jpeg.py; no acquisition.py was started."""
+    """Substep 2 added transport.py, substep 3 jpeg.py, substep 4 acquisition.py -- nothing else."""
     assert IMAGES_SRC_ROOT.is_dir()
-    assert {p.name for p in _source_files(IMAGES_SRC_ROOT)} == _FOUNDATION_MODULES | {_TRANSPORT_MODULE}
+    assert {p.name for p in _source_files(IMAGES_SRC_ROOT)} == (
+        _FOUNDATION_MODULES | {_TRANSPORT_MODULE, _ACQUISITION_MODULE}
+    )
 
 
 def test_images_foundation_imports_only_allowed_stdlib_and_itself():
@@ -184,12 +201,42 @@ def test_jpeg_module_is_pure_and_independent_of_transport():
         assert needle not in text, needle
 
 
-def test_nothing_but_transport_imports_transport():
+def test_only_acquisition_imports_transport_and_nothing_imports_acquisition():
     for path in _source_files(IMAGES_SRC_ROOT):
-        if path.name == _TRANSPORT_MODULE:
-            continue
-        for module in _imported_modules(_tree(path)):
-            assert module != "fc2_organizer.images.transport", path.name
+        modules = _imported_modules(_tree(path))
+        if path.name not in (_TRANSPORT_MODULE, _ACQUISITION_MODULE):
+            assert "fc2_organizer.images.transport" not in modules, path.name
+        assert "fc2_organizer.images.acquisition" not in modules, path.name
+
+
+def test_acquisition_imports_only_its_frozen_allow_list():
+    for module in _imported_modules(_tree(IMAGES_SRC_ROOT / _ACQUISITION_MODULE)):
+        assert module in _ACQUISITION_ALLOWED, f"acquisition.py: import of {module!r} is outside its allow-list"
+        assert not module.startswith(("httpx", "fc2_metadata_core", "amane", "os", "pathlib", "io", "shutil",
+                                      "tempfile", "asyncio", "socket")), module
+
+
+def test_acquisition_is_memory_only_sequential_and_never_builds_a_client():
+    path = IMAGES_SRC_ROOT / _ACQUISITION_MODULE
+    for node in ast.walk(_tree(path)):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            assert name not in _ACQUISITION_FORBIDDEN_CALL_NAMES, f"acquisition.py:{node.lineno}: call to {name!r}"
+    text = path.read_text(encoding="utf-8")
+    for needle in ("import httpx", "from httpx", "fc2_metadata_core", "import amane", "from amane", "os.environ"):
+        assert needle not in text, needle
+
+
+def test_images_package_import_does_not_load_acquisition_transport_or_core():
+    _purge()
+    try:
+        importlib.import_module("fc2_organizer.images")
+        for name in ("fc2_organizer.images.acquisition", "fc2_organizer.images.transport",
+                     "fc2_organizer.publication"):
+            assert name not in sys.modules, name
+    finally:
+        _purge()
 
 
 def test_errors_module_is_stdlib_only():
