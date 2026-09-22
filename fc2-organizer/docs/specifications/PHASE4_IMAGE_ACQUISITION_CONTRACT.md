@@ -1,15 +1,17 @@
 # FC2 Organizer -- Phase 4 / P4-C5 Image Acquisition Contract
 
-Status: **draft, substeps 1-2 of P4-C5** (foundation + binary transport frozen; independent review pending).
-Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`, `transport.py`).
+Status: **draft, substeps 1-3 of P4-C5** (foundation + binary transport + JPEG validation frozen; independent review pending).
+Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`, `transport.py`, `jpeg.py`).
 Frozen Base: `97f6aeba8d11d9bc8a29d5397b9a1e1711d36cd6`
 Substep 1 Head: `a961dda486bc8377bd2cec8ae9dd107f5379eba4`
+Substep 2 Head: `d7c1bd9173cb88be399368a4a7a9083f52f73e72`
 Branch: `claude/phase4-c5-image-acquisition`
 
 Sections marked **IMPLEMENTED IN SUBSTEP 2** describe the binary HTTP transport
-(section 12). Sections marked **PENDING IN LATER P4-C5 SUBSTEP** describe work
-that is *not* implemented. Nothing in this document claims JPEG validation,
-dimension extraction, Content-Type policy or acquisition orchestration exists yet.
+(section 12); **IMPLEMENTED IN SUBSTEP 3** marks the JPEG-only content policy,
+structural validation and dimension caps (section 13). Sections marked
+**PENDING IN LATER P4-C5 SUBSTEP** describe work that is *not* implemented.
+Nothing in this document claims acquisition orchestration exists yet.
 
 ## 1. Scope
 
@@ -34,11 +36,16 @@ HTTP transport -- `ImageHttpClient` protocol, production `HttpxImageClient`,
 streamed per-response `max_bytes` bound, per-request total deadline, transport
 error mapping and client lifecycle.
 
-**Not yet implemented** (section 11): Content-Type accept / reject policy, JPEG
-validation, dimension extraction, HTTP-status -> failure-kind mapping in the
-acquisition result, candidate fallback, candidate-count / extrafanart /
-total-bytes runtime enforcement, role orchestration, `acquire_images`,
-synthetic gate, filesystem writes of any kind.
+**Substep 3 delivers only** (section 13, IMPLEMENTED IN SUBSTEP 3): the
+JPEG-only rule, the Content-Type policy, bounded JPEG structural validation,
+dimension extraction from the SOF header, the dimension caps, the exact-bytes /
+exact-str boundary and hostile-input semantics, plus the pure
+`validate_acquired_image` helper.
+
+**Not yet implemented** (section 11): `acquire_images`, HTTP-status ->
+failure-kind mapping in the acquisition result, candidate fallback and
+orchestration, role isolation, candidate-count / extrafanart / total-bytes
+runtime enforcement, synthetic gate, final handoff, filesystem writes of any kind.
 
 ## 2. Roles
 
@@ -78,8 +85,10 @@ is **PENDING IN LATER P4-C5 SUBSTEP**.
 | `size_bytes` | exact `int`, `== len(content)` |
 | `sha256` | exact `str`, 64 lowercase hex chars, **equal to** `hashlib.sha256(content).hexdigest()` |
 
-The model checks shape only; whether `content` is a real JPEG and whether
-`width` / `height` match it is **PENDING IN LATER P4-C5 SUBSTEP**.
+The model checks shape only. The JPEG validator and dimension caps exist
+(section 13, IMPLEMENTED IN SUBSTEP 3); building every `AcquiredImage` from a
+`validate_acquired_image` result (so `width` / `height` always come from the
+SOF header) is the acquisition layer's job -- **PENDING IN LATER P4-C5 SUBSTEP**.
 
 ## 5. Failure vocabulary: `ImageFailureKind` and `ImageCandidateFailure`
 
@@ -225,6 +234,9 @@ ImageError(Exception)
       |                                       TRANSPORT_ERROR if None, else INVALID_URL / UNSAFE_URL
       +-- ImageResponseTooLargeError          TOO_LARGE
       +-- ImageClientClosedError              TRANSPORT_ERROR
+ +-- ImageContentTypeError(ImageError, ValueError)   substep 3; CONTENT_TYPE_MISMATCH
+ +-- ImageJpegError(ImageError, ValueError)          INVALID_JPEG, .reason: JpegRejectionReason
+ +-- ImageDimensionError(ImageError, ValueError)     INVALID_DIMENSIONS, .reason: DimensionRejectionReason
 ```
 
 Transport errors take **no constructor argument** (except `ImageRedirectError`'s
@@ -238,9 +250,11 @@ No bare `ValueError` is raised by the package.
 ## 10. Architecture boundary
 
 ```text
-fc2_organizer.images    foundation: __init__, errors, models, policy, urls
+fc2_organizer.images    foundation: __init__, errors, models, policy, urls, jpeg (substep 3)
     '-- standard library only:
         __future__, dataclasses, enum, hashlib, math, re, ipaddress, urllib.parse
+    '-- jpeg.py specifically: __future__, dataclasses, enum, fc2_organizer.images.errors
+        (never transport.py, httpx, an image library, struct, or any I/O module)
 
 fc2_organizer.images.transport    (substep 2 -- the single httpx exception)
     '-- httpx
@@ -290,11 +304,12 @@ meta-path level; public API contains no deferred entry point).
 | Content-Type extraction (no policy) | IMPLEMENTED IN SUBSTEP 2 (12.8) |
 | transport error mapping, cancellation, lifecycle | IMPLEMENTED IN SUBSTEP 2 (12.9-12.10) |
 | HTTP status -> `HTTP_STATUS` failure mapping in the acquisition result | PENDING IN LATER P4-C5 SUBSTEP |
-| Content-Type accept / reject policy | PENDING IN LATER P4-C5 SUBSTEP |
+| JPEG-only rule, Content-Type accept / reject policy | IMPLEMENTED IN SUBSTEP 3 (13.1-13.2) |
+| JPEG structural validation, dimension extraction, dimension caps | IMPLEMENTED IN SUBSTEP 3 (13.3-13.4) |
+| exact-bytes / exact-str boundary, hostile input semantics | IMPLEMENTED IN SUBSTEP 3 (13.6) |
 | total 64 MiB result cap, candidate-count and extrafanart runtime enforcement | PENDING IN LATER P4-C5 SUBSTEP |
 | connection-time resolved-address check / DNS rebinding | NOT ADDRESSED (see 8.5, 12.11) |
-| JPEG validation and width / height extraction | PENDING IN LATER P4-C5 SUBSTEP |
-| candidate fallback, candidate limit, role orchestration, `acquire_images` | PENDING IN LATER P4-C5 SUBSTEP |
+| `acquire_images`, candidate fallback / orchestration, candidate limit, role isolation | PENDING IN LATER P4-C5 SUBSTEP |
 | synthetic acquisition gate | PENDING IN LATER P4-C5 SUBSTEP |
 | final P4-C5 handoff | PENDING IN LATER P4-C5 SUBSTEP |
 
@@ -422,7 +437,8 @@ any httpx timeout (`ConnectTimeout`, `ReadTimeout`, `WriteTimeout`,
 surrounding whitespace trimmed, case preserved. `None` when the header is
 absent, empty, longer than 127 characters or contains anything but printable
 ASCII. No `image/jpeg` / `image/png` / `application/octet-stream` judgement
-happens here (PENDING, acquisition layer). The header mapping is never returned.
+happens in the transport; the policy is section 13.2 (IMPLEMENTED IN SUBSTEP 3),
+applied by the acquisition layer (PENDING). The header mapping is never returned.
 
 ### 12.9 Error mapping and cancellation
 
@@ -456,8 +472,9 @@ untouched. Only ordinary `Exception`s are mapped.
   answer is private / loopback is still connected to. DNS rebinding is **not**
   addressed.
 * No retry / backoff / `Retry-After`, no HTTP/2, no caching.
-* No Content-Type or JPEG judgement, no role / candidate orchestration, no
-  result-level total-bytes cap (all PENDING).
+* The transport itself makes no Content-Type or JPEG judgement (that is
+  section 13, applied by the acquisition layer); no role / candidate
+  orchestration, no result-level total-bytes cap (PENDING).
 
 ### 12.12 Offline tests
 
@@ -469,5 +486,129 @@ pull zero chunks), and the recorder lists every request actually sent (unsafe
 redirect targets never appear). Mutation-checked during development: removing
 redirect re-validation, reading the whole body before the size check, or
 re-arming the deadline per hop each makes the corresponding tests fail.
+
+## 13. JPEG-only content validation -- IMPLEMENTED IN SUBSTEP 3
+
+Module: `fc2_organizer.images.jpeg` (standard library only; exported from
+`fc2_organizer.images`). Tests: `tests/unit/images/test_image_jpeg.py`.
+
+### 13.1 JPEG-only rule (frozen)
+
+The P4-C5 output format is **JPEG only**. PNG, WEBP, GIF, AVIF, HTML, JSON or
+anything else without a JPEG structure is refused (`INVALID_JPEG`). Nothing is
+transcoded; no image library (Pillow or other) is added or imported.
+
+### 13.2 Content-Type policy: `validate_image_content_type(content_type) -> ContentTypeVerdict`
+
+`content_type` must be `None` or an exact `str` (`ImageInputError` otherwise,
+before any method of the value runs). The media type is the text before the
+first `;`, whitespace-trimmed, compared case-insensitively; parameters are ignored.
+
+| declared media type | outcome |
+|---|---|
+| `image/jpeg`, `image/jpg`, `image/pjpeg` | `JPEG_DECLARED` |
+| `None`, empty, `application/octet-stream` | `UNDECLARED` -- the bytes alone decide |
+| anything else (`image/png`, `image/webp`, `image/gif`, `image/avif`, `text/html`, `application/json`, `text/plain`, `image/*`, `binary/octet-stream`, ...) | `ImageContentTypeError` -> `CONTENT_TYPE_MISMATCH` |
+
+An explicit non-JPEG media type is rejected **even when the body is a valid
+JPEG**. `JPEG_DECLARED` and `UNDECLARED` both still require the byte validation
+of 13.3; a declaration never substitutes for it. The error message is fixed
+(`image content type is not JPEG`) and never echoes the declared value.
+
+### 13.3 Structural validation: `inspect_jpeg(content) -> JpegInfo`
+
+`content` must be exact `bytes` (`bytearray`, `memoryview`, `str` and any
+`bytes` subclass -> `ImageInputError`, before any hook of the value runs).
+One forward pass, O(len(content)), every index bounds-checked before use:
+
+1. `FF D8` (SOI) at offset 0, else `NOT_JPEG` (this is where PNG / WEBP / GIF /
+   AVIF / HTML / JSON fail).
+2. Up to and including the first SOS, markers and segments are parsed exactly:
+   * a marker is `0xFF`, optionally repeated as fill bytes (T.81 B.1.1.2), then
+     a code; a non-`FF` byte where a marker must start -> `INVALID_MARKER`. Fill
+     bytes are never taken as segment data;
+   * standalone markers `TEM` (`01`) and `RST0..7` (`D0..D7`) carry no length
+     and are skipped;
+   * `FF 00`, a repeated SOI and reserved codes `02..BF` -> `INVALID_MARKER`;
+   * an EOI before any SOS -> `MISSING_SOF` / `MISSING_SOS`;
+   * every other marker has a 2-byte big-endian length: a cut length field ->
+     `TRUNCATED`, length `< 2` -> `INVALID_SEGMENT_LENGTH`, a segment running
+     past the end -> `SEGMENT_OUT_OF_BOUNDS`. Such segments (APPn, DQT, DHT, DAC,
+     DRI, COM, JPG, JPGn, DNL, DHP, EXP ...) are skipped by their declared length.
+3. SOF: exactly the 13 frame markers `C0 C1 C2 C3 C5 C6 C7 C9 CA CB CD CE CF`.
+   `C4` (DHT), `C8` (JPG) and `CC` (DAC) are **never** frames. Frame header:
+   precision, height, width, component count `Nf >= 1`, and the segment length
+   must be exactly `8 + 3*Nf`. Precision `8` or `12` (DCT) or `2..16`
+   (lossless `C3 C7 CB CF`); otherwise `INVALID_SOF`. A second SOF ->
+   `MULTIPLE_SOF`.
+4. SOS: requires a prior SOF (`MISSING_SOF`); header `Ns` in `1..4` and length
+   exactly `6 + 2*Ns` (`INVALID_SOS`).
+5. After the SOS header the entropy-coded data is **not scanned**. The payload
+   must end with `FF D9` (EOI), located after the SOS header; otherwise
+   `MISSING_EOI` (this includes trailing bytes after EOI). Data ending before
+   any SOS -> `TRUNCATED`.
+
+A bare `FF D8 ... FF D9` without real segments is rejected; the check is never
+just `startswith(FFD8)` / `endswith(FFD9)`.
+
+**Scope of the promise (frozen):** bounded *structural* validation. Passing it
+does **not** guarantee that every JPEG decoder can decode the image (entropy
+data, Huffman / quantisation table content and component sampling are not
+verified). No pixel is decoded.
+
+All failures are `ImageJpegError(reason: JpegRejectionReason)`
+(`INVALID_JPEG`). No `IndexError`, `struct.error`, `UnicodeError`,
+`OverflowError` or other internal exception can escape (every prefix of a
+valid fixture and a deterministic 3000-case mutation fuzz are tested).
+
+### 13.4 Dimensions and caps
+
+Width and height come from the SOF frame header (no decoding). They are judged
+**after** the structure is accepted. `JpegInfo(width, height, sof_marker)` is
+`frozen=True, slots=True` and enforces the caps at construction:
+
+| rule | reason (`INVALID_DIMENSIONS`) |
+|---|---|
+| width / height exact `int` (not `bool`) | `NOT_EXACT_INT` |
+| `width == 0` | `ZERO_WIDTH` |
+| `height == 0` (DNL-defined height is not supported) | `ZERO_HEIGHT` |
+| `width <= 20000` | `WIDTH_TOO_LARGE` |
+| `height <= 20000` | `HEIGHT_TOO_LARGE` |
+| `width * height <= 100_000_000` | `TOO_MANY_PIXELS` |
+
+`20000 x 5000` (exactly `1e8`) is accepted; `20000 x 5001` is not. Violations
+raise `ImageDimensionError(reason)`, never a bare `ValueError`. `sof_marker`
+must be one of the 13 frame markers.
+
+### 13.5 Integration helper: `validate_acquired_image(content, content_type) -> JpegInfo`
+
+Frozen order: (0) exact types of both arguments, (1) Content-Type policy,
+(2) JPEG structure, (3) dimension caps. Pure: no HTTP, role, candidate
+iteration or I/O. Wiring it into acquisition is PENDING.
+
+### 13.6 Hostile input semantics
+
+`type(content) is bytes` and `content_type is None or type(content_type) is str`
+are the first operations. A hostile `bytes` subclass (overriding `__bytes__`,
+`__repr__`, `__str__`, `__getitem__`, `__len__`, `__iter__`, `__eq__`,
+`__hash__`, `__buffer__`, `startswith`, `find`, `decode`, ...) or `str`
+subclass (`strip`, `lower`, `split`, `__eq__`, `__hash__`, ...) is rejected
+with `ImageInputError` and **zero** of its hooks run (tested with hooks that
+record and raise).
+
+### 13.7 Errors and side effects
+
+`ImageContentTypeError` (`CONTENT_TYPE_MISMATCH`), `ImageJpegError`
+(`INVALID_JPEG`, `.reason`), `ImageDimensionError` (`INVALID_DIMENSIONS`,
+`.reason`) are `ImageError` + `ValueError`. Messages are fixed text plus the
+reason value: never payload bytes, a declared Content-Type, a URL or internal
+exception text; never chained. The module performs zero filesystem, network,
+clock or randomness operations and imports only `__future__`, `dataclasses`,
+`enum` and `fc2_organizer.images.errors`.
+
+Mutation-checked during development: accepting `C4`/`C8`/`CC` as SOF, dropping
+the EOI check, dropping the segment-length lower bound, dropping the bounds
+check, dropping the pixel cap, or using `isinstance` instead of the exact-type
+check each makes `test_image_jpeg.py` fail.
 
 P4-C5: **NOT CLOSED**. Phase 4: **NOT CLOSED**.

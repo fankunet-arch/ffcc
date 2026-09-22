@@ -33,7 +33,9 @@ IMAGES_SRC_ROOT = SRC_ROOT / "fc2_organizer" / "images"
 ORGANIZER_SRC_ROOT = SRC_ROOT / "fc2_organizer"
 CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 
-_FOUNDATION_MODULES = {"__init__.py", "errors.py", "models.py", "policy.py", "urls.py"}
+# Foundation = stdlib-only modules. Substep 3 added jpeg.py (JPEG-only content policy) to this set.
+_FOUNDATION_MODULES = {"__init__.py", "errors.py", "models.py", "policy.py", "urls.py", "jpeg.py"}
+_JPEG_ALLOWED = {"__future__", "dataclasses", "enum", "fc2_organizer.images.errors"}
 _TRANSPORT_MODULE = "transport.py"
 _TRANSPORT_ALLOWED = {
     "__future__", "asyncio", "dataclasses", "math", "re", "types", "typing", "urllib.parse", "httpx",
@@ -80,7 +82,7 @@ def _foundation_files() -> list[Path]:
 
 
 def test_images_package_has_exactly_the_foundation_plus_transport_modules():
-    """Substep 2 added only transport.py; no jpeg.py / acquisition.py was started."""
+    """Substep 2 added transport.py, substep 3 jpeg.py; no acquisition.py was started."""
     assert IMAGES_SRC_ROOT.is_dir()
     assert {p.name for p in _source_files(IMAGES_SRC_ROOT)} == _FOUNDATION_MODULES | {_TRANSPORT_MODULE}
 
@@ -167,6 +169,29 @@ def test_transport_creates_exactly_one_async_client_in_the_constructor_and_none_
     assert module_level_calls == []
 
 
+def test_jpeg_module_is_pure_and_independent_of_transport():
+    """jpeg.py: stdlib + images errors only -- no httpx, transport, image library, struct,
+    filesystem, clock or randomness; and it makes no I/O call."""
+    path = IMAGES_SRC_ROOT / "jpeg.py"
+    assert _imported_modules(_tree(path)) <= _JPEG_ALLOWED
+    for node in ast.walk(_tree(path)):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            assert name not in _TRANSPORT_FORBIDDEN_CALL_NAMES | {"urlopen", "random", "now", "monotonic"}, name
+    text = path.read_text(encoding="utf-8")
+    for needle in ("import PIL", "from PIL", "import httpx", "images.transport", "import struct", "import os"):
+        assert needle not in text, needle
+
+
+def test_nothing_but_transport_imports_transport():
+    for path in _source_files(IMAGES_SRC_ROOT):
+        if path.name == _TRANSPORT_MODULE:
+            continue
+        for module in _imported_modules(_tree(path)):
+            assert module != "fc2_organizer.images.transport", path.name
+
+
 def test_errors_module_is_stdlib_only():
     assert _imported_modules(_tree(IMAGES_SRC_ROOT / "errors.py")) <= {"__future__", "enum"}
 
@@ -243,7 +268,7 @@ def test_bare_import_of_fc2_organizer_does_not_load_images():
         _purge()
 
 
-def test_images_public_api_is_the_foundation_plus_pure_transport_errors():
+def test_images_public_api_is_the_foundation_plus_pure_transport_errors_and_jpeg_policy():
     _purge()
     try:
         images = importlib.import_module("fc2_organizer.images")
@@ -253,6 +278,9 @@ def test_images_public_api_is_the_foundation_plus_pure_transport_errors():
             "ImageRole", "ImageUrlError", "MAX_IMAGE_URL_LENGTH", "UrlRejectionReason", "validate_image_url",
             "ImageTransportError", "ImageTimeoutError", "ImageConnectionError", "ImageRedirectLimitError",
             "ImageRedirectError", "ImageResponseTooLargeError", "ImageClientClosedError",
+            "ContentTypeVerdict", "DimensionRejectionReason", "ImageContentTypeError", "ImageDimensionError",
+            "ImageJpegError", "JpegInfo", "JpegRejectionReason", "MAX_IMAGE_HEIGHT", "MAX_IMAGE_PIXELS",
+            "MAX_IMAGE_WIDTH", "inspect_jpeg", "validate_acquired_image", "validate_image_content_type",
         }
         assert "fc2_organizer.images.transport" not in sys.modules
         assert not any(name == "httpx" or name.startswith("httpx.") for name in images.__all__)

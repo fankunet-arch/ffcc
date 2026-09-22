@@ -35,6 +35,11 @@ __all__ = [
     "ImageRedirectError",
     "ImageResponseTooLargeError",
     "ImageClientClosedError",
+    "ImageContentTypeError",
+    "ImageJpegError",
+    "ImageDimensionError",
+    "JpegRejectionReason",
+    "DimensionRejectionReason",
 ]
 
 
@@ -220,3 +225,72 @@ class ImageClientClosedError(ImageTransportError):
     """The image HTTP client was used after ``aclose()`` / context-manager exit."""
 
     _message = "image HTTP client is closed"
+
+
+# --- content family (P4-C5 substep 3, contract section 13) ------------------------------------------
+#
+# Messages are fixed strings plus a reason enum value: never a byte of the payload, a
+# Content-Type value, a URL, or an internal exception's text. Never chained.
+
+
+class JpegRejectionReason(Enum):
+    """Why :func:`fc2_organizer.images.jpeg.inspect_jpeg` refused the bytes (all -> INVALID_JPEG)."""
+
+    NOT_JPEG = "not_jpeg"  # no SOI: PNG / WEBP / GIF / HTML / anything else
+    TRUNCATED = "truncated"  # the data ends inside a marker or segment header
+    SEGMENT_OUT_OF_BOUNDS = "segment_out_of_bounds"  # declared segment length runs past the end
+    INVALID_SEGMENT_LENGTH = "invalid_segment_length"  # segment length < 2
+    INVALID_MARKER = "invalid_marker"  # non-FF where a marker must start, FF00, reserved, repeated SOI
+    MISSING_SOF = "missing_sof"
+    MULTIPLE_SOF = "multiple_sof"
+    INVALID_SOF = "invalid_sof"  # SOF segment shape / precision / component count
+    MISSING_SOS = "missing_sos"
+    INVALID_SOS = "invalid_sos"  # SOS header shape
+    MISSING_EOI = "missing_eoi"  # the payload does not end with FF D9
+
+
+class DimensionRejectionReason(Enum):
+    """Why image dimensions were refused (all -> INVALID_DIMENSIONS)."""
+
+    NOT_EXACT_INT = "not_exact_int"
+    ZERO_WIDTH = "zero_width"
+    ZERO_HEIGHT = "zero_height"
+    WIDTH_TOO_LARGE = "width_too_large"
+    HEIGHT_TOO_LARGE = "height_too_large"
+    TOO_MANY_PIXELS = "too_many_pixels"
+
+
+class ImageContentTypeError(ImageError, ValueError):
+    """The response declared an explicit non-JPEG media type (``image/png``, ``text/html`` ...).
+    The declared value itself is never stored or echoed."""
+
+    failure_kind = ImageFailureKind.CONTENT_TYPE_MISMATCH
+
+    def __init__(self) -> None:
+        super().__init__("image content type is not JPEG")
+
+
+class ImageJpegError(ImageError, ValueError):
+    """The bytes are not a structurally valid JPEG (contract section 13.3). Carries only ``reason``."""
+
+    failure_kind = ImageFailureKind.INVALID_JPEG
+    __slots__ = ("reason",)
+
+    def __init__(self, reason: JpegRejectionReason) -> None:
+        if type(reason) is not JpegRejectionReason:
+            raise TypeError("ImageJpegError.reason must be a JpegRejectionReason")
+        self.reason = reason
+        super().__init__(f"invalid JPEG: {reason.value}")
+
+
+class ImageDimensionError(ImageError, ValueError):
+    """Width / height are zero, not exact ints, or exceed the frozen caps. Carries only ``reason``."""
+
+    failure_kind = ImageFailureKind.INVALID_DIMENSIONS
+    __slots__ = ("reason",)
+
+    def __init__(self, reason: DimensionRejectionReason) -> None:
+        if type(reason) is not DimensionRejectionReason:
+            raise TypeError("ImageDimensionError.reason must be a DimensionRejectionReason")
+        self.reason = reason
+        super().__init__(f"invalid image dimensions: {reason.value}")
