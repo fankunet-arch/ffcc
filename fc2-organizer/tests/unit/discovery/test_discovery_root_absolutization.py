@@ -108,30 +108,53 @@ def test_relative_root_with_no_symlinks_present_yields_zero_issues(relative_root
     assert result.issues == ()
 
 
-def test_coerce_root_does_not_lexically_collapse_dotdot_in_relative_root(monkeypatch):
+# ---- POSIX branch: _coerce_root must never lexically fold ".." away -----------------------------------------
+#
+# These force scanner._coerce_root's *POSIX* code path via monkeypatching
+# scanner._is_windows() (never the real os.name -- mutating that global
+# attribute directly would leak into every other module reading it in this
+# process, including pathlib's own Path-subclass selection, and breaks
+# outright on a real Windows host; see _is_windows()'s docstring). That
+# branch is pure pathlib string manipulation (no OS syscall beyond
+# os.getcwd(), also mocked below), so it is meaningful and deterministic
+# on any host, including this Windows one (P4-C1-R2-01 kept the
+# Windows-native branch separate specifically so this POSIX guarantee is
+# never diluted by Windows-only reasoning -- see the "Windows branch"
+# tests further down for the real-OS-dependent counterpart). tmp_path is
+# used for "the current/already-absolute path" throughout so every
+# assertion is against a genuinely absolute path on whatever OS actually
+# runs the test, never a hand-typed "/base"-style string that would not
+# even parse as absolute under a real WindowsPath.
+
+
+def test_coerce_root_posix_branch_does_not_collapse_dotdot_in_relative_root(tmp_path, monkeypatch):
     """Core P4-C1-R1-01 regression guard, independent of any real
-    filesystem object: ``_coerce_root`` must only *prefix* the current
-    working directory onto a relative root -- it must never fold a ``..``
-    segment away itself (that is exactly what ``os.path.abspath`` did in
-    R1, and exactly what let a symlink/junction target get silently
+    filesystem object: on POSIX, ``_coerce_root`` must only *prefix* the
+    current working directory onto a relative root -- it must never fold a
+    ``..`` segment away itself (that is exactly what ``os.path.abspath``
+    did in R1, and exactly what let a symlink target get silently
     substituted). A ``.`` segment may still be dropped by plain ``pathlib``
     joining -- that is always lexically safe (see the next test)."""
-    monkeypatch.setattr(scanner.os, "getcwd", lambda: str(Path("C:/base") if os.name == "nt" else Path("/base")))
+    monkeypatch.setattr(scanner, "_is_windows", lambda: False)
+    monkeypatch.setattr(scanner.os, "getcwd", lambda: str(tmp_path))
 
     result = scanner._coerce_root(os.path.join("link", "..", "mydir"))
 
-    expected = Path("C:/base" if os.name == "nt" else "/base") / "link" / ".." / "mydir"
+    expected = tmp_path / "link" / ".." / "mydir"
     assert result == expected
     assert ".." in result.parts
 
 
-def test_coerce_root_does_not_lexically_collapse_dotdot_in_absolute_root(monkeypatch):
-    """An already-absolute root must be returned completely untouched --
-    including any ``..`` segment it contains -- never run through
-    ``abspath``/``normpath``/``resolve`` (all of which would silently fold
-    it)."""
-    base = Path("C:/base") if os.name == "nt" else Path("/base")
-    absolute_with_dotdot = base / "link" / ".." / "mydir"
+def test_coerce_root_posix_branch_does_not_collapse_dotdot_in_absolute_root(tmp_path, monkeypatch):
+    """On POSIX, an already-absolute root must be returned completely
+    untouched -- including any ``..`` segment it contains -- never run
+    through ``abspath``/``normpath``/``resolve`` (all of which would
+    silently fold it). This is deliberately POSIX-only: the Windows branch
+    (below) does *not* make this same promise, because Windows's own
+    native path resolution collapses ``..`` unconditionally regardless of
+    what this package does (P4-C1-R2-01)."""
+    monkeypatch.setattr(scanner, "_is_windows", lambda: False)
+    absolute_with_dotdot = tmp_path / "link" / ".." / "mydir"
 
     result = scanner._coerce_root(str(absolute_with_dotdot))
 
@@ -139,14 +162,50 @@ def test_coerce_root_does_not_lexically_collapse_dotdot_in_absolute_root(monkeyp
     assert ".." in result.parts
 
 
-def test_coerce_root_still_absolutizes_a_plain_relative_root(monkeypatch):
-    fake_cwd = Path("C:/base") if os.name == "nt" else Path("/base")
-    monkeypatch.setattr(scanner.os, "getcwd", lambda: str(fake_cwd))
+def test_coerce_root_posix_branch_still_absolutizes_a_plain_relative_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "_is_windows", lambda: False)
+    monkeypatch.setattr(scanner.os, "getcwd", lambda: str(tmp_path))
 
     result = scanner._coerce_root("mydir")
 
-    assert result == fake_cwd / "mydir"
+    assert result == tmp_path / "mydir"
     assert result.is_absolute()
+
+
+# ---- Windows branch: _coerce_root must match native GetFullPathNameW resolution exactly ----------------------
+#
+# Real-OS-dependent: only meaningful on an actual Windows host, since it
+# asserts _coerce_root's Windows branch (os.path.abspath) matches what
+# Windows's own os.path.abspath independently produces for a *real*
+# process cwd (changed via monkeypatch.chdir, not faked) -- proving the
+# production code is a pure, unmodified delegation to the platform API,
+# not a reimplementation that could silently diverge.
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-native path resolution branch; not applicable on this OS")
+def test_coerce_root_windows_branch_matches_native_abspath_for_plain_relative_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    result = scanner._coerce_root("mydir")
+
+    assert result == Path(os.path.abspath("mydir"))
+    assert result.is_absolute()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-native path resolution branch; not applicable on this OS")
+def test_coerce_root_windows_branch_matches_native_abspath_for_dotdot_root(tmp_path, monkeypatch):
+    """Unlike the POSIX branch, the Windows branch is *expected* to
+    lexically collapse ``..`` -- because native Windows filesystem access
+    does too (GetFullPathNameW, verified independently via ctypes in
+    ``test_discovery_symlink_dotdot_identity.py``), so matching that native
+    behavior exactly is correct, not a regression of P4-C1-R1-01 (which is
+    specifically about POSIX symlink resolution)."""
+    monkeypatch.chdir(tmp_path)
+
+    result = scanner._coerce_root(os.path.join("sibling", "..", "mydir"))
+
+    assert result == Path(os.path.abspath(os.path.join("sibling", "..", "mydir")))
+    assert ".." not in result.parts
 
 
 def test_discovered_media_item_rejects_relative_source_path():

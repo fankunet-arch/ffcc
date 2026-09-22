@@ -41,51 +41,84 @@ from fc2_organizer.discovery.policy import DiscoveryPolicy
 __all__ = ["discover_media"]
 
 
+def _is_windows() -> bool:
+    """Isolated platform check (mirrors ``_list_directory_sorted``/
+    ``_stat_entry``/``_is_symlink`` below): a real ``os.name`` mutation
+    would leak into every other module reading the same global attribute
+    (including ``pathlib`` itself, which picks its concrete ``Path``
+    subclass from it) -- monkeypatching this seam instead lets a test
+    exercise ``_coerce_root``'s POSIX branch on any host without touching
+    real process/platform state."""
+    return os.name == "nt"
+
+
 def _coerce_root(root: object) -> Path:
-    """Coerce ``root`` to an **absolute, lexically-unmodified** ``Path``
-    (P4-C1-R-01, tightened by P4-C1-R1-01).
+    """Coerce ``root`` to an **absolute** ``Path`` using **platform-specific**
+    semantics (P4-C1-R-01, tightened by P4-C1-R1-01 and P4-C1-R2-01).
 
-    This must produce an *absolute OS-native path*, not a *canonicalized /
-    normalized / resolved physical path* -- those are not the same thing
-    when a relative segment (``.``/``..``) sits on either side of a
-    symlink or a Windows junction/reparse point.
+    This must produce an *absolute OS-native path* that names the same
+    physical location the caller's original path string names *on this
+    OS* -- not a *canonicalized / normalized / resolved* path in general,
+    and not a path built from an assumption that only holds on one
+    platform. POSIX and Windows disagree about what "the same physical
+    location" even means for certain relative forms, so this function is
+    deliberately split by ``os.name`` rather than sharing one algorithm:
 
-    ``os.path.abspath`` (P4-C1-R-01's original fix) is **not used**: despite
-    its name, ``abspath`` first lexically normalizes the whole path
-    (collapsing ``a/../b`` to ``b``) *before* any filesystem lookup ever
-    happens. For an ordinary directory that lexical collapse is harmless.
-    For ``link/../mydir`` where ``link`` is a symlink or junction, it is
-    wrong: the real filesystem resolves ``..`` *after* traversing into
-    wherever ``link`` actually points, which is not necessarily anywhere
-    near ``link``'s own parent directory. Lexically collapsing first (as
-    ``abspath``/``normpath`` do) silently substitutes a different physical
-    directory for the one the caller's path string actually names --
-    exactly the P4-C1-R1-01 regression the independent reviewer reproduced.
-    ``Path.resolve()``/``os.path.realpath`` are equally wrong here for the
-    same reason, plus they additionally resolve the root itself through any
-    symlink, which P4-C1-R-01's original fix already correctly rejected.
+    **Windows** (``os.name == "nt"``): delegates entirely to
+    ``os.path.abspath`` (``ntpath.abspath``, backed by the real
+    ``GetFullPathNameW`` Win32 API). This is not merely "acceptable" on
+    Windows, it is **required** for correctness, because Windows has
+    relative-path forms a simple string join cannot replicate at all:
 
-    The fix: absolute-ize only by prefixing the current working directory
-    onto a *relative* root -- never rewriting the segments that were
-    already there. ``pathlib``'s ``/`` join (unlike ``os.path.normpath``/
-    ``abspath``) never collapses ``..`` and only drops a redundant ``.``
-    segment, which is always lexically safe (a bare ``.`` never changes
-    which directory a path names, with or without symlinks in the way).
-    An already-absolute root is returned completely untouched, including
-    any ``..``/symlink-sensitive segments it contains.
+    - drive-relative, same drive (``C:foo`` while the process's current
+      drive is already ``C:``) -- relative to *that drive's own* current
+      directory, which may differ from the last component of ``os.getcwd()``
+      only in edge cases but is still, semantically, drive-scoped;
+    - drive-relative, a **different** drive (``D:foo`` while the process
+      is on ``C:``) -- relative to drive ``D:``'s own current directory,
+      a piece of OS-maintained state (the hidden per-drive ``=D:``
+      environment variable Windows itself tracks) that Python exposes
+      through no API except ``GetFullPathNameW`` itself; ``os.getcwd()``
+      only ever reports the *current* drive's directory, so a plain
+      ``Path(os.getcwd()) / "D:foo"`` cannot resolve this at all (P4-C1-R2-01);
+    - rooted-relative (``\\foo``) -- relative to the current drive's root.
 
-    Every path built during the walk (``DiscoveryResult.root``, every
-    ``DiscoveredMediaItem.source_path``) is derived from this ``Path`` via
-    plain ``os.scandir``/``os.DirEntry.path`` string concatenation (never
-    re-normalized), so any ``..``/symlink segment present here is carried
-    through unresolved into every result path. Every real filesystem call
-    made along the way (``os.stat``, ``os.scandir``) still receives that
-    same literal string and resolves it exactly the way the OS resolves any
-    path -- component by component, following a symlink/junction/reparse
-    point exactly where the caller's original path said to -- so scan
-    *behavior* (what gets discovered) is governed by the OS's own path
-    resolution, never by an early, symlink-blind, in-process string
-    rewrite.
+    Additionally (P4-C1-R1-01 / R2, reverified here): Windows's own
+    ``GetFullPathNameW`` collapses a ``..`` segment as a **pure string
+    operation**, with no filesystem I/O and no reparse-point awareness,
+    *before* ``CreateFileW``/``FindFirstFileW`` (what every ``os.stat``/
+    ``os.scandir`` call on Windows ultimately goes through) ever get to
+    consult a junction/reparse point -- independently verified via
+    ``ctypes`` on a nonexistent path, see
+    ``test_discovery_symlink_dotdot_identity.py``. This is identical to
+    how ``cmd.exe``/PowerShell/Explorer resolve such a path, not something
+    this package introduces or could avoid by not calling ``abspath``
+    itself: any Windows filesystem access to ``link\\..\\mydir`` collapses
+    the same way regardless of what this function does. So using
+    ``abspath`` here does not reintroduce the R1 regression -- it produces
+    the identical, correct-for-Windows result the OS would produce anyway,
+    while *additionally* correctly handling every relative form above that
+    a bare cwd-join cannot.
+
+    **POSIX** (everything else): never lexically folds ``..`` away --
+    ``pathlib``'s ``/`` join (unlike ``os.path.normpath``/``abspath``)
+    never collapses ``..`` and only drops a redundant ``.`` segment, which
+    is always lexically safe (a bare ``.`` never changes which directory a
+    path names, with or without symlinks in the way). Only the current
+    working directory is prefixed onto a *relative* root; an already-absolute
+    root is returned completely untouched, ``..``/symlink-sensitive segments
+    and all. This is what lets a POSIX kernel resolve ``..`` in
+    ``link/../mydir`` relative to wherever the symlink ``link`` actually
+    points -- component by component, the way any other POSIX application
+    resolves the same path -- rather than relative to ``link``'s own
+    location (P4-C1-R1-01). POSIX has no drive-relative path concept, so
+    none of the Windows-specific reasoning above applies here.
+
+    Either branch: every path built during the walk (``DiscoveryResult.root``,
+    every ``DiscoveredMediaItem.source_path``) is derived from this one
+    ``Path`` via plain ``os.scandir``/``os.DirEntry.path`` string
+    concatenation, so whichever absolute form this function returns is
+    what every result path is built from.
     """
     if isinstance(root, Path):
         candidate = root
@@ -97,6 +130,9 @@ def _coerce_root(root: object) -> Path:
         candidate = Path(os.fspath(root))
     else:
         raise DiscoveryInputError(f"discover_media root must be a str or os.PathLike, got {type(root).__name__}")
+
+    if _is_windows():
+        return Path(os.path.abspath(candidate))
 
     if not candidate.is_absolute():
         candidate = Path(os.getcwd()) / candidate
