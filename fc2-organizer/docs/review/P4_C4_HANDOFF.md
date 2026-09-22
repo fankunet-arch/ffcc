@@ -315,3 +315,178 @@ Phase 4            : NOT CLOSED
 ```
 
 The developer does not declare P4-C4 PASS / CLOSED. No later package was started.
+
+---
+
+# Final Closure -- P4-C4 Pure NFO Rendering
+
+Docs-only closure record appended after independent review. Sections 1-22 above
+are the unchanged developer handoff (historical record).
+
+```text
+Phase                      = 4
+Package                    = P4-C4 Pure NFO Rendering
+Status                     = CLOSED
+Final Level                = Level 1 PASS
+Final Reviewed Code Head   = 526177b7c4279057633a2fb893fab79804c97835
+Previous Docs Head         = 79f74d6b94602a030a45f305a3aad04a66401234
+Blocking Findings          = NONE
+```
+
+## C.1 Independent review governance (two reviews)
+
+**Reviewer A.** Static / semantic review of the XML contract, field mapping,
+XML 1.0 character safety, XML injection, hostile textual inputs, status /
+provenance isolation, architecture and known limitations: no implementation
+blocker found. Reviewer A's verdict was FAIL for one reason only: its review
+environment could not obtain a local checkout, so it could not independently run
+the targeted pytest, the full pytest suite or a literal `git diff --check`. That
+is a review execution-evidence gap, not an implementation, contract or security
+defect.
+
+**Reviewer B.** Checked out the exact reviewed code in a temporary detached
+worktree and independently executed:
+
+```text
+Targeted       : 433 passed, 0 failed, 0 skipped
+Full Suite     : 3220 passed, 14 skipped, 0 failed
+git diff --check: both ranges clean
+```
+
+It also independently ran the direct reproductions, XML security checks,
+hostile-string tests, trap checks, status-isolation checks and architecture
+checks. Verdict: **PASS**.
+
+**Governance result.** The only evidence Reviewer A lacked was later supplied by
+another independent reviewer on the exact reviewed worktree:
+
+```text
+Independent Review Evidence Gap (Reviewer A: pytest / full suite / diff-check not run)
+Status: SATISFIED / CLOSED by later independent execution evidence (Reviewer B)
+```
+
+This gap is not a product finding and carries no finding ID.
+
+## C.2 Finding-ID normalization
+
+Both reviewers labelled a different item `P4-C4-R-01`. To keep one ID per issue:
+
+* Reviewer A's "could not run pytest / diff-check" item is **not** kept as a
+  finding ID. It is recorded only as the Independent Review Evidence Gap in C.1
+  (SATISFIED / CLOSED).
+* **`P4-C4-R-01`** refers only to Reviewer B's LOW finding (C.3).
+
+## C.3 P4-C4-R-01 -- container subclass defence-in-depth asymmetry
+
+```text
+ID        : P4-C4-R-01
+Severity  : LOW
+Status    : CARRIED / non-blocking
+Topic     : container subclass defence-in-depth asymmetry
+```
+
+`render_movie_nfo` requires an exact `PublicationRecord`, and every rendered
+textual value must be an exact `str`. The containers inside the record
+(`NormalizedMetadata`, `OrganizePlan`) may still be subclasses. A
+`NormalizedMetadata` subclass could run code via a custom `__getattribute__` when
+the renderer reads a field. The renderer still exact-type-checks every value that
+read returns.
+
+This does not violate the frozen P4-C4 contract. It produced no demonstrated XML
+injection, filesystem, network or provenance leak. It is a defence-in-depth
+consistency observation. A later decision should either freeze container-level
+exact-type semantics or explicitly define these container subclasses as trusted
+inputs. No code change was made in this closure.
+
+## C.4 Known-limitation rulings
+
+```text
+KL-1 Optional Control-Whitespace  = NON-BLOCKING / NOT A DEFECT (contract-defined behavior)
+```
+
+The frozen contract (section 10) uses blank-first semantics. An optional value,
+actor item or tag item with `str.strip() == ""` is omitted because it never
+reaches the XML. Only values that are actually rendered pass through the XML
+character boundary. Omitting a strip-blank optional value made only of U+000B,
+U+000C or U+001C..U+001F therefore follows the contract. No finding is created.
+
+```text
+KL-2 fc2db_net uploadDate         = NON-BLOCKING / NOT A P4-C4 DEFECT
+```
+
+`fc2db_net` may pass schema.org `uploadDate` straight into `metadata.release`.
+Given e.g. `2026-01-01T12:34:56Z`, P4-C4 raises `NfoReleaseDateError`. This is
+correct: the frozen contract (section 8) requires a non-blank release to be an
+exact ASCII `YYYY-MM-DD` real Gregorian date and forbids truncation, `split("T")`,
+format guessing, auto-repair and silent omission. The renderer is not changed.
+
+Un-numbered future observation: *fc2db_net release normalization may require a
+future upstream / source-layer decision.* This is not a P4-C4 finding.
+
+## C.5 P2-R-07
+
+```text
+P2-R-07 = LOW / CARRIED
+```
+
+The P4-C4 renderer reads neither `SourceResult.elapsed_ms` nor
+`SourceAttempt.elapsed_ms` and outputs no timing, so P4-C4 adds no new closure
+requirement for this debt.
+
+## C.6 Independent Level 1 evidence
+
+```text
+Independent Level 1                                   : PASS
+Execution-capable independent reviewer evidence:
+  Targeted                                            : 433 passed / 0 failed / 0 skipped
+  Full Suite                                          : 3220 passed / 14 skipped / 0 failed
+  Direct semantic / security reproductions            : PASS
+  Architecture                                        : PASS
+  XML contract                                        : PASS
+  XML injection                                       : PASS
+  XML 1.0 character boundary                          : PASS
+  Hostile textual value boundary                      : PASS
+  Status isolation                                    : PASS
+  Provenance exclusion                                : PASS
+  No filesystem / network / clock / random / env / locale : PASS
+  git diff --check                                    : clean
+```
+
+## C.7 Carried debts after closure
+
+```text
+P4-C4-R-01 -- LOW (new, C.3)
+P4-C3-R-01 -- LOW
+P4-C3-R-02 -- LOW
+P4-C2-R1-02 -- LOW
+OrganizePlan operation-graph hardening
+overwrite executor semantics = frozen NEVER
+extended Windows reserved names
+P4-C1-R-02..R-05
+P2-R-05
+P2-R-06
+P2-R-07
+C3-N1..N4
+C4-N1
+C4-R1-N1..N3
+F3
+F5
+C5-R1-L1
+```
+
+Closed earlier and not re-carried: P4-C2 metadata identity gap, C2-L2, P2-R-10.
+
+## C.8 Scope of this closure
+
+This closes **P4-C4** only. It does not close Phase 4 and does not start any
+later package. Each later package needs its own frozen contract and review cycle.
+No `src/**`, `tests/**` or `docs/specifications/**` file was changed by this
+closure.
+
+## C.9 Final status
+
+```text
+P4-C4: CLOSED
+Phase 4: NOT CLOSED
+Next Package: NOT STARTED
+```
