@@ -746,13 +746,289 @@ scanner rewrite, no symlink/junction architecture expansion, no
 extension-policy redesign, and no fd-relative scanner rewrite were
 undertaken to close P4-C1-R1-01. They remain open for a future round.
 
-## R2.17 Independent R2 Closure Review
+## R2.17 Independent R2 Closure Review (original round)
 
 ```text
 REQUIRED
 ```
 
-## R2.18 P4-C1
+## R2.18 P4-C1 (original round)
+
+```text
+NOT CLOSED
+```
+
+---
+
+# R3 Closure — P4-C1-R2-01 (HIGH / BLOCKING)
+
+The three sections above (original P4-C1, R1, R2) are left unmodified for
+history. This section records the R3 incremental-closure round.
+
+## R3.1 Coordinates
+
+```text
+R2 Reviewed-Failed Code Head = 2db3a44d48eb6e9ae36d627c3fd1bb5ed661e34c
+Previous Docs Head           = a65a29f30b0c6e1352c19e6f2a85c061434f86a5
+R3 Code Review Candidate     = c4f5a415d8fd8d0d56ff4ee227e7b87a01fbe79f
+R3 Docs Head                 = <this commit; see git log after commit>
+R3 Code Review Range         = a65a29f30b0c6e1352c19e6f2a85c061434f86a5..c4f5a415d8fd8d0d56ff4ee227e7b87a01fbe79f
+R3 Docs Review Range         = c4f5a415d8fd8d0d56ff4ee227e7b87a01fbe79f..<R3 Docs Head>
+```
+
+```text
+P4-C1-R-01:   REMAINS CLOSED (reverified, R3.10 Repro A)
+P4-C1-R1-01:  REMAINS CLOSED (reverified, R3.10 Repro B + Repro C)
+P4-C1-R2-01:  CLOSED by this round (R3.10 Repro D)
+```
+
+## R3.2 Finding addressed
+
+```text
+P4-C1-R2-01
+Severity: HIGH / BLOCKING
+```
+
+**Defect:** R2's `_coerce_root` absolutized a relative root by
+unconditionally prefixing the current working directory
+(`Path(os.getcwd()) / candidate`). Correct on POSIX (no drive-relative
+concept exists there), but wrong on Windows for relative forms a plain
+string join cannot express: same-drive drive-relative (`C:foo`),
+cross-drive drive-relative (`D:foo` while the process's current drive is
+`C:`), and rooted-relative (`\foo`). `D:foo` in particular resolves
+against drive `D:`'s **own** current directory -- OS-maintained state (the
+hidden per-drive `=D:` environment variable Windows itself tracks) that
+`os.getcwd()` cannot report for any drive other than the current one.
+`Path(os.getcwd()) / Path("D:foo")` does not correctly resolve this and
+could still fail to produce a path that is actually absolute for the
+caller's intended target -- reopening the P4-C1-R-01 contract violation
+for this specific input shape.
+
+## R3.3 Exact changed files
+
+```text
+fc2-organizer/src/fc2_organizer/discovery/scanner.py                              (M)
+fc2-organizer/tests/unit/discovery/test_discovery_root_absolutization.py          (M)
+fc2-organizer/tests/unit/discovery/test_discovery_drive_relative_identity.py      (new)
+fc2-organizer/docs/review/P4_C1_HANDOFF.md                                        (this section)
+```
+
+`models.py` was **not** touched: the "`source_path` must be absolute"
+invariant is correct and unchanged. `PHASE4_DISCOVERY_CONTRACT.md` was
+**not** touched: it specifies "absolute OS-native path", which is what
+this fix now actually delivers on every platform.
+
+## R3.4 Platform-specific absolutization strategy
+
+```python
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+...
+if _is_windows():
+    return Path(os.path.abspath(candidate))
+
+if not candidate.is_absolute():
+    candidate = Path(os.getcwd()) / candidate
+return candidate
+```
+
+`_is_windows()` is a new, small, isolated seam (mirroring the existing
+`_list_directory_sorted`/`_stat_entry`/`_is_symlink` pattern) so a test can
+force either branch without mutating the real `os.name` global --
+important because `os.name` is read by other modules in the same process,
+including `pathlib`'s own concrete-`Path`-subclass selection, so mutating
+it directly breaks on a real Windows host (`NotImplementedError: cannot
+instantiate 'PosixPath' on your system`, hit and fixed during this round).
+
+* **Windows branch:** delegates entirely to `os.path.abspath`
+  (`ntpath.abspath`, backed by the real `GetFullPathNameW` Win32 API).
+  This is not a convenience choice -- it is the *only* way to correctly
+  resolve same-drive/cross-drive-relative and rooted-relative paths at
+  all, since Python exposes no other API for a non-current drive's own
+  current directory. It also means `..` is lexically collapsed on
+  Windows -- but that is *not* a P4-C1-R1-01 regression: R2 already
+  independently verified (via `ctypes` `GetFullPathNameW` on a
+  nonexistent path) that Windows collapses `..` this way natively, before
+  any reparse point is ever consulted, identical to
+  `cmd.exe`/PowerShell/Explorer -- so `abspath` on Windows produces the
+  identical, correct-for-Windows result the OS would produce for any
+  filesystem access to that path regardless of what this package does.
+* **POSIX branch:** unchanged from R2 -- prefixes the current working
+  directory onto a relative root via a plain `pathlib` join, never folding
+  `..` away, so a POSIX kernel can still resolve `..` in
+  `link/../mydir` relative to wherever `link` actually points
+  (P4-C1-R1-01).
+
+## R3.5 Ordinary relative root (must not regress)
+
+`discover_media("mydir")`, `"./mydir"`, and (non-symlink) `"foo/../mydir"`
+all still yield absolute `result.root`/`source_path`, correct
+`relative_path`, and correct content identity on Windows -- now via the
+`os.path.abspath` branch instead of the R2 cwd-join, with an identical
+observable result for these ordinary forms. Covered by the pre-existing
+`test_discovery_root_absolutization.py` tests, all still green.
+
+## R3.6 Windows rooted-relative root (`\foo`)
+
+Covered as an oracle path-resolution match (`ctypes GetFullPathNameW`),
+not against a real file at a drive root: this round deliberately does not
+write test fixtures directly at a drive root (`C:\` or `D:\`), matching
+the task brief's own softer "at least add appropriate regression
+coverage" wording for this specific case (vs. the explicit "must be a
+real Windows filesystem test" wording for the cross-drive case, R3.8).
+`test_discovery_drive_relative_identity.py::test_rooted_relative_root_matches_native_path_resolution`
+asserts `_coerce_root("\\foo")` matches `GetFullPathNameW("\\foo")`
+exactly, under a real (non-root) `monkeypatch.chdir`.
+
+## R3.7 Windows same-drive drive-relative root (`C:foo`)
+
+Real filesystem identity test, no special drive needed (same-drive
+drive-relative resolves against the current drive's own current
+directory, i.e. `tmp_path` here, an ordinary, already-sanctioned temp
+location -- never a drive root).
+`test_discovery_drive_relative_identity.py::test_same_drive_drive_relative_root_preserves_identity`:
+creates a real file under `tmp_path`, independently resolves `"C:mydir"`
+via `ctypes GetFullPathNameW`, directly reads the oracle-resolved file's
+content with a plain `open()` before ever calling `discover_media`, then
+asserts `discover_media("C:mydir")` matches that oracle exactly in both
+path identity (`os.path.samefile`) and content.
+
+## R3.8 Windows cross-drive drive-relative root (`D:foo`)
+
+```text
+PASS -- ran for real (a genuine second writable drive, D:, is present on this host)
+```
+
+This is the round's central regression, and the only piece requiring
+write access outside the repo's own temp areas. **Explicit user
+authorization was obtained before touching the real `D:\` drive** (which
+contains the repo owner's actual personal files -- Documents, SQL dumps,
+project folders -- not a scratch/test drive), under these constraints,
+honored exactly:
+
+* Exactly **one** uniquely, randomly-named directory created directly
+  under `D:\` (`D:\ffcc_p4c1_r3_<uuid4 hex>`) -- nothing else on `D:`
+  read, modified, moved, or deleted.
+* Every created path tracked explicitly; deletion targets only that one
+  owned root (and its own contents, created by this round), verified by
+  path identity immediately before `shutil.rmtree`.
+* No recursive delete of anything that existed before this round; no
+  wildcard/fuzzy path used for deletion.
+* Deletion success re-verified after (`owned_root.exists() == False`);
+  the strategy was to report a residual path and stop, never bypass a
+  protection, if deletion had failed (it did not).
+
+**Standalone reproduction (outside pytest, Repro D)** ran first, with
+every created/deleted path printed:
+
+```text
+Created: D:\ffcc_p4c1_r3_12d5923b632143d99e2c9a6fab0a0da4
+         D:\ffcc_p4c1_r3_12d5923b632143d99e2c9a6fab0a0da4\droot
+         D:\ffcc_p4c1_r3_12d5923b632143d99e2c9a6fab0a0da4\droot\mydir
+         D:\ffcc_p4c1_r3_12d5923b632143d99e2c9a6fab0a0da4\droot\mydir\D_DRIVE_FILE.mp4
+Oracle (ctypes GetFullPathNameW) resolved "D:mydir" ->
+         D:\ffcc_p4c1_r3_12d5923b632143d99e2c9a6fab0a0da4\droot\mydir
+discover_media("D:mydir") result.root / item.source_path: same directory, absolute
+item.relative_path: D_DRIVE_FILE.mp4
+Oracle direct-read content == discover_media-read content == "d-drive-content"
+Deleted: D:\ffcc_p4c1_r3_12d5923b632143d99e2c9a6fab0a0da4 (the single owned root)
+owned_root exists after cleanup: False
+```
+
+`Get-ChildItem D:\` was diffed before and after (22 top-level entries,
+identical names, no `ffcc_*` residual) both after the standalone script
+and again after the full pytest run that also exercises this path
+(`test_discovery_drive_relative_identity.py::test_cross_drive_drive_relative_root_preserves_identity`,
+which programmatically re-derives a second writable drive via a
+`_second_writable_drive` fixture rather than hard-coding `D:` -- it
+`pytest.skip`s if none is found, never fabricating a pass).
+
+## R3.9 Windows junction + `..` (must not regress, P4-C1-R1-01 Windows side)
+
+`test_discovery_symlink_dotdot_identity.py::test_windows_junction_dotdot_root_matches_native_win32_path_resolution`
+(unmodified from R2) still passes: `discover_media("link/../mydir")`
+across a real junction still resolves to `BASE.mp4` -- the same,
+correct-for-Windows result as before, since `_coerce_root`'s Windows
+branch (`abspath`) produces an identical result to R2's cwd-join for this
+specific case (R3.4).
+
+## R3.10 Direct reproductions (outside pytest)
+
+```text
+Repro A -- ordinary relative root ("mydir"):
+  source_path/result.root absolute, relative_path == "a.mp4"
+  direct DiscoveredMediaItem(source_path="relative/a.mp4", ...) -> DiscoveryContractError
+  -> PASS, P4-C1-R-01 remains closed
+
+Repro B -- POSIX symlink/../mydir:
+  os.symlink(...) -> OSError(22, "客户端没有所需的特权。") (WinError 1314)
+  -> NOT RUN -- platform/privilege limitation (unchanged from R1/R2), honestly reported
+
+Repro C -- Windows junction/../mydir:
+  discovered BASE.mp4 / "base-content" (native, correct-for-Windows result)
+  result.root now shows the lexically-collapsed path (...\base\mydir), consistent
+  with the Windows branch now using abspath unconditionally
+  -> PASS, P4-C1-R1-01 Windows side remains closed
+
+Repro D -- Windows cross-drive "D:mydir":
+  independent oracle (ctypes GetFullPathNameW) and discover_media agree exactly
+  on both path identity and file content; single owned directory created and
+  fully deleted, D:\ diffed clean before/after
+  -> PASS, P4-C1-R2-01 CLOSED
+```
+
+## R3.11 Targeted tests
+
+```text
+119 passed, 4 skipped
+```
+
+(114 prior P4-C1(+R1+R2) tests + 5 new, all green; 4 skips unchanged --
+the 3 pre-existing real-directory-symlink-privilege skips plus the one
+POSIX-symlink-identity skip from R2, same root cause each time: no
+`SeCreateSymbolicLinkPrivilege` on this host.)
+
+## R3.12 Full suite
+
+```text
+2480 passed, 4 skipped
+```
+
+`2475 (R2 full-suite baseline) + 5 (new) = 2480`. No pre-existing test was
+modified, newly failing, or newly skipped for a different reason than
+before.
+
+## R3.13 `git diff --check`
+
+```text
+clean (no output)
+```
+
+## R3.14 `git status --porcelain`
+
+Clean after the R3 code commit; clean again after this R3 docs commit
+(verify with `git status --porcelain`). No residual state on `D:\` (see
+R3.8).
+
+## R3.15 Carried non-blocking findings (unchanged, not addressed by R3)
+
+```text
+P4-C1-R-02  MEDIUM  -- CARRIED / non-blocking
+P4-C1-R-03  LOW     -- CARRIED / non-blocking
+P4-C1-R-04  LOW     -- CARRIED / non-blocking
+P4-C1-R-05  LOW     -- CARRIED / non-blocking
+```
+
+None closed, upgraded, or removed by R3.
+
+## R3.16 Independent R3 Closure Review
+
+```text
+REQUIRED
+```
+
+## R3.17 P4-C1
 
 ```text
 NOT CLOSED
