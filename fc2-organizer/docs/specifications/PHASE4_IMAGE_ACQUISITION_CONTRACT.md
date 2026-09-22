@@ -1,13 +1,15 @@
 # FC2 Organizer -- Phase 4 / P4-C5 Image Acquisition Contract
 
-Status: **draft, substep 1 of P4-C5** (foundation frozen; independent review pending).
-Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`).
+Status: **draft, substeps 1-2 of P4-C5** (foundation + binary transport frozen; independent review pending).
+Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`, `transport.py`).
 Frozen Base: `97f6aeba8d11d9bc8a29d5397b9a1e1711d36cd6`
+Substep 1 Head: `a961dda486bc8377bd2cec8ae9dd107f5379eba4`
 Branch: `claude/phase4-c5-image-acquisition`
 
-Sections marked **PENDING IN LATER P4-C5 SUBSTEP** describe work that is *not*
-implemented. Nothing in this document claims transport, download, redirect,
-streaming, JPEG or orchestration behaviour exists yet.
+Sections marked **IMPLEMENTED IN SUBSTEP 2** describe the binary HTTP transport
+(section 12). Sections marked **PENDING IN LATER P4-C5 SUBSTEP** describe work
+that is *not* implemented. Nothing in this document claims JPEG validation,
+dimension extraction, Content-Type policy or acquisition orchestration exists yet.
 
 ## 1. Scope
 
@@ -26,11 +28,17 @@ structured, secret-free form.
 6. the error hierarchy (section 9) and the architecture boundary with its
    contract test (section 10).
 
-**Not in substep 1** (section 11): HTTP transport, real or mock download,
-redirect handling, status classification, streaming / memory enforcement,
-Content-Type handling, JPEG validation, dimension extraction, candidate
-fallback, role orchestration, `acquire_images`, synthetic gate, filesystem
-writes of any kind.
+**Substep 2 delivers only** (section 12, IMPLEMENTED IN SUBSTEP 2): the binary
+HTTP transport -- `ImageHttpClient` protocol, production `HttpxImageClient`,
+`ImageHttpResponse`, manual redirect handling with per-hop URL re-validation,
+streamed per-response `max_bytes` bound, per-request total deadline, transport
+error mapping and client lifecycle.
+
+**Not yet implemented** (section 11): Content-Type accept / reject policy, JPEG
+validation, dimension extraction, HTTP-status -> failure-kind mapping in the
+acquisition result, candidate fallback, candidate-count / extrafanart /
+total-bytes runtime enforcement, role orchestration, `acquire_images`,
+synthetic gate, filesystem writes of any kind.
 
 ## 2. Roles
 
@@ -186,11 +194,12 @@ Teredo) is itself global. Examples refused: `127.0.0.1`, `::1`, `10.0.0.1`,
 
 * **No DNS resolution.** A public-looking hostname that resolves to a private
   or loopback address is **not** caught by this gate.
-* **This gate does not solve DNS rebinding.** Connection-time address policy is
-  **PENDING IN LATER P4-C5 SUBSTEP** (transport), and may still not fully
-  close it.
-* Redirect targets must be re-validated by the transport -- **PENDING IN LATER
-  P4-C5 SUBSTEP**.
+* **This gate does not solve DNS rebinding.** The substep-2 transport does not
+  add connection-time (resolved-address) checks either; see section 12.11.
+  DNS rebinding and "public name resolving to a private address" remain
+  **explicitly unaddressed** in P4-C5 so far.
+* Redirect targets are re-validated by the transport with this same function
+  before every further hop -- **IMPLEMENTED IN SUBSTEP 2** (section 12.4).
 
 ### 8.6 Error shape
 
@@ -204,29 +213,55 @@ the exception or included in its message, and the error is never chained
 
 ```text
 ImageError(Exception)
- +-- ImageInputError(ImageError, TypeError)   reserved for the later acquisition entry point
+ +-- ImageInputError(ImageError, TypeError)   illegal argument (e.g. HttpxImageClient.get(max_bytes=True))
  +-- ImagePolicyError(ImageError, ValueError)
  +-- ImageModelError(ImageError, ValueError)
  +-- ImageUrlError(ImageError, ValueError)    .reason, .failure_kind
+ +-- ImageTransportError(ImageError)          substep 2; failure_kind TRANSPORT_ERROR
+      +-- ImageTimeoutError                   TIMEOUT
+      +-- ImageConnectionError                CONNECTION_ERROR
+      +-- ImageRedirectLimitError             REDIRECT_LIMIT
+      +-- ImageRedirectError                  .reason (None | UrlRejectionReason);
+      |                                       TRANSPORT_ERROR if None, else INVALID_URL / UNSAFE_URL
+      +-- ImageResponseTooLargeError          TOO_LARGE
+      +-- ImageClientClosedError              TRANSPORT_ERROR
 ```
+
+Transport errors take **no constructor argument** (except `ImageRedirectError`'s
+optional reason enum): each message is a fixed string, so no URL, header, body,
+library message or exception `repr` can be passed in. `ImageUrlError.failure_kind`
+semantics are unchanged from substep 1 (the mapping was only moved into a shared
+helper so `ImageRedirectError` reuses it).
 
 No bare `ValueError` is raised by the package.
 
 ## 10. Architecture boundary
 
 ```text
-fc2_organizer.images    (substep 1)
+fc2_organizer.images    foundation: __init__, errors, models, policy, urls
     '-- standard library only:
         __future__, dataclasses, enum, hashlib, math, re, ipaddress, urllib.parse
+
+fc2_organizer.images.transport    (substep 2 -- the single httpx exception)
+    '-- httpx
+    '-- fc2_organizer.images.errors, fc2_organizer.images.urls
+    '-- __future__, asyncio, dataclasses, math, re, types, typing, urllib.parse
 ```
 
-* No import of `fc2_metadata_core` (any module, incl. `sources`, aggregation,
+* Foundation modules: no import of `fc2_metadata_core` (any module, incl. `sources`, aggregation,
   batch, resource control), `amane`, `httpx`, `requests`, `socket`, `ssl`,
   `http`, `urllib.request`, `asyncio`, `os`, `pathlib`, `io`, `shutil`, `time`,
   `random`, or any other `fc2_organizer` package. `errors.py` imports only
   `__future__` and `enum`.
 * No reverse dependency: `fc2_metadata_core`, `discovery`, `planning`,
   `publication` and `nfo` never import `images`.
+* `transport.py` is the **only** images module that imports `httpx`. It never
+  imports `fc2_metadata_core` (it does not reuse the text-oriented
+  `SourceHttpClient` / `HttpResponse.text`), `amane`, a filesystem module or any
+  other `fc2_organizer` package, and makes no filesystem call.
+* `fc2_organizer/images/__init__.py` does **not** import `transport`; a bare
+  `import fc2_organizer.images` never loads `httpx`. Import the transport
+  explicitly: `from fc2_organizer.images.transport import HttpxImageClient`.
 * `fc2_organizer/__init__.py` is unchanged and does **not** eagerly import
   `images`; import explicitly: `from fc2_organizer.images import ...`.
 * Top-level `fc2_organizer` subpackages are now exactly
@@ -234,28 +269,205 @@ fc2_organizer.images    (substep 1)
   scope-guard assertions (P4-C1..P4-C4 architecture tests) were updated by one
   line each (package-set growth only); none of their forbidden-import guards,
   runtime blockers, allow-lists or reverse-dependency guards changed.
-* Whether the later transport substep may depend on `httpx` directly or must go
-  through a local abstraction is **PENDING IN LATER P4-C5 SUBSTEP**.
-
 Enforced by `tests/contract/test_images_architecture.py` (module set is exactly
-the five foundation modules; import allow-list; forbidden calls; reverse
+the five foundation modules plus `transport.py`; only `transport.py` imports
+`httpx`; transport allow-list, no filesystem call, no `.aread` / `.text` /
+`decode` / non-`self` `.content`, `AsyncClient` created once in `__init__` with
+`follow_redirects=False` and `trust_env=False` and no auth / cookies / headers /
+proxies; foundation import allow-list; forbidden calls; reverse
 dependency; runtime import with `amane` / `httpx` / `requests` / `socket` /
 `ssl` / `fc2_metadata_core` / `urllib.request` / `http.client` blocked at the
 meta-path level; public API contains no deferred entry point).
 
-## 11. Deferred sections -- PENDING IN LATER P4-C5 SUBSTEP
+## 11. Implementation status
 
 | area | status |
 |---|---|
-| HTTP client abstraction / httpx transport | PENDING IN LATER P4-C5 SUBSTEP |
-| redirect handling and per-hop URL re-validation | PENDING IN LATER P4-C5 SUBSTEP |
-| HTTP status classification | PENDING IN LATER P4-C5 SUBSTEP |
-| streaming body, per-image and total memory bounds at runtime | PENDING IN LATER P4-C5 SUBSTEP |
-| deadline enforcement | PENDING IN LATER P4-C5 SUBSTEP |
-| Content-Type handling | PENDING IN LATER P4-C5 SUBSTEP |
+| HTTP client abstraction / httpx transport | IMPLEMENTED IN SUBSTEP 2 (12.1-12.2) |
+| redirect handling and per-hop URL re-validation | IMPLEMENTED IN SUBSTEP 2 (12.4) |
+| streaming body and per-response `max_bytes` bound | IMPLEMENTED IN SUBSTEP 2 (12.5-12.6) |
+| per-request total deadline | IMPLEMENTED IN SUBSTEP 2 (12.7) |
+| Content-Type extraction (no policy) | IMPLEMENTED IN SUBSTEP 2 (12.8) |
+| transport error mapping, cancellation, lifecycle | IMPLEMENTED IN SUBSTEP 2 (12.9-12.10) |
+| HTTP status -> `HTTP_STATUS` failure mapping in the acquisition result | PENDING IN LATER P4-C5 SUBSTEP |
+| Content-Type accept / reject policy | PENDING IN LATER P4-C5 SUBSTEP |
+| total 64 MiB result cap, candidate-count and extrafanart runtime enforcement | PENDING IN LATER P4-C5 SUBSTEP |
+| connection-time resolved-address check / DNS rebinding | NOT ADDRESSED (see 8.5, 12.11) |
 | JPEG validation and width / height extraction | PENDING IN LATER P4-C5 SUBSTEP |
 | candidate fallback, candidate limit, role orchestration, `acquire_images` | PENDING IN LATER P4-C5 SUBSTEP |
 | synthetic acquisition gate | PENDING IN LATER P4-C5 SUBSTEP |
 | final P4-C5 handoff | PENDING IN LATER P4-C5 SUBSTEP |
+
+## 12. Binary HTTP transport -- IMPLEMENTED IN SUBSTEP 2
+
+Module: `fc2_organizer.images.transport`. Tests:
+`tests/unit/images/test_image_transport.py` (fully offline, section 12.12).
+
+### 12.1 `ImageHttpClient` (protocol) and `ImageHttpResponse`
+
+```python
+class ImageHttpClient(Protocol):
+    async def get(self, url: str, *, deadline_seconds: float, max_redirects: int,
+                  max_bytes: int) -> ImageHttpResponse: ...
+    async def aclose(self) -> None: ...
+
+@dataclass(frozen=True, slots=True)
+class ImageHttpResponse:
+    status_code: int          # exact int, 100..599, never a redirect status
+    content_type: str | None  # exact str media type or None (12.8)
+    content: bytes            # exact bytes; b"" unless status_code == 200
+```
+
+`ImageHttpResponse` violations raise `ImageModelError` (`bytearray`,
+`memoryview`, `str`, `bytes` / `str` subclasses, `bool` status, non-200 with a
+body). The body is snapshotted into builtin `bytes`. The response holds **no**
+URL, redirect history, header mapping, cookie, `httpx.Request` / `httpx.Response`
+or exception (its `gc` referents are only `int` / `str` / `bytes` / `None`).
+
+`get` argument rules (else `ImageInputError`, before any request):
+`deadline_seconds` exact `int` / `float`, finite, `> 0`; `max_redirects` exact
+`int >= 0`; `max_bytes` exact `int > 0`. There is no `headers`, `cookies`,
+`auth` or credentials parameter.
+
+### 12.2 `HttpxImageClient`
+
+* One `httpx.AsyncClient` per instance, created in `__init__` (never per request,
+  never at import time). Construction sends no request.
+* `follow_redirects=False`, `trust_env=False` (no `HTTP_PROXY` / `HTTPS_PROXY`
+  / `ALL_PROXY` / `.netrc`), no auth, no client cookies, no client headers.
+* `transport=` accepts an `httpx.AsyncBaseTransport` (tests inject
+  `httpx.MockTransport`); anything else -> `ImageInputError`.
+* Each hop's `httpx.Request` is built directly with only the fixed headers
+  `Accept: image/jpeg, image/*;q=0.8`, `Accept-Encoding: identity`,
+  `User-Agent: fc2-organizer-image-fetch/0.1 (...)` (plus httpx's `Host`).
+  Server cookies are cleared from the client jar after every hop and are
+  never sent.
+* Parse-differential guard: the built request's scheme and host must equal the
+  `urlsplit` scheme / hostname the validator judged; otherwise nothing is sent
+  (`ImageTransportError`).
+* One send per hop -- **no retry, no backoff, no `Retry-After`**. A redirect is
+  not a retry.
+
+### 12.3 Initial URL
+
+`validate_image_url(url)` (substep 1, not a copy) runs before any request is
+built. An unsafe / invalid initial URL raises `ImageUrlError` and nothing is sent.
+
+### 12.4 Manual redirects
+
+* Redirect statuses: `301 302 303 307 308`. Each hop is a `GET`.
+* httpx 0.27 `AsyncClient.send` parses `Location` itself (to build
+  `next_request`) even with `follow_redirects=False`. To keep every redirect
+  target under *our* validator, a response event hook runs right after the
+  headers arrive and, for a redirect status, stops `send` with a private signal
+  carrying only the raw `Location` string; httpx closes that response **unread**.
+* Resolution: `urllib.parse.urljoin(current_url, location)` (relative
+  `Location` allowed), then `validate_image_url(target)` **before** the next hop
+  is sent. The validated string is exactly what is requested next.
+* Missing / blank `Location` -> `ImageRedirectError(reason=None)`
+  (`TRANSPORT_ERROR`). A target failing validation (localhost, `*.localhost`,
+  private / link-local / loopback / non-canonical-numeric IP, `file:` / `data:`
+  / `ftp:`, userinfo, whitespace, malformed ...) -> `ImageRedirectError(reason)`
+  whose `failure_kind` is `INVALID_URL` / `UNSAFE_URL` exactly as for
+  `ImageUrlError`. **The rejected target is never requested** (tests assert the
+  recorded request list).
+* A redirect body is never read and never treated as an image.
+
+**Redirect limit (frozen):** `max_redirects` is the number of redirects that may
+be *followed*. With `max_redirects = N`, a chain of N redirects succeeds (N+1
+requests); when the (N+1)-th redirect response arrives, `ImageRedirectLimitError`
+is raised **without** requesting its target (so at most N+1 requests are sent).
+`max_redirects = 0` means the first redirect response fails. Boundary tests
+cover N = 0, 1, 5, 6 on both sides.
+
+### 12.5 Status handling
+
+Only a final `200` enters body streaming. Every other final status (`204`,
+`206`, `304`, `403`, `404`, `429`, `500`, `503`, ...) returns
+`ImageHttpResponse(status_code, content_type, b"")` **without reading the
+body**. Mapping a non-200 status to `HTTP_STATUS` is the acquisition layer's job
+(PENDING). A status outside `100..599` -> `ImageTransportError`.
+
+### 12.6 Streaming `max_bytes` bound and `Content-Length`
+
+* `Content-Encoding` must be absent or `identity` (the request asks for
+  `identity`); anything else -> `ImageTransportError` before reading, so no
+  decompression (and no decompression bomb) ever happens and the byte counter
+  equals the bytes held in memory.
+* The body is consumed chunk by chunk (`aiter_bytes` under identity encoding)
+  into a `bytearray`; before appending a chunk,
+  `len(buffer) + len(chunk) > max_bytes` -> `ImageResponseTooLargeError`
+  immediately; **no further chunk is pulled** and the response is closed without
+  draining. Exactly `max_bytes` is accepted; `max_bytes + 1` is rejected. Never
+  `aread()` / `.content` first.
+* `Content-Length` early reject: if the header is a well-formed ASCII decimal
+  (`[0-9]+` after trimming) and its value `> max_bytes`, `TOO_LARGE` is raised
+  before reading any body byte. Very long digit strings are compared by length,
+  never passed to `int()`. A malformed / signed / duplicated value is ignored.
+  `Content-Length` is only a hint: the streamed counter applies regardless (a
+  lying small value is still capped; a missing value is fine).
+
+### 12.7 Total deadline
+
+`deadline_seconds` is the whole wall-clock budget of one `get()`: first hop,
+every redirect, headers and body streaming. One `asyncio.timeout(deadline)`
+wraps the entire request / redirect / stream lifecycle; it is **not** reset per
+hop. Each hop's httpx timeout extension is set to the *remaining* budget, and
+any httpx timeout (`ConnectTimeout`, `ReadTimeout`, `WriteTimeout`,
+`PoolTimeout`) or builtin `TimeoutError` maps to the same `ImageTimeoutError`.
+
+### 12.8 Content-Type extraction (no policy)
+
+`content_type` is the `Content-Type` media type: the text before the first `;`,
+surrounding whitespace trimmed, case preserved. `None` when the header is
+absent, empty, longer than 127 characters or contains anything but printable
+ASCII. No `image/jpeg` / `image/png` / `application/octet-stream` judgement
+happens here (PENDING, acquisition layer). The header mapping is never returned.
+
+### 12.9 Error mapping and cancellation
+
+| cause | raised |
+|---|---|
+| httpx `TimeoutException` family, builtin `TimeoutError`, deadline expiry | `ImageTimeoutError` |
+| httpx `NetworkError` (`ConnectError` incl. DNS / TLS, `ReadError`, `WriteError`, `CloseError`), `ProtocolError` (`RemoteProtocolError`, `LocalProtocolError`), `ProxyError` | `ImageConnectionError` |
+| any other ordinary `Exception` (e.g. `UnsupportedProtocol`, `RuntimeError`) | `ImageTransportError` |
+| failure after `aclose()` | `ImageClientClosedError` |
+
+Library exceptions are translated into a **fresh** error value inside the worker
+coroutine and raised only from `get()` itself, outside any `except` block, so
+`__cause__` and `__context__` are `None` and no httpx exception, request,
+response, header mapping or redirect URL is reachable from the error. Messages
+never contain a URL, query, body, library message or exception `repr`.
+
+**Cancellation (frozen):** a caller's `asyncio.CancelledError` propagates
+unchanged (it is never mapped). `KeyboardInterrupt`, `SystemExit`,
+`GeneratorExit` and every other non-`Exception` `BaseException` propagate
+untouched. Only ordinary `Exception`s are mapped.
+
+### 12.10 Lifecycle
+
+`async with HttpxImageClient() as client:` or `await client.aclose()`
+(idempotent). After close, `get()` and `__aenter__` raise
+`ImageClientClosedError` and send nothing.
+
+### 12.11 Explicit non-claims
+
+* No resolved-address (connection-time) check: a public hostname whose DNS
+  answer is private / loopback is still connected to. DNS rebinding is **not**
+  addressed.
+* No retry / backoff / `Retry-After`, no HTTP/2, no caching.
+* No Content-Type or JPEG judgement, no role / candidate orchestration, no
+  result-level total-bytes cap (all PENDING).
+
+### 12.12 Offline tests
+
+All transport tests use `httpx.MockTransport` plus a recording
+`httpx.AsyncByteStream` -- no DNS, socket, listener or public network. Proof
+strength: the recording stream counts chunks actually pulled (over-cap bodies
+stop at exactly the first chunk crossing the cap; non-200 / redirect bodies
+pull zero chunks), and the recorder lists every request actually sent (unsafe
+redirect targets never appear). Mutation-checked during development: removing
+redirect re-validation, reading the whole body before the size check, or
+re-arming the deadline per hop each makes the corresponding tests fail.
 
 P4-C5: **NOT CLOSED**. Phase 4: **NOT CLOSED**.

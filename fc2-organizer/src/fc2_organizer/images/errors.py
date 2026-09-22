@@ -28,6 +28,13 @@ __all__ = [
     "ImageUrlError",
     "ImageFailureKind",
     "UrlRejectionReason",
+    "ImageTransportError",
+    "ImageTimeoutError",
+    "ImageConnectionError",
+    "ImageRedirectLimitError",
+    "ImageRedirectError",
+    "ImageResponseTooLargeError",
+    "ImageClientClosedError",
 ]
 
 
@@ -100,9 +107,8 @@ class ImageError(Exception):
 
 
 class ImageInputError(ImageError, TypeError):
-    """A public images entry point was given an argument of the wrong Python
-    type. Reserved for the later acquisition entry point; no substep-1 function
-    raises it."""
+    """A public images entry point was given an illegal argument (wrong exact
+    type or out-of-range value), e.g. ``HttpxImageClient.get(max_bytes=True)``."""
 
 
 class ImagePolicyError(ImageError, ValueError):
@@ -131,6 +137,86 @@ class ImageUrlError(ImageError, ValueError):
     @property
     def failure_kind(self) -> ImageFailureKind:
         """``UNSAFE_URL`` for a refused-by-policy URL, ``INVALID_URL`` otherwise."""
-        if self.reason in _UNSAFE_REASONS:
-            return ImageFailureKind.UNSAFE_URL
-        return ImageFailureKind.INVALID_URL
+        return _url_failure_kind(self.reason)
+
+
+def _url_failure_kind(reason: UrlRejectionReason) -> ImageFailureKind:
+    if reason in _UNSAFE_REASONS:
+        return ImageFailureKind.UNSAFE_URL
+    return ImageFailureKind.INVALID_URL
+
+
+# --- transport family (P4-C5 substep 2, contract section 12) ----------------------------------------
+#
+# Every transport error takes no constructor argument: its message is a fixed string, so no
+# URL, header, body, or library exception text can ever be passed in. Transport code creates
+# these outside of any ``except`` block's raise path, so ``__cause__`` / ``__context__`` stay None.
+
+
+class ImageTransportError(ImageError):
+    """A candidate request failed below the HTTP-status level (generic / unexpected failure)."""
+
+    failure_kind = ImageFailureKind.TRANSPORT_ERROR
+    _message = "image request failed"
+
+    def __init__(self) -> None:
+        super().__init__(self._message)
+
+
+class ImageTimeoutError(ImageTransportError):
+    """The per-candidate total deadline (all hops + body) expired, or the library timed out."""
+
+    failure_kind = ImageFailureKind.TIMEOUT
+    _message = "image request deadline exceeded"
+
+
+class ImageConnectionError(ImageTransportError):
+    """Connect / DNS / TLS / read / write / protocol-level connection failure."""
+
+    failure_kind = ImageFailureKind.CONNECTION_ERROR
+    _message = "image request connection failed"
+
+
+class ImageRedirectLimitError(ImageTransportError):
+    """More redirects than ``max_redirects`` were returned; the extra one was not followed."""
+
+    failure_kind = ImageFailureKind.REDIRECT_LIMIT
+    _message = "image request redirect limit exceeded"
+
+
+class ImageRedirectError(ImageTransportError):
+    """A redirect response had no usable ``Location``, or its target failed URL validation.
+
+    ``reason`` is ``None`` for a missing / unusable ``Location``; otherwise it is the
+    :class:`UrlRejectionReason` of the resolved target, and ``failure_kind`` follows the
+    same INVALID_URL / UNSAFE_URL mapping as :class:`ImageUrlError`.
+    """
+
+    __slots__ = ("reason",)
+    _message = "image request redirect rejected"
+
+    def __init__(self, reason: UrlRejectionReason | None = None) -> None:
+        if reason is not None and type(reason) is not UrlRejectionReason:
+            raise TypeError("ImageRedirectError.reason must be a UrlRejectionReason or None")
+        self.reason = reason
+        suffix = "missing_location" if reason is None else reason.value
+        Exception.__init__(self, f"{self._message}: {suffix}")
+
+    @property
+    def failure_kind(self) -> ImageFailureKind:  # type: ignore[override]
+        if self.reason is None:
+            return ImageFailureKind.TRANSPORT_ERROR
+        return _url_failure_kind(self.reason)
+
+
+class ImageResponseTooLargeError(ImageTransportError):
+    """The 200 body (declared ``Content-Length`` or actually streamed bytes) exceeded ``max_bytes``."""
+
+    failure_kind = ImageFailureKind.TOO_LARGE
+    _message = "image response exceeded max_bytes"
+
+
+class ImageClientClosedError(ImageTransportError):
+    """The image HTTP client was used after ``aclose()`` / context-manager exit."""
+
+    _message = "image HTTP client is closed"

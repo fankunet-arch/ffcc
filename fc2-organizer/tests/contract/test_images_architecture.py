@@ -1,4 +1,4 @@
-"""Contract test: ``fc2_organizer.images`` substep-1 foundation boundary (P4-C5 contract section 10).
+"""Contract test: ``fc2_organizer.images`` architecture boundary (P4-C5 contract section 10).
 
 Allowed dependencies (and nothing else) for the foundation modules
 (``__init__``, ``errors``, ``models``, ``policy``, ``urls``):
@@ -12,6 +12,13 @@ Never: ``fc2_metadata_core`` (any module), ``amane``, ``httpx`` / ``requests`` /
 randomness / environment module. Never the reverse either: ``fc2_metadata_core``, ``discovery``,
 ``planning``, ``publication`` and ``nfo`` never import ``images``; ``fc2_organizer/__init__.py``
 does not eagerly import it.
+
+Substep-2 exception (frozen): ``transport.py`` is the **only** images module that may import
+``httpx``. Its allow-list is exactly ``_TRANSPORT_ALLOWED`` below; it still never imports
+``fc2_metadata_core`` (in particular not ``SourceHttpClient`` / ``HttpResponse``), ``amane``, any
+filesystem module, or any other ``fc2_organizer`` package, and it makes no filesystem call.
+``fc2_organizer/images/__init__.py`` does not import ``transport``, so ``import fc2_organizer.images``
+never loads ``httpx``.
 """
 
 from __future__ import annotations
@@ -27,6 +34,15 @@ ORGANIZER_SRC_ROOT = SRC_ROOT / "fc2_organizer"
 CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 
 _FOUNDATION_MODULES = {"__init__.py", "errors.py", "models.py", "policy.py", "urls.py"}
+_TRANSPORT_MODULE = "transport.py"
+_TRANSPORT_ALLOWED = {
+    "__future__", "asyncio", "dataclasses", "math", "re", "types", "typing", "urllib.parse", "httpx",
+}
+_TRANSPORT_FORBIDDEN_CALL_NAMES = {
+    "open", "stat", "lstat", "exists", "is_file", "is_dir", "resolve", "realpath", "mkdir", "makedirs",
+    "rename", "remove", "unlink", "read_bytes", "read_text", "write_bytes", "write_text", "getcwd", "chdir",
+    "getenv", "print", "AsyncHTTPTransport", "HTTPTransport", "Client", "sleep", "retry",
+}
 _ALLOWED_STDLIB = {"__future__", "dataclasses", "enum", "hashlib", "math", "re", "ipaddress", "urllib.parse"}
 _FORBIDDEN_PREFIXES = (
     "fc2_metadata_core", "amane", "httpx", "requests", "aiohttp", "socket", "ssl", "http", "urllib.request",
@@ -59,14 +75,18 @@ def _imported_modules(tree: ast.AST) -> set[str]:
     return modules
 
 
-def test_images_package_has_exactly_the_substep_1_foundation_modules():
-    """No transport.py / jpeg.py / acquisition.py was started in substep 1."""
+def _foundation_files() -> list[Path]:
+    return [p for p in _source_files(IMAGES_SRC_ROOT) if p.name in _FOUNDATION_MODULES]
+
+
+def test_images_package_has_exactly_the_foundation_plus_transport_modules():
+    """Substep 2 added only transport.py; no jpeg.py / acquisition.py was started."""
     assert IMAGES_SRC_ROOT.is_dir()
-    assert {p.name for p in _source_files(IMAGES_SRC_ROOT)} == _FOUNDATION_MODULES
+    assert {p.name for p in _source_files(IMAGES_SRC_ROOT)} == _FOUNDATION_MODULES | {_TRANSPORT_MODULE}
 
 
 def test_images_foundation_imports_only_allowed_stdlib_and_itself():
-    for path in _source_files(IMAGES_SRC_ROOT):
+    for path in _foundation_files():
         for module in _imported_modules(_tree(path)):
             if module.startswith("fc2_organizer.images"):
                 continue
@@ -75,7 +95,7 @@ def test_images_foundation_imports_only_allowed_stdlib_and_itself():
 
 
 def test_images_foundation_has_no_network_filesystem_or_amane_text():
-    for path in _source_files(IMAGES_SRC_ROOT):
+    for path in _foundation_files():
         text = path.read_text(encoding="utf-8")
         for needle in ("import amane", "from amane", "import httpx", "from httpx", "urllib.request",
                        "import socket", "getaddrinfo", "os.environ"):
@@ -83,12 +103,68 @@ def test_images_foundation_has_no_network_filesystem_or_amane_text():
 
 
 def test_images_foundation_makes_no_io_network_or_clock_call():
-    for path in _source_files(IMAGES_SRC_ROOT):
+    for path in _foundation_files():
         for node in ast.walk(_tree(path)):
             if isinstance(node, ast.Call):
                 func = node.func
                 name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
                 assert name not in _FORBIDDEN_CALL_NAMES, f"{path.name}:{node.lineno}: call to {name!r}"
+
+
+def test_only_transport_imports_httpx():
+    for path in _source_files(IMAGES_SRC_ROOT):
+        uses_httpx = any(m == "httpx" or m.startswith("httpx.") for m in _imported_modules(_tree(path)))
+        assert uses_httpx is (path.name == _TRANSPORT_MODULE), path.name
+
+
+def test_transport_imports_only_its_frozen_allow_list():
+    for module in _imported_modules(_tree(IMAGES_SRC_ROOT / _TRANSPORT_MODULE)):
+        if module in {"fc2_organizer.images.errors", "fc2_organizer.images.urls"}:
+            continue
+        assert module in _TRANSPORT_ALLOWED, f"transport.py: import of {module!r} is outside its allow-list"
+
+
+def test_transport_never_reuses_core_text_http_client_or_touches_filesystem():
+    path = IMAGES_SRC_ROOT / _TRANSPORT_MODULE
+    for module in _imported_modules(_tree(path)):
+        assert not module.startswith(("fc2_metadata_core", "amane", "os", "pathlib", "io", "shutil")), module
+    for node in ast.walk(_tree(path)):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            assert name not in _TRANSPORT_FORBIDDEN_CALL_NAMES, f"transport.py:{node.lineno}: call to {name!r}"
+    tree = _tree(path)
+    for node in ast.walk(tree):
+        # bytes end to end: no text decoding, no whole-body read before the size check
+        if isinstance(node, ast.Attribute):
+            assert node.attr not in {"aread", "read", "text", "json", "aiter_text", "iter_text", "decode",
+                                     "encode", "environ"}, f"transport.py:{node.lineno}: .{node.attr}"
+            if node.attr == "content":
+                assert isinstance(node.value, ast.Name) and node.value.id == "self", (
+                    f"transport.py:{node.lineno}: .content on a non-self object (whole-body read)"
+                )
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "AsyncClient":
+            keywords = {k.arg: k.value for k in node.keywords}
+            for flag in ("follow_redirects", "trust_env"):
+                assert isinstance(keywords.get(flag), ast.Constant) and keywords[flag].value is False, flag
+            assert not ({"auth", "cookies", "headers", "proxy", "proxies", "mounts"} & set(keywords))
+
+
+def test_transport_creates_exactly_one_async_client_in_the_constructor_and_none_at_import():
+    tree = _tree(IMAGES_SRC_ROOT / _TRANSPORT_MODULE)
+    sites = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Call) and getattr(inner.func, "attr", None) == "AsyncClient":
+                    sites.append(node.name)
+    assert sites == ["__init__"]
+    module_level_calls = [
+        n for n in tree.body if isinstance(n, ast.Assign | ast.AnnAssign) and any(
+            isinstance(c, ast.Call) and getattr(c.func, "attr", None) == "AsyncClient" for c in ast.walk(n)
+        )
+    ]
+    assert module_level_calls == []
 
 
 def test_errors_module_is_stdlib_only():
@@ -167,7 +243,7 @@ def test_bare_import_of_fc2_organizer_does_not_load_images():
         _purge()
 
 
-def test_images_public_api_is_exactly_the_substep_1_foundation():
+def test_images_public_api_is_the_foundation_plus_pure_transport_errors():
     _purge()
     try:
         images = importlib.import_module("fc2_organizer.images")
@@ -175,9 +251,12 @@ def test_images_public_api_is_exactly_the_substep_1_foundation():
             "AcquiredImage", "ImageAcquisitionPolicy", "ImageAcquisitionResult", "ImageCandidateFailure",
             "ImageError", "ImageFailureKind", "ImageInputError", "ImageModelError", "ImagePolicyError",
             "ImageRole", "ImageUrlError", "MAX_IMAGE_URL_LENGTH", "UrlRejectionReason", "validate_image_url",
+            "ImageTransportError", "ImageTimeoutError", "ImageConnectionError", "ImageRedirectLimitError",
+            "ImageRedirectError", "ImageResponseTooLargeError", "ImageClientClosedError",
         }
-        for deferred in ("acquire_images", "ImageHttpClient", "HttpxImageClient", "download", "parse_jpeg",
-                         "write", "save"):
+        assert "fc2_organizer.images.transport" not in sys.modules
+        assert not any(name == "httpx" or name.startswith("httpx.") for name in images.__all__)
+        for deferred in ("acquire_images", "HttpxImageClient", "download", "parse_jpeg", "write", "save"):
             assert not hasattr(images, deferred)
     finally:
         _purge()
