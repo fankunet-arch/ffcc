@@ -993,3 +993,144 @@ NOT CLOSED
 ```text
 NOT CLOSED
 ```
+
+---
+
+# Final Closure -- P4-C2
+
+The sections above (original P4-C2, R1, R2) are left unmodified for
+history. This section is a docs-only governance record of the final
+independent closure decision; it introduces no code or test change and
+freezes no new technical claim beyond what R1/R2 already established.
+
+```text
+Phase:                       4
+Package:                     P4-C2 Immutable Organize Plan
+Status:                      CLOSED
+Final Level:                 Level 1 PASS
+Final Reviewed Code Head:    f56bfeef9fac2bd6a2e11e6e9065d3aea1b05ee7
+Previous Docs Head:          fa2655408f6cff8e2376d90b953cb477b16c084d
+```
+
+## Final findings disposition
+
+```text
+P4-C2-GOV-01   CLOSED
+P4-C2-GOV-02   CLOSED
+P4-C2-GOV-03   CLOSED
+P4-C2-R1-01    CLOSED
+
+P4-C2-R1-02    CARRIED / LOW / non-blocking
+```
+
+**All blocking P4-C2 findings are closed. Remaining findings are
+explicitly carried as non-blocking, or stand as entry-gates for a later
+package** -- they were not fixed, not downgraded, and not reopened by this
+closure; see R1.10/R1.11/R2.10 above and "Carried findings" and "Future
+entry gates" below for what each concerns and why none was addressed
+in-round.
+
+## Independent closure evidence
+
+Two independent Level 1 review outputs were obtained for this R2 round.
+
+**Reviewer A -- PASS.** Ran the suite directly and reported real numbers:
+
+```text
+Targeted: 223 passed / 10 skipped
+Full suite: 2703 passed / 14 skipped
+```
+
+and independently, substantively verified: normal-root dot/dot-dot
+containment (the exact P4-C2-R1-01 defect class), drive-root containment,
+UNC-root containment, the Windows lexical `normpath` anchor-clamping
+semantics the fix depends on, hand-built-`OrganizePlan` escape rejection at
+the model layer, and that both the network guard (GOV-01) and the
+fully-qualified root boundary (GOV-03) remain closed and unregressed.
+
+**Reviewer B -- substantive result PASS, procedural verdict BLOCKED.**
+This review's own read of the code and diff reached the same substantive
+conclusion as Reviewer A: P4-C2-R1-01 closed, GOV-01/02/03 remain closed,
+no new blocking code finding. However, that reviewer's execution
+environment had no local repository checkout available to it, so it could
+not run the targeted pytest suite, could not run the full pytest suite,
+and could not run a literal local `git diff --check` -- and its own report
+accordingly surfaced a procedural `BLOCKED` verdict for those specific,
+environment-caused gaps.
+
+**This `BLOCKED` verdict was caused by the reviewer's execution
+environment, not by a code or contract finding.** No blocking or
+closure-required defect was identified by Reviewer B; the substantive
+code-level conclusion from that review is the same PASS as Reviewer A's.
+
+Closure is therefore based on **one execution-capable independent Level 1
+PASS** (Reviewer A, with real targeted/full-suite numbers and direct
+verification of every R1-01-relevant semantic) **plus one additional
+independent substantive confirmation with no code blocker** (Reviewer B),
+consistent with this project's phase-gate governance for a round whose
+change is narrowly scoped (one function's containment-normalization logic
+plus its regression tests) and whose only prior-round carried procedural
+issue (a reviewer-instruction defect, see P4-C1's own R1.1 precedent for
+this exact class of non-implementation blocker) was again environmental,
+not substantive.
+
+## Carried findings
+
+```text
+P4-C2-R1-02 -- LOW / CARRIED / non-blocking
+  Bare "\\server" (no explicit share) may be accepted by
+  is_fully_qualified_absolute_root. Not touched by R1 or R2 (GOV-03's
+  implementation was not modified after R1). Carried forward unchanged.
+
+metadata.number != canonical_number identity gap -- CARRIED
+operation-graph model-level hardening -- CARRIED
+overwrite executor semantics -- CARRIED / frozen NEVER
+extended Windows reserved-name edge cases -- CARRIED
+```
+
+Plus all pre-existing project carried debts, unchanged:
+`P4-C1-R-02`, `P4-C1-R-03`, `P4-C1-R-04`, `P4-C1-R-05`, `C2-L2`, `P2-R-05`,
+`P2-R-06`, `P2-R-07`, `P2-R-10`, `C3-N1`, `C3-N2`, `C3-N3`, `C3-N4`,
+`C4-N1`, `C4-R1-N1`, `C4-R1-N2`, `C4-R1-N3`, `F3`, `F5`, `C5-R1-L1`.
+
+## Future entry gates (must be resolved before, not by, a later package)
+
+```text
+metadata.number != canonical_number identity gap
+  Must be closed before the first package that actually binds OrganizePlan
+  with NormalizedMetadata for NFO/artifact publication. Not a P4-C2
+  defect: contract section 9 freezes metadata as validation-only for this
+  package, and no cross-check was ever promised here.
+
+OrganizePlan operation-graph model-level hardening
+  Must be resolved before an executor accepts arbitrary or reconstructed
+  OrganizePlan instances (as opposed to ones produced by
+  build_organize_plan itself). Deferred as executor-entry hardening,
+  out of scope for a pure planning package with no executor.
+
+overwrite = NEVER
+  Remains a frozen global execution semantic (contract section 12). It is
+  not a caller-configurable field on OrganizePlan or OutputPolicy today,
+  and P4-C2 performs no filesystem access to enforce it against. The
+  future executor must enforce it fail-closed against the real
+  filesystem; that enforcement does not exist yet anywhere in this
+  codebase and is not claimed to.
+```
+
+## Scope of this closure
+
+This closes **P4-C2** (immutable organize plan) only. It does not close
+Phase 4 as a whole, and does not authorize starting P4-C3 or any other
+later Phase 4 package -- each requires its own frozen contract and its own
+review cycle, per the project's phase-gate governance (the same boundary
+P4-C1's own final closure recorded).
+
+```text
+Phase 4: NOT CLOSED
+```
+
+## Final status
+
+```text
+P4-C2: CLOSED
+```
