@@ -78,7 +78,7 @@ plan: OrganizePlan = build_organize_plan(
     media_item,       # fc2_organizer.discovery.DiscoveredMediaItem
     canonical_number,  # exact str, already FC2-<digits>
     metadata,          # fc2_metadata_core.models.NormalizedMetadata
-    library_root,      # str | os.PathLike, absolute
+    library_root,      # str | os.PathLike, fully-qualified absolute (section 11a)
     policy=None,       # OutputPolicy | None
 )
 ```
@@ -180,7 +180,7 @@ source_size: int            (from media_item, unmodified)
 
 canonical_number: str
 
-library_root: str            (absolute)
+library_root: str            (fully-qualified absolute, section 11a)
 
 target_directory: PlannedPath
 target_media_path: PlannedPath
@@ -253,6 +253,50 @@ defense-in-depth invariant at the model layer, independent of whether the
 planner that built the plan is correct, mirroring P4-C1-R-01's dual-layer
 (scanner + model) pattern for `DiscoveredMediaItem.source_path`.
 
+**Segment comparison, not `str.split(os.sep)` (R1, P4-C2-GOV-02).** The
+original implementation split each normalized path on `os.sep`. A root that
+is itself a bare drive (`C:\`) or a bare UNC share (`\\server\share\`)
+normalizes to a string *ending* in the separator, so `str.split(os.sep)`
+produces a spurious trailing empty segment that inflates the root's part
+count -- a real child (`C:\FC2-1234567`) then wrongly compared as "not
+contained" (`len(candidate_parts) <= len(root_parts)` tripped even though
+the candidate genuinely nests under the root). `is_contained_within` now
+splits with `pathlib.Path(...).parts` instead: a drive-and-root or a
+UNC-share-and-root collapses into a single anchor part (`('C:\\',)` /
+`('\\\\server\\share\\',)`), which has no such artifact, still performs
+zero filesystem access (`Path` construction and `.parts` are purely
+lexical), and continues to reject a same-string-prefix sibling
+(`C:\library2` is not "under" `C:\library`) without ever using
+`str.startswith`.
+
+## 11a. Fully-qualified library root boundary (frozen, P4-C2-GOV-03)
+
+`library_root` must be an **unambiguous, fully-qualified absolute path**,
+under the *current runtime OS*'s own semantics --
+`fc2_organizer.planning.paths.is_fully_qualified_absolute_root` is the
+single, centralized boundary; `planner.py` and `models.py` both call into
+it rather than each guessing with a bare `os.path.isabs()`.
+
+* **Windows** (`os.name == "nt"`): accepted only if `os.path.splitdrive`
+  finds a real drive letter with a root (`C:\lib`, `C:/lib`) or a UNC share
+  (`\\server\share`, `\\server\share\lib`, with or without a trailing
+  separator). **Rejected:** a plain relative name (`lib`), a dot-relative
+  form (`.\lib`, `..\lib`), a drive-relative form (`C:lib`), and --
+  the specific finding this closes -- a **rooted-but-driveless** form
+  (`\lib`, `/lib`). `os.path.isabs()`'s treatment of the rooted-but-driveless
+  form has differed across Python versions; it is ambiguous ("the root of
+  whichever drive is current"), and this package never guesses it.
+* **POSIX** (anything else): plain `os.path.isabs(path)` -- POSIX has no
+  drive/UNC ambiguity, so `/lib` is already unambiguous and remains legal.
+  The branch is chosen by the *current runtime OS*, never by guessing from
+  the string's own shape, so a genuine POSIX absolute path is never
+  rejected by a Windows-only rule (and vice versa).
+
+Violation raises `InvalidLibraryRootError` from `build_organize_plan`, and
+(redundantly, at the model layer) `OrganizePlanContractError` from
+`OrganizePlan.__post_init__` for a hand-built plan -- the same dual-layer
+pattern as section 11's containment re-check.
+
 ## 12. Collision and overwrite policy (frozen, not a knob)
 
 **Collision = fail closed.** If any two of a plan's own generated target
@@ -320,7 +364,8 @@ OrganizePlanError(Exception)
 |      str/os.PathLike; policy neither None nor an OutputPolicy
 +-- InvalidCanonicalNumberError(OrganizePlanError, ValueError)
 +-- InvalidLibraryRootError(OrganizePlanError, ValueError)
-|      empty / whitespace-only / not absolute
+|      empty / whitespace-only / not a fully-qualified absolute path
+|      (section 11a -- includes a Windows rooted-but-driveless form)
 +-- InvalidMetadataForPlanningError(OrganizePlanError, ValueError)
 +-- InvalidOutputPolicyError(OrganizePlanError, ValueError)
 +-- UnsafeTargetComponentError(OrganizePlanError, ValueError)
@@ -341,19 +386,44 @@ section 3).
 |---|---|---|
 | 1-12 | standard/extension-preserving/normalized/deterministic-field plans, identical-input replay, distinct-identity-same-number | `test_planning_planner.py` |
 | 13-15 | canonical number validation (valid/dirty/subclass), invalid metadata rejected | `test_planning_planner.py` |
-| 16 | empty/whitespace/relative/non-str library root rejected, `os.PathLike` accepted | `test_planning_planner.py` |
-| 17-18 | target containment, traversal/absolute-override/drive-replacement cannot escape root | `test_planning_planner.py`, `test_planning_paths.py` |
+| 16 | empty/whitespace/relative/non-str library root rejected, `os.PathLike` accepted, **fully-qualified-root boundary (section 11a): Windows drive/UNC accepted, rooted-but-driveless (`\lib`/`/lib`) rejected, POSIX `/lib` accepted** | `test_planning_planner.py`, `test_planning_paths.py`, `test_planning_models.py` |
+| 17-18 | target containment (including bare drive-root and UNC-share-root children, section 11 R1 fix), traversal/absolute-override/drive-replacement cannot escape root | `test_planning_planner.py`, `test_planning_paths.py` |
 | 19-21 | Windows illegal chars, reserved device names, trailing dot/space | `test_planning_paths.py`, `test_planning_planner.py` |
 | 22-23 | case-insensitive collision reasoning, internal collision fail-closed | `test_planning_paths.py`, `test_planning_planner.py` |
 | 24-25 | overwrite policy frozen (not a knob), no automatic suffixing | `test_planning_planner.py` |
 | 26-27 | title / Unicode metadata never alter default target path | `test_planning_planner.py` |
 | 28 | plan models deeply immutable | `test_planning_models.py` |
 | 29 | operations ordered deterministically | `test_planning_planner.py`, `test_planning_synthetic_gate.py` |
-| 30-33 | no filesystem mutation, no network, no Amane, no reverse dependency | `test_planning_no_mutation.py`, `test_planning_architecture.py`, `test_planning_synthetic_gate.py` |
-| 34 | P4-C1 discovery remains untouched (behaviorally) | full-suite regression (2659 passed, baseline 2480) |
-| model/policy/paths contracts | `PlannedPath`/`PlannedOperation`/`OrganizePlan`/`OutputPolicy` invariants, sanitization helpers | `test_planning_models.py`, `test_planning_policy.py`, `test_planning_paths.py` |
+| 30-33 | no filesystem mutation, no network (guard scans the real, non-empty production source directory and is proven to FAIL on a planted forbidden import, not just PASS on today's clean code -- section "Network Guard" below, P4-C2-GOV-01), no Amane, no reverse dependency | `test_planning_no_mutation.py`, `test_planning_architecture.py`, `test_planning_synthetic_gate.py` |
+| 34 | P4-C1 discovery remains untouched (behaviorally) | full-suite regression (2692 passed / 8 skipped after R1, baseline 2480 passed / 4 skipped at P4-C1 close) |
+| model/policy/paths contracts | `PlannedPath`/`PlannedOperation`/`OrganizePlan`/`OutputPolicy` invariants, sanitization/containment/qualification helpers | `test_planning_models.py`, `test_planning_policy.py`, `test_planning_paths.py` |
 | architecture | dependency direction, no `amane`, no forbidden `fc2_metadata_core`/`discovery` submodule | `test_planning_architecture.py` |
-| synthetic planning gate | 400 synthetic items, multiple extensions/numbers/Unicode titles, determinism, containment, zero internal collision, zero mutation | `test_planning_synthetic_gate.py` |
+| synthetic planning gate | 400 synthetic items, multiple extensions/numbers/Unicode titles, determinism, containment, zero internal collision, zero mutation, non-vacuous + planted-import-detecting network guard | `test_planning_synthetic_gate.py` |
+
+### Network Guard (R1, P4-C2-GOV-01)
+
+The synthetic gate's no-network-import scan computes its production
+source directory as `Path(__file__).resolve().parents[N] / "src" /
+"fc2_organizer" / "planning"`. The original `N=2` was copied from
+`tests/contract/test_planning_architecture.py` (one directory shallower --
+`tests/contract` -- where `parents[2]` is correct), but this file lives at
+`tests/unit/planning/`, one level deeper, so `parents[2]` resolved to the
+nonexistent `tests/src/fc2_organizer/planning`: `rglob("*.py")` silently
+returned zero files, and a `for path in ...: assert ...` loop over zero
+files vacuously passes without checking anything. Fixed to `parents[3]`,
+and now guarded three ways: (1) a dedicated test asserts the resolved
+directory exists *and* the file count is non-zero *and* contains every
+known production module by name; (2) the scan function itself
+(`_scan_forbidden_imports`) is a small, reusable, pure AST walker exercised
+directly against a planted `import socket` / `from urllib import request`
+in an isolated `tmp_path` file (never a production file) and asserted to
+detect it -- proving the guard can actually FAIL, not just PASS on
+whatever code happens to be clean today; (3) a fourth test proves the same
+scanner does *not* false-positive on ordinary allowed imports (`os`,
+`pathlib`, `dataclasses`, `enum`) it itself uses. No production code was
+changed to make this pass -- both independent reviewers already confirmed
+`fc2_organizer.planning` has no real network dependency; this was purely a
+test-evidence defect.
 
 ## 18. Backlog carried forward (not addressed by P4-C2)
 

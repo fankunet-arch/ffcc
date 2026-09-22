@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from fc2_organizer.planning.errors import OrganizePlanContractError, TargetEscapesLibraryRootError
-from fc2_organizer.planning.paths import is_contained_within
+from fc2_organizer.planning.paths import is_contained_within, is_fully_qualified_absolute_root
 
 __all__ = [
     "PlannedOperationKind",
@@ -169,9 +169,10 @@ class OrganizePlan:
         _require_nonempty_str(self.canonical_number, "OrganizePlan.canonical_number")
 
         _require_nonempty_str(self.library_root, "OrganizePlan.library_root")
-        if not os.path.isabs(self.library_root):
+        if not is_fully_qualified_absolute_root(self.library_root):
             raise OrganizePlanContractError(
-                f"OrganizePlan.library_root must be an absolute path, got {self.library_root!r}"
+                "OrganizePlan.library_root must be a fully-qualified absolute "
+                f"path (P4-C2-GOV-03), got {self.library_root!r}"
             )
 
         for name in _PATH_FIELDS:

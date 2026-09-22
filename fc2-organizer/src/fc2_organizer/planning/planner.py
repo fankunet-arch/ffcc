@@ -43,7 +43,11 @@ from fc2_organizer.planning.models import (
     PlannedOperationKind,
     PlannedPath,
 )
-from fc2_organizer.planning.paths import basenames_collide, validate_path_component
+from fc2_organizer.planning.paths import (
+    basenames_collide,
+    is_fully_qualified_absolute_root,
+    validate_path_component,
+)
 from fc2_organizer.planning.policy import OutputPolicy
 
 __all__ = ["build_organize_plan"]
@@ -72,9 +76,14 @@ def build_organize_plan(
     :param metadata: a :class:`~fc2_metadata_core.models.NormalizedMetadata`
         that satisfies ``meets_minimum_success()``. Partial/failed metadata
         is rejected fail-closed (contract section 19).
-    :param library_root: an absolute directory path (``str`` or
-        ``os.PathLike``) that is the target library root. Never confused
-        with ``media_item.source_path``'s own root (contract section 11).
+    :param library_root: a *fully-qualified* absolute directory path (``str``
+        or ``os.PathLike``) that is the target library root -- on Windows, a
+        drive-qualified path (``C:\\lib``) or a UNC share (``\\\\server\\share``);
+        on POSIX, an ordinary absolute path (``/lib``). A Windows
+        rooted-but-driveless form (``\\lib``, ``/lib``) is rejected, not
+        guessed onto the current drive (contract section 11, P4-C2-GOV-03).
+        Never confused with ``media_item.source_path``'s own root (contract
+        section 11).
     :param policy: an :class:`~fc2_organizer.planning.policy.OutputPolicy`,
         or ``None`` for the frozen v1.0 default layout.
     :raises OrganizePlanInputError: an argument has the wrong fundamental
@@ -141,9 +150,14 @@ def build_organize_plan(
         raise InvalidLibraryRootError(
             f"library_root must be a non-empty, non-whitespace path, got {library_root_str!r}"
         )
-    if not os.path.isabs(library_root_str):
+    if not is_fully_qualified_absolute_root(library_root_str):
         raise InvalidLibraryRootError(
-            f"library_root must be an absolute path, got {library_root_str!r}"
+            "library_root must be a fully-qualified absolute path (a "
+            "Windows drive-qualified path or UNC share, or a POSIX "
+            f"absolute path); got {library_root_str!r} (P4-C2-GOV-03: a "
+            "Windows rooted-but-driveless form such as '\\lib' or '/lib' "
+            "is not accepted -- this package never guesses the current "
+            "drive)"
         )
 
     directory_name = validate_path_component(canonical_number, label="target directory name")

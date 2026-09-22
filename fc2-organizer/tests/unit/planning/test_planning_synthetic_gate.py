@@ -15,7 +15,10 @@ reproducible -- same spirit as P4-C1's
 
 from __future__ import annotations
 
+import ast as _ast
 import os
+import pathlib as _pathlib
+from collections.abc import Sequence
 
 from fc2_metadata_core.models import NormalizedMetadata
 from fc2_organizer.discovery import DiscoveredMediaItem
@@ -113,17 +116,115 @@ def test_synthetic_gate_zero_filesystem_mutation(tmp_path):
     assert not os.path.exists(library_root)
 
 
-def test_synthetic_gate_no_network_import_reachable():
-    import ast
-    import pathlib as _pathlib
+def _planning_src_root() -> _pathlib.Path:
+    """The real ``fc2_organizer/planning`` production source directory.
 
-    planning_src = _pathlib.Path(__file__).resolve().parents[2] / "src" / "fc2_organizer" / "planning"
-    forbidden = {"socket", "httpx", "urllib", "requests", "asyncio"}
-    for path in sorted(planning_src.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
+    ``P4-C2-GOV-01``: this file lives at
+    ``fc2-organizer/tests/unit/planning/test_planning_synthetic_gate.py``.
+    ``.parents``, counted from this file (index 0), are: ``[0] tests/unit/planning``,
+    ``[1] tests/unit``, ``[2] tests``, ``[3] fc2-organizer``. The original
+    version of this guard used ``parents[2]`` (copied from
+    ``tests/contract/test_planning_architecture.py``, where that file is one
+    directory shallower -- ``tests/contract`` -- so ``parents[2]`` is correct
+    *there*, but wrong here) and so resolved to a nonexistent
+    ``tests/src/fc2_organizer/planning``, silently glob-matching zero files.
+    The fix is ``parents[3]``, verified non-vacuous by
+    ``test_synthetic_gate_planning_src_root_resolves_and_has_production_files``
+    below rather than trusted by inspection alone.
+    """
+    return _pathlib.Path(__file__).resolve().parents[3] / "src" / "fc2_organizer" / "planning"
+
+
+_FORBIDDEN_NETWORK_IMPORTS = {"socket", "httpx", "urllib", "requests", "asyncio"}
+
+
+def _scan_forbidden_imports(paths: Sequence[_pathlib.Path], forbidden: set[str]) -> list[str]:
+    """Pure AST scan: return one description string per forbidden top-level
+    import found in any of ``paths``. Used both for the real production-code
+    guard and for the planted-import self-tests below (``_scan_forbidden_imports``
+    itself is exercised against known-bad and known-good input, not just
+    trusted to work correctly on the one input that happens to currently be
+    clean)."""
+    violations: list[str] = []
+    for path in paths:
+        tree = _ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Import):
                 for alias in node.names:
-                    assert alias.name.split(".")[0] not in forbidden, f"{path}: forbidden import {alias.name}"
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                assert node.module.split(".")[0] not in forbidden, f"{path}: forbidden import {node.module}"
+                    top = alias.name.split(".")[0]
+                    if top in forbidden:
+                        violations.append(f"{path}: forbidden import {alias.name!r}")
+            elif isinstance(node, _ast.ImportFrom) and node.module:
+                top = node.module.split(".")[0]
+                if top in forbidden:
+                    violations.append(f"{path}: forbidden import {node.module!r}")
+    return violations
+
+
+def test_synthetic_gate_planning_src_root_resolves_and_has_production_files():
+    """Guards against the exact P4-C2-GOV-01 regression: a wrong ``parents[N]``
+    silently resolving to a nonexistent directory, so ``rglob`` yields zero
+    files and every downstream assertion in a ``for path in ...`` loop never
+    runs -- a vacuous PASS that proves nothing."""
+    root = _planning_src_root()
+    assert root.is_dir(), f"expected the real production source directory to exist at {root}"
+    files = sorted(root.rglob("*.py"))
+    assert len(files) > 0, (
+        "planning source file set must not be empty -- a guard that scans "
+        "zero files vacuously passes without checking anything (P4-C2-GOV-01)"
+    )
+    names = {f.name for f in files}
+    assert {"__init__.py", "errors.py", "models.py", "paths.py", "planner.py", "policy.py"} <= names, (
+        f"expected all known production modules to be present, got {names}"
+    )
+
+
+def test_synthetic_gate_no_network_import_reachable():
+    root = _planning_src_root()
+    files = sorted(root.rglob("*.py"))
+    assert files, "no production files scanned -- this guard would be vacuous (P4-C2-GOV-01)"
+    violations = _scan_forbidden_imports(files, _FORBIDDEN_NETWORK_IMPORTS)
+    assert violations == [], "\n".join(violations)
+
+
+def test_network_guard_fails_on_planted_import_statement(tmp_path):
+    """Proves the guard actually detects a violation, not just that it
+    passes on today's clean production code (P4-C2-GOV-01: 'must prove FAIL
+    on planted forbidden import, not just PASS on correct code'). Writes to
+    an isolated ``tmp_path`` file only -- never touches any production file
+    -- and leaves nothing behind (pytest owns and cleans up ``tmp_path``)."""
+    planted = tmp_path / "hostile_import_statement.py"
+    planted.write_text("import socket\n", encoding="utf-8")
+
+    violations = _scan_forbidden_imports([planted], _FORBIDDEN_NETWORK_IMPORTS)
+
+    assert violations, "guard failed to detect a planted 'import socket'"
+    assert "socket" in violations[0]
+
+
+def test_network_guard_fails_on_planted_import_from_form(tmp_path):
+    """Same proof for the ``from X import Y`` form specifically -- a scan
+    that only inspects ``ast.Import`` (never ``ast.ImportFrom``) would miss
+    ``from urllib import request`` entirely."""
+    planted = tmp_path / "hostile_import_from.py"
+    planted.write_text("from urllib import request\n", encoding="utf-8")
+
+    violations = _scan_forbidden_imports([planted], _FORBIDDEN_NETWORK_IMPORTS)
+
+    assert violations, "guard failed to detect a planted 'from urllib import request'"
+    assert "urllib" in violations[0]
+
+
+def test_network_guard_does_not_false_positive_on_ordinary_stdlib_imports(tmp_path):
+    """The other failure mode is a guard so broad it flags legitimate code.
+    Proves ordinary, allowed imports (including ones this very package
+    uses -- ``os``, ``dataclasses``, ``pathlib``) never trip it."""
+    planted = tmp_path / "benign_imports.py"
+    planted.write_text(
+        "import os\nimport pathlib\nfrom dataclasses import dataclass\nfrom enum import Enum\n",
+        encoding="utf-8",
+    )
+
+    violations = _scan_forbidden_imports([planted], _FORBIDDEN_NETWORK_IMPORTS)
+
+    assert violations == []

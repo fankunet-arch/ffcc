@@ -6,6 +6,7 @@ immutability (contract section 20, tests #28).
 from __future__ import annotations
 
 import dataclasses
+import os
 
 import pytest
 
@@ -139,6 +140,14 @@ class TestOrganizePlanContract:
     def test_relative_library_root_rejected(self):
         with pytest.raises(OrganizePlanContractError):
             _valid_plan(library_root="library")
+
+    @pytest.mark.skipif(os.name != "nt", reason="Windows rooted-but-driveless path")
+    def test_windows_rooted_but_driveless_library_root_rejected_at_model_layer(self):
+        # P4-C2-GOV-03, model-layer redundant check: a hand-built
+        # OrganizePlan must reject this independently of whether the
+        # planner that (hypothetically) built it validated it correctly.
+        with pytest.raises(OrganizePlanContractError):
+            _valid_plan(library_root=r"\library")
 
     def test_negative_source_index_rejected(self):
         with pytest.raises(OrganizePlanContractError):

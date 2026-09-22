@@ -5,6 +5,7 @@ the P4-C2 test matrix (contract section 29, items 1-27).
 from __future__ import annotations
 
 import dataclasses
+import os
 
 import pytest
 
@@ -212,6 +213,70 @@ def test_pathlike_library_root_accepted():
 
     plan = build_organize_plan(_item(), "FC2-1234567", _metadata(), pathlib.Path(LIBRARY_ROOT))
     assert plan.library_root == LIBRARY_ROOT
+
+
+# --- P4-C2-GOV-03: library_root must be fully-qualified -----------------
+#
+# Windows-specific forms are only meaningful on a Windows host (a bare
+# backslash is an ordinary filename character on POSIX, not a separator);
+# gated accordingly (contract section 10).
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows rooted-but-driveless path")
+def test_windows_rooted_but_driveless_backslash_root_rejected():
+    with pytest.raises(InvalidLibraryRootError):
+        build_organize_plan(_item(), "FC2-1234567", _metadata(), r"\library")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows rooted-but-driveless path")
+def test_windows_rooted_but_driveless_forward_slash_root_rejected():
+    with pytest.raises(InvalidLibraryRootError):
+        build_organize_plan(_item(), "FC2-1234567", _metadata(), "/library")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows drive-relative path")
+def test_windows_drive_relative_root_rejected():
+    with pytest.raises(InvalidLibraryRootError):
+        build_organize_plan(_item(), "FC2-1234567", _metadata(), "C:library")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows dot-relative path")
+def test_windows_dot_relative_root_rejected():
+    with pytest.raises(InvalidLibraryRootError):
+        build_organize_plan(_item(), "FC2-1234567", _metadata(), r".\library")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows dot-dot-relative path")
+def test_windows_dotdot_relative_root_rejected():
+    with pytest.raises(InvalidLibraryRootError):
+        build_organize_plan(_item(), "FC2-1234567", _metadata(), r"..\library")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows UNC share root")
+def test_windows_unc_share_root_accepted():
+    plan = build_organize_plan(_item(), "FC2-1234567", _metadata(), r"\\server\share\library")
+    assert plan.target_directory.absolute_path == r"\\server\share\library\FC2-1234567"
+    assert plan.target_media_path.absolute_path == r"\\server\share\library\FC2-1234567\FC2-1234567.mp4"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows bare drive root")
+def test_windows_bare_drive_root_accepted_as_library_root():
+    # P4-C2-GOV-02's exact scenario, exercised end-to-end through the
+    # public API: a bare drive root must not wrongly reject its own child.
+    plan = build_organize_plan(_item(), "FC2-1234567", _metadata(), "C:\\")
+    assert plan.target_directory.absolute_path == "C:\\FC2-1234567"
+    assert plan.target_media_path.absolute_path == "C:\\FC2-1234567\\FC2-1234567.mp4"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX absolute path")
+def test_posix_absolute_root_still_accepted():
+    # A POSIX-style absolute source_path here, deliberately not the
+    # module's Windows-hardcoded ``_item()`` default -- this test only runs
+    # on a POSIX host, where DiscoveredMediaItem's own absolute-path
+    # invariant requires a real POSIX absolute path.
+    posix_item = _item(source_path="/downloads/random-name.MP4", relative_path="random-name.MP4")
+    plan = build_organize_plan(posix_item, "FC2-1234567", _metadata(), "/library")
+    assert plan.target_directory.absolute_path == "/library/FC2-1234567"
 
 
 # --- 17-18: target containment / traversal ------------------------------
