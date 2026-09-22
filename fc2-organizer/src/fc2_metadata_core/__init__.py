@@ -13,9 +13,10 @@ Phase 1 defined contracts only (models, normalization, error semantics),
 with no network access and no site-specific scraper. Phase 2 adds the
 pluggable source adapter framework (``sources``) and its injectable HTTP
 transport (``http``). Phase 3 C1 adds multi-source execution and deterministic
-field-level aggregation (``aggregation``). Zero dependency on ``amane``.
+field-level aggregation (``aggregation``); C4 adds the batch scheduler (``batch``); C5 adds shared host resource
+control and the circuit breaker (``resource_control``). Zero dependency on ``amane``.
 """
 
-from fc2_metadata_core import aggregation, batch, errors, http, models, normalize, sources
+from fc2_metadata_core import aggregation, batch, errors, http, models, normalize, resource_control, sources
 
-__all__ = ["aggregation", "batch", "errors", "http", "models", "normalize", "sources"]
+__all__ = ["aggregation", "batch", "errors", "http", "models", "normalize", "resource_control", "sources"]

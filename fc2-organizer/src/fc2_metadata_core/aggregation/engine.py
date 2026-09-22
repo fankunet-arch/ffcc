@@ -10,6 +10,11 @@ The engine only *wires* the three separately testable pieces together:
 It owns no HTTP transport: the caller passes **one** shared
 :class:`SourceHttpClient`, so every source runs through the same client
 lifecycle (Phase 2 requirement) and the caller decides when to close it.
+
+Optional shared resource control (Phase 3 C5): pass ``governor=`` (a
+:class:`~fc2_metadata_core.resource_control.SourceResourceGovernor`) and every engine -- and every
+``BatchScheduler`` on top of them -- built with the **same** governor shares one per-host attempt budget and
+one per-source circuit breaker. Without it the engine behaves exactly as before.
 """
 
 from __future__ import annotations
@@ -17,12 +22,13 @@ from __future__ import annotations
 import inspect
 import time
 
-from fc2_metadata_core.aggregation.config import AggregationConfig
+from fc2_metadata_core.aggregation.config import AggregationConfig, validate_base_url
 from fc2_metadata_core.aggregation.execution import SourceTarget, execute_sources_traced
 from fc2_metadata_core.aggregation.merge import merge_source_results
 from fc2_metadata_core.aggregation.models import AggregationResult
 from fc2_metadata_core.aggregation.policy import AggregationConfigError, AggregationPolicy
 from fc2_metadata_core.http.client import SourceHttpClient
+from fc2_metadata_core.resource_control import SourceResourceGovernor, host_key_for_base_url
 from fc2_metadata_core.sources.base import require_canonical_number
 from fc2_metadata_core.sources.registry import SourceRegistry
 
@@ -58,7 +64,16 @@ class MultiSourceEngine:
     stateless and reused across lookups.
     """
 
-    def __init__(self, config: AggregationConfig, registry: SourceRegistry, client: SourceHttpClient) -> None:
+    def __init__(
+        self,
+        config: AggregationConfig,
+        registry: SourceRegistry,
+        client: SourceHttpClient,
+        *,
+        governor: SourceResourceGovernor | None = None,
+    ) -> None:
+        if governor is not None and not isinstance(governor, SourceResourceGovernor):
+            raise AggregationConfigError("governor must be a SourceResourceGovernor or None")
         if not isinstance(config, AggregationConfig):
             raise AggregationConfigError("config must be an AggregationConfig")
         if not isinstance(registry, SourceRegistry):
@@ -80,18 +95,24 @@ class MultiSourceEngine:
         targets = []
         for source in enabled:
             kwargs = {"base_url": source.base_url} if source.base_url is not None else {}
-            targets.append(
-                SourceTarget(
-                    source,
-                    registry.create(source.source_id, **kwargs),
-                    config.retry_policy_for(source.source_id),
-                )
-            )
+            adapter = registry.create(source.source_id, **kwargs)
+            host = None
+            if governor is not None:
+                # Host identity comes from the configured/validated base URL the adapter will use -- never from a
+                # response. A malformed default URL fails here, before any request.
+                try:
+                    host = host_key_for_base_url(validate_base_url(adapter.base_url))
+                except (AggregationConfigError, ValueError) as exc:
+                    raise AggregationConfigError(
+                        f"source {source.source_id!r}: cannot derive a host identity for resource control: {exc}"
+                    ) from None
+            targets.append(SourceTarget(source, adapter, config.retry_policy_for(source.source_id), host))
 
         self._config = config
         self._policy: AggregationPolicy = config.policy()
         self._targets = tuple(targets)
         self._client = client
+        self._governor = governor
 
     @property
     def config(self) -> AggregationConfig:
@@ -100,6 +121,11 @@ class MultiSourceEngine:
     @property
     def policy(self) -> AggregationPolicy:
         return self._policy
+
+    @property
+    def governor(self) -> SourceResourceGovernor | None:
+        """The shared resource domain this engine runs in (``None`` = no resource control)."""
+        return self._governor
 
     async def aggregate(self, number: str) -> AggregationResult:
         """Look ``number`` up on every enabled source and merge the answers.
@@ -112,7 +138,11 @@ class MultiSourceEngine:
         require_canonical_number(number)
         started = time.monotonic()
         traces = await execute_sources_traced(
-            number, self._targets, self._client, max_concurrency=self._config.max_concurrency
+            number,
+            self._targets,
+            self._client,
+            max_concurrency=self._config.max_concurrency,
+            governor=self._governor,
         )
         return merge_source_results(
             number,

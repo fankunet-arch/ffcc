@@ -4,6 +4,11 @@ Status: **frozen at Phase 3 C2** (candidate; independent review pending).
 Builds on `PHASE3_AGGREGATION_CONTRACT.md` (C1). Closes Phase 2 review finding **P2-R-12**
 and the C1 review findings **LOW-1 … LOW-4**.
 
+> **C5 amendment** (`PHASE3_RESOURCE_CONTROL_CONTRACT.md`): `SourceErrorKind.CIRCUIT_OPEN` is added under
+> `NETWORK_ERROR` (never retried); a source answered by an open circuit breaker has a `SourceExecutionTrace` with
+> **zero attempts** (§5); the queue wait for a shared host permit is not charged to the source deadline (§3);
+> the "no circuit breaker" statements below describe C2 and are superseded by the opt-in `governor=` of C5.
+
 **Out of scope, not implemented:** batch engine / cross-item scheduling, failed-subset retry,
 circuit breaker, `Retry-After`-aware scheduling, jitter, NFO, images, filesystem, Amane adapter.
 
@@ -20,7 +25,7 @@ Each rule names the test file that enforces it (all offline, deterministic;
 | `NOT_FOUND` | `NOT_FOUND` |
 | `BLOCKED` | `BLOCKED` |
 | `RATE_LIMITED` | `RATE_LIMITED` |
-| `NETWORK_ERROR` | `NETWORK_ERROR` (generic), `TIMEOUT`, `CONNECTION_ERROR`, `DECODE_ERROR`, `REDIRECT_ERROR`, `SOURCE_DEADLINE` |
+| `NETWORK_ERROR` | `NETWORK_ERROR` (generic), `TIMEOUT`, `CONNECTION_ERROR`, `DECODE_ERROR`, `REDIRECT_ERROR`, `SOURCE_DEADLINE`, `CIRCUIT_OPEN` *(C5)* |
 | `PARSE_ERROR` | `PARSE_ERROR` |
 | `INVALID_RESPONSE` | `INVALID_RESPONSE` (generic), `HTTP_SERVER_ERROR`, `RESPONSE_TOO_LARGE`, `ADAPTER_EXCEPTION`, `RESULT_CONTRACT_MISMATCH` |
 
@@ -39,6 +44,7 @@ Meaning of the refined kinds and who produces them:
 | `DECODE_ERROR` | body decode / decompress failure (`gzip`/`deflate` error) | `HttpDecodingError` (new; raised by `HttpxTransport` on `httpx.DecodingError`) |
 | `REDIRECT_ERROR` | redirect chain limit exceeded | `HttpRedirectLimitError` |
 | `SOURCE_DEADLINE` | the per-source wall-clock deadline expired | aggregation execution boundary |
+| `CIRCUIT_OPEN` *(C5)* | the source's circuit breaker is open; **no request was made** | aggregation execution boundary (via `resource_control`) only — an adapter returning it is `RESULT_CONTRACT_MISMATCH` |
 | `HTTP_SERVER_ERROR` | HTTP **500–599** | `classify_page_response` (adapters) |
 | `RESPONSE_TOO_LARGE` | body over the transport's size cap | `HttpResponseTooLargeError` |
 | `ADAPTER_EXCEPTION` | the adapter itself raised (incl. a self-raised `CancelledError`) | execution boundary |
@@ -149,7 +155,7 @@ problems; `SOURCE_DEADLINE` means the time budget is already spent. (`test_agg_r
     (`deadline_during == "backoff"`, the never-started attempt is absent from `attempts`).
   * *Deadline inside a retry attempt* → that attempt is recorded `completed=False`
     (`deadline_during == "attempt"`); total time ≈ the configured deadline.
-  * Queue time for a concurrency slot is **not** charged to the deadline (C1 rule kept).
+  * Queue time for a concurrency slot is **not** charged to the deadline (C1 rule kept). *(C5: nor is queue time for a shared host permit — `PHASE3_RESOURCE_CONTROL_CONTRACT.md` §5.1.)*
 - The final result of a deadline expiry is `NETWORK_ERROR`/`SOURCE_DEADLINE` with the real elapsed time.
 
 ## 4. Cancellation and fatal exceptions (LOW-2) — `test_agg_low2_cancellation.py`
@@ -180,7 +186,7 @@ have none; each `trace.final_result == source_results[i]`.
 `SourceExecutionTrace(source_id, attempts, final_result, max_attempts, deadline_exceeded,
 deadline_during)`, properties `attempt_count` (attempts *started*) and `retried`.
 `SourceAttempt(sequence, status, error_kind, elapsed_ms, completed, backoff_before_seconds)`.
-Invariants enforced at construction: sequences `1..n` in order and `n <= max_attempts`; only the last
+Invariants enforced at construction *(C5: `attempts` may be empty **iff** `final_result.error_kind is CIRCUIT_OPEN` — no request was made — and then no deadline may be recorded)*: sequences `1..n` in order and `n <= max_attempts`; only the last
 attempt may be incomplete; no attempt after a `SUCCESS`; an unfinished last attempt ⇔
 `deadline_during == "attempt"`; `"backoff"` ⇒ the last attempt completed and fewer than
 `max_attempts` were made; an expired deadline ends in `NETWORK_ERROR`/`SOURCE_DEADLINE`, otherwise
@@ -227,4 +233,5 @@ sequence is the C1 `PARTIAL` (both tested).
 `aggregate()` calls concurrently therefore has *no* global concurrency limit — `gather(500 ×
 engine.aggregate())` would give every item its own semaphore. Phase 3 batch **must** introduce a
 cross-item global concurrency/resource budget (and, together with it, per-host limits and a circuit
-breaker). C2 implements none of this.
+breaker). C2 implements none of this. *(C4 added the per-scheduler item budget; C5 added the shared per-host limiter and
+the per-source circuit breaker as an opt-in `governor=` — `PHASE3_RESOURCE_CONTROL_CONTRACT.md`.)*

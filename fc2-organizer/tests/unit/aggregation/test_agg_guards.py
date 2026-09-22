@@ -78,13 +78,19 @@ def _identifiers(tree):
     return names
 
 
-def test_no_circuit_breaker_in_c2():
-    # Identifiers only (docstrings may say what is deliberately NOT implemented yet).
+# C5 supersedes the C2 rule "no circuit breaker anywhere in aggregation": the breaker state machine now lives in
+# ``resource_control``. The aggregation package may only *integrate* with it, through this closed vocabulary.
+_C5_INTEGRATION_NAMES = {"circuit_open_result", "CIRCUIT_OPEN"}
+
+
+def test_the_aggregation_package_holds_no_circuit_breaker_implementation():
+    # Identifiers only (docstrings may describe the integration).
     for path in PACKAGE.glob("*.py"):
         for name in _identifiers(ast.parse(path.read_text(encoding="utf-8"))):
             lowered = name.lower()
-            for forbidden in ("circuit", "breaker"):
-                assert forbidden not in lowered, (path.name, name)
+            for forbidden in ("circuit", "breaker", "half_open", "halfopen"):
+                if forbidden in lowered:
+                    assert name in _C5_INTEGRATION_NAMES, (path.name, name)
 
 
 @pytest.mark.parametrize("module", ["retry.py", "execution.py", "merge.py", "engine.py"])

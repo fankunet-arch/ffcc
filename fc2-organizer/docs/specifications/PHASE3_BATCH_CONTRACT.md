@@ -48,7 +48,9 @@ blocked-import dynamic scan; C4 adds explicit assertions that they are).
 
 Theoretical maximum simultaneous source operations = **M × S**, further limited by the number of enabled
 sources, per-source deadlines and cancellation. C4 does **not** implement a per-host limiter: two sources
-served from one host, or many items hitting one source, are not throttled per host (Phase 3 / C5).
+served from one host, or many items hitting one source, are not throttled per host **by the scheduler**. *(C5:
+that is the shared `SourceResourceGovernor` — `PHASE3_RESOURCE_CONTROL_CONTRACT.md` — which engines opt into with
+`governor=` and which the scheduler never sees; batch code is unchanged by C5.)*
 
 `max_in_flight_items` is enforced **at the scheduler boundary by bounded admission**, not by a semaphore
 that inner code contends on: at any instant at most `M` `aggregate()` calls exist for the scheduler.

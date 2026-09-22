@@ -15,6 +15,7 @@ Default matrix (frozen in ``docs/specifications/PHASE3_RESILIENCE_CONTRACT.md``)
     NO RETRY   SUCCESS  NOT_FOUND  BLOCKED  RATE_LIMITED  PARSE_ERROR
                INVALID_RESPONSE (generic)  RESPONSE_TOO_LARGE  REDIRECT_ERROR
                ADAPTER_EXCEPTION  RESULT_CONTRACT_MISMATCH  SOURCE_DEADLINE
+               CIRCUIT_OPEN (C5: an open breaker answered; no request was made)
 
 Why the non-retryable ones are not retried: ``NOT_FOUND`` is a coverage gap, not a
 failure; ``BLOCKED`` (403 / anti-bot challenge) must never be hit again

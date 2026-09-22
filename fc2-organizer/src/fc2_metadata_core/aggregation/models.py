@@ -209,7 +209,9 @@ class SourceAttempt:
 class SourceExecutionTrace:
     """How one source's execution went: every attempt and how it ended.
 
-    ``attempts`` is in order (sequence ``1..n``, ``n <= max_attempts``). If the
+    ``attempts`` is empty only for a source an open circuit breaker short-circuited (final
+    ``NETWORK_ERROR`` / ``CIRCUIT_OPEN``, Phase 3 C5: no request was made). Otherwise it is in order
+    (sequence ``1..n``, ``n <= max_attempts``). If the
     source's total wall-clock deadline ran out, ``deadline_exceeded`` is true and
     ``deadline_during`` says where: ``"attempt"`` (the last attempt was cut off:
     ``completed=False``) or ``"backoff"`` (the pause before attempt ``n + 1``
@@ -231,10 +233,20 @@ class SourceExecutionTrace:
             raise AggregationContractError("SourceExecutionTrace.final_result must be this source's SourceResult")
         if isinstance(self.max_attempts, bool) or not isinstance(self.max_attempts, int) or self.max_attempts < 1:
             raise AggregationContractError("SourceExecutionTrace.max_attempts must be an int >= 1")
-        if not isinstance(self.attempts, tuple) or not self.attempts:
-            raise AggregationContractError("SourceExecutionTrace.attempts must be a non-empty tuple")
+        if not isinstance(self.attempts, tuple):
+            raise AggregationContractError("SourceExecutionTrace.attempts must be a tuple")
         if not all(isinstance(a, SourceAttempt) for a in self.attempts):
             raise AggregationContractError("SourceExecutionTrace.attempts must contain SourceAttempt only")
+        no_request_made = self.final_result.error_kind is SourceErrorKind.CIRCUIT_OPEN
+        if no_request_made != (not self.attempts):
+            # C5: an open circuit breaker answers without a network attempt -- and that is the ONLY way to have none.
+            raise AggregationContractError(
+                "a trace has no attempts if and only if its final result is CIRCUIT_OPEN (no request was made)"
+            )
+        if no_request_made:
+            if self.deadline_exceeded or self.deadline_during is not None:
+                raise AggregationContractError("an open-breaker (CIRCUIT_OPEN) source cannot have exceeded a deadline")
+            return
         if [a.sequence for a in self.attempts] != list(range(1, len(self.attempts) + 1)):
             raise AggregationContractError("attempt sequences must be 1..n in order")
         if len(self.attempts) > self.max_attempts:
