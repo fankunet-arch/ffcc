@@ -55,8 +55,21 @@ C4's M and C1's S are unchanged and still apply; C5's host budget is an addition
 on what actually reaches the wire. `test_rc_shared_scope.py`: two schedulers (M=8 each) + two engines +
 one governor with host limit 3 → observed host peak **3** (not 6, not 16); two governors → peak up to
 6 (independent domains); two sources on `https://same.example/a` and `/b` with limit 2 → combined peak
-**2**; hosts `a.example` (limit 2) and `b.example` (limit 3) run 2 + 3 = 5 at once and never block each
-other.
+**2**; hosts `a.example` (limit 2) and `b.example` (limit 3) run 2 + 3 = 5 at once, each up to its own
+limit.
+
+**What this guarantees, precisely.** Host permit capacities are independent **per `HostKey`**: saturation
+of one host never consumes or reduces another host's permit capacity, and different hosts may execute
+concurrently up to their own respective limits whenever an aggregate source slot is available to use them.
+This is a **capacity-isolation** guarantee. It is **not** a cross-host **latency**-isolation guarantee, and
+C5 does not provide one: `AggregationConfig.max_concurrency` (S, C1) remains an outer, unchanged
+per-`aggregate()` scheduling budget, and a source that is queued waiting for a *host* permit continues to
+occupy its *aggregate-local* source slot for as long as it waits (§5, §5.1). Consequently, when `S` is
+smaller than the number of runnable sources of one lookup, contention on one host can indirectly delay the
+admission of a later source targeting a *different* host, even while that other host's own permit capacity
+sits completely idle. This is not a host-permit leak and not cross-host budget coupling — it is ordinary
+aggregate-level head-of-line scheduling under the unchanged C1 semaphore, orthogonal to (and outside) the
+host limiter's own accounting, which stays exactly as isolated as described above.
 
 ## 3. Host identity (`host_key.py`) — `test_rc_host_key.py`
 
@@ -115,8 +128,10 @@ One `HostLimiter` per host key (created lazily by the governor — O(hosts) stat
 * A permit is acquired **per network attempt**: `permit = await governor.acquire_host_permit(admission)` →
   `adapter.fetch` → `permit.release()`. **A retry's backoff pause holds no permit** (a one-second backoff
   never blocks another item on that host); attempt 2 acquires again.
-* At any instant, for one governor and one host key, **live permits ≤ the host's limit**; different hosts
-  never block each other.
+* At any instant, for one governor and one host key, **live permits ≤ the host's limit**; different hosts'
+  permit *capacities* never block each other (§2's capacity-isolation guarantee) — though admission into an
+  aggregate source slot in the first place is still governed by the unchanged, outer C1 `max_concurrency`
+  (§2).
 * **FIFO** and fair: a newcomer never overtakes a waiter. Release hands the permit directly to the oldest
   live waiter (no window in which a third party can steal it).
 * `HostPermit.release()` is idempotent; `with permit:` releases on exit (also on exception/cancellation).

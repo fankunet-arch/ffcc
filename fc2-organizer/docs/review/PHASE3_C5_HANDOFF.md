@@ -172,8 +172,11 @@ independently from inside the fake adapters (a `Meter`, not the governor's own c
 - **Two sources on one host** (`.../a`, `.../b`), host limit 2: combined peak **2**, not 2 each; their breakers
   are independent (one source's `PARSE_ERROR`s opening its breaker never affects the other, which keeps serving
   every item).
-- **Two hosts** (limits 2 and 3): peaks of 2 and 3 simultaneously, total 5, neither blocks the other; a
-  saturated host never delays a different host.
+- **Two hosts** (limits 2 and 3): peaks of 2 and 3 simultaneously, total 5. Host permit capacities remain
+  independent: saturation of one host does not consume another host's permit budget. Aggregate-level
+  `max_concurrency` remains an outer scheduling limit, so contention on one host may still indirectly delay
+  admission of a later source on another host when all aggregate source slots are occupied (capacity
+  isolation, not cross-host latency isolation — see contract §2).
 - Engine construction derives the host from the *configured* base URL only (`test_the_host_key_is_taken_from_configuration_never_from_the_response`);
   malformed default URLs are rejected with a governor, and are simply not consulted without one.
 
