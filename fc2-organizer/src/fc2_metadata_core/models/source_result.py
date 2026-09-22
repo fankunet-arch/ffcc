@@ -72,6 +72,7 @@ class SourceErrorKind(Enum):
     DECODE_ERROR = "decode_error"  # body decode / decompress failure
     REDIRECT_ERROR = "redirect_error"  # redirect chain limit exceeded
     SOURCE_DEADLINE = "source_deadline"  # the per-source wall-clock deadline (aggregation layer)
+    CIRCUIT_OPEN = "circuit_open"  # governor rejected lookup without a request
 
     # refinements of INVALID_RESPONSE (a response arrived but is unusable)
     HTTP_SERVER_ERROR = "http_server_error"  # HTTP 500-599
@@ -96,6 +97,7 @@ ALLOWED_ERROR_KINDS: Mapping[SourceStatus, frozenset[SourceErrorKind]] = Mapping
                 SourceErrorKind.DECODE_ERROR,
                 SourceErrorKind.REDIRECT_ERROR,
                 SourceErrorKind.SOURCE_DEADLINE,
+                SourceErrorKind.CIRCUIT_OPEN,
             }
         ),
         SourceStatus.PARSE_ERROR: frozenset({SourceErrorKind.PARSE_ERROR}),

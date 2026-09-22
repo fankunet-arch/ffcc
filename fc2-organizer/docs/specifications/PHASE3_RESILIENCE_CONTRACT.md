@@ -20,7 +20,7 @@ Each rule names the test file that enforces it (all offline, deterministic;
 | `NOT_FOUND` | `NOT_FOUND` |
 | `BLOCKED` | `BLOCKED` |
 | `RATE_LIMITED` | `RATE_LIMITED` |
-| `NETWORK_ERROR` | `NETWORK_ERROR` (generic), `TIMEOUT`, `CONNECTION_ERROR`, `DECODE_ERROR`, `REDIRECT_ERROR`, `SOURCE_DEADLINE` |
+| `NETWORK_ERROR` | `NETWORK_ERROR` (generic), `TIMEOUT`, `CONNECTION_ERROR`, `DECODE_ERROR`, `REDIRECT_ERROR`, `SOURCE_DEADLINE`, `CIRCUIT_OPEN` (C5) |
 | `PARSE_ERROR` | `PARSE_ERROR` |
 | `INVALID_RESPONSE` | `INVALID_RESPONSE` (generic), `HTTP_SERVER_ERROR`, `RESPONSE_TOO_LARGE`, `ADAPTER_EXCEPTION`, `RESULT_CONTRACT_MISMATCH` |
 
@@ -39,6 +39,7 @@ Meaning of the refined kinds and who produces them:
 | `DECODE_ERROR` | body decode / decompress failure (`gzip`/`deflate` error) | `HttpDecodingError` (new; raised by `HttpxTransport` on `httpx.DecodingError`) |
 | `REDIRECT_ERROR` | redirect chain limit exceeded | `HttpRedirectLimitError` |
 | `SOURCE_DEADLINE` | the per-source wall-clock deadline expired | aggregation execution boundary |
+| `CIRCUIT_OPEN` (C5) | resource governor rejected the lookup without a network request | resource-control boundary |
 | `HTTP_SERVER_ERROR` | HTTP **500–599** | `classify_page_response` (adapters) |
 | `RESPONSE_TOO_LARGE` | body over the transport's size cap | `HttpResponseTooLargeError` |
 | `ADAPTER_EXCEPTION` | the adapter itself raised (incl. a self-raised `CancelledError`) | execution boundary |
@@ -104,7 +105,7 @@ Immutable, hashable. Defaults: `max_attempts = 2`, `initial_backoff_seconds = 1.
   `execution.py`; `retry.py` imports neither `httpx` nor any adapter).
 - `retryable_error_kinds` may only **narrow** the default: it must be a `frozenset` ⊆
   `RETRY_ELIGIBLE_KINDS = {NETWORK_ERROR, TIMEOUT, CONNECTION_ERROR, DECODE_ERROR,
-  HTTP_SERVER_ERROR}`. `BLOCKED` and `RATE_LIMITED` (and every other kind) cannot be made
+  HTTP_SERVER_ERROR}`. `BLOCKED`, `RATE_LIMITED`, and C5 `CIRCUIT_OPEN` (and every other kind) cannot be made
   retryable by configuration in C2.
 - Configuration: `AggregationConfig.retry_policy` (global default) and `SourceConfig.retry_policy`
   (per-source override, `None` = default), both immutable; `AggregationConfig.retry_policy_for(id)`.

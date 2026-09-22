@@ -5,7 +5,8 @@ source **concurrently** (at most ``max_concurrency`` at once) through one shared
 :class:`SourceHttpClient`, and returns exactly one :class:`SourceExecutionTrace`
 per source **in configuration order** -- never in completion order. It is the
 Phase 3 *source execution boundary*; it does no merging (see ``merge.py``) and no
-cross-item scheduling, and it has no circuit breaker (later Phase 3 subphases).
+cross-item scheduling. When a governor is injected, C5 admission and host permits
+wrap source execution without changing the existing trace or merge decisions.
 ``execute_sources`` is the same run reduced to the final ``SourceResult``s.
 
 Guarantees
@@ -70,6 +71,7 @@ from fc2_metadata_core.aggregation.retry import RetryPolicy
 from fc2_metadata_core.http.client import SourceHttpClient
 from fc2_metadata_core.models.source_result import SourceErrorKind, SourceResult, SourceStatus
 from fc2_metadata_core.sources.base import SourceAdapter
+from fc2_metadata_core.resource_control import SourceResourceGovernor
 
 __all__ = ["SourceTarget", "execute_sources", "execute_sources_traced"]
 
@@ -171,6 +173,9 @@ async def _attempt_loop(
     clock: Callable[[], float],
     sleep: Callable[[float], Awaitable[None]],
     progress: _Progress,
+    governor: SourceResourceGovernor | None = None,
+    token: object | None = None,
+    timeout_scope: asyncio.Timeout | None = None,
 ) -> SourceResult:
     policy = target.retry_policy
     while True:
@@ -180,10 +185,31 @@ async def _attempt_loop(
         if sequence > 1:
             progress.phase = "backoff"
             await sleep(backoff)
-        progress.phase = "attempt"
-        progress.backoff_before = backoff
-        progress.attempt_started = clock()
-        result = await _run_attempt(number, target, client, clock)
+        held = False
+        if governor is not None:
+            # Host contention is scheduling time, excluded from source deadline.
+            old_deadline = timeout_scope.when()
+            queued_at = asyncio.get_running_loop().time()
+            if old_deadline <= queued_at:
+                await asyncio.sleep(0)  # let an already-expired source deadline fire
+            timeout_scope.reschedule(None)
+            try:
+                await governor.acquire_host(target.config.source_id)
+                held = True
+            finally:
+                if held:
+                    timeout_scope.reschedule(old_deadline + asyncio.get_running_loop().time() - queued_at)
+            if not governor.valid(token):
+                governor.release_host(target.config.source_id)
+                return governor.circuit_open_result(target.config.source_id)
+        try:
+            progress.phase = "attempt"
+            progress.backoff_before = backoff
+            progress.attempt_started = clock()
+            result = await _run_attempt(number, target, client, clock)
+        finally:
+            if held:
+                governor.release_host(target.config.source_id)
         progress.attempts.append(
             SourceAttempt(
                 sequence=sequence,
@@ -206,51 +232,48 @@ async def _execute_one(
     semaphore: asyncio.Semaphore,
     clock: Callable[[], float],
     sleep: Callable[[float], Awaitable[None]],
+    governor: SourceResourceGovernor | None = None,
 ) -> SourceExecutionTrace:
     source_id = target.config.source_id
     deadline = target.config.deadline_seconds
     max_attempts = target.retry_policy.max_attempts
     async with semaphore:  # held for the whole retry sequence of this source
+        token = governor.admit(source_id) if governor is not None else None
+        if governor is not None and token is None:
+            return SourceExecutionTrace(source_id, (), governor.circuit_open_result(source_id), max_attempts)
         started = clock()
         progress = _Progress()
         try:
-            async with asyncio.timeout(deadline) as scope:
-                final = await _attempt_loop(number, target, client, clock, sleep, progress)
-        except TimeoutError:
+            try:
+                async with asyncio.timeout(deadline) as scope:
+                    final = await _attempt_loop(number, target, client, clock, sleep, progress,
+                                                governor, token, scope)
+            except TimeoutError:
             # Only the scope's own expiry can surface here: an adapter's TimeoutError is
             # caught inside _run_attempt and becomes ADAPTER_EXCEPTION.
-            elapsed = _elapsed_ms(started, clock)
-            attempts = list(progress.attempts)
-            if progress.phase == "attempt":
-                attempts.append(
-                    SourceAttempt(
-                        sequence=progress.sequence,
-                        status=SourceStatus.NETWORK_ERROR,
-                        error_kind=SourceErrorKind.SOURCE_DEADLINE,
-                        elapsed_ms=_elapsed_ms(progress.attempt_started, clock),
-                        completed=False,
-                        backoff_before_seconds=progress.backoff_before,
-                    )
-                )
-                during = "attempt"
+                elapsed = _elapsed_ms(started, clock)
+                attempts = list(progress.attempts)
+                if progress.phase == "attempt":
+                    attempts.append(SourceAttempt(progress.sequence, SourceStatus.NETWORK_ERROR,
+                                                  SourceErrorKind.SOURCE_DEADLINE,
+                                                  _elapsed_ms(progress.attempt_started, clock), False,
+                                                  progress.backoff_before))
+                    during = "attempt"
+                else:
+                    during = "backoff"
+                if not scope.expired():
+                    raise
+                trace = SourceExecutionTrace(source_id, tuple(attempts),
+                                             _deadline_result(source_id, deadline, elapsed),
+                                             max_attempts, True, during)
             else:
-                during = "backoff"  # attempt (sequence) never started
-            if not scope.expired():  # cannot happen; never mislabel a foreign TimeoutError as our deadline
-                raise
-            return SourceExecutionTrace(
-                source_id=source_id,
-                attempts=tuple(attempts),
-                final_result=_deadline_result(source_id, deadline, elapsed),
-                max_attempts=max_attempts,
-                deadline_exceeded=True,
-                deadline_during=during,
-            )
-        return SourceExecutionTrace(
-            source_id=source_id,
-            attempts=tuple(progress.attempts),
-            final_result=final,
-            max_attempts=max_attempts,
-        )
+                trace = SourceExecutionTrace(source_id, tuple(progress.attempts), final, max_attempts)
+            if governor is not None and trace.final_result.error_kind is not SourceErrorKind.CIRCUIT_OPEN:
+                governor.record_result(token, trace.final_result)
+            return trace
+        finally:
+            if governor is not None:
+                governor.abandon(token)
 
 
 def _validate_arguments(targets: Sequence[SourceTarget], max_concurrency: object) -> None:
@@ -270,6 +293,7 @@ async def execute_sources_traced(
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    governor: SourceResourceGovernor | None = None,
 ) -> tuple[SourceExecutionTrace, ...]:
     """Run every target; return one trace (attempts + final result) per target, in target order.
 
@@ -285,7 +309,7 @@ async def execute_sources_traced(
         # CancelledError propagates; no child outlives this call.
         async with asyncio.TaskGroup() as group:
             tasks = [
-                group.create_task(_execute_one(number, target, client, semaphore, clock, sleep))
+                group.create_task(_execute_one(number, target, client, semaphore, clock, sleep, governor))
                 for target in targets
             ]
     except ExceptionGroup as group_error:
@@ -304,9 +328,11 @@ async def execute_sources(
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    governor: SourceResourceGovernor | None = None,
 ) -> tuple[SourceResult, ...]:
     """:func:`execute_sources_traced` reduced to each source's final ``SourceResult`` (config order)."""
     traces = await execute_sources_traced(
-        number, targets, client, max_concurrency=max_concurrency, clock=clock, sleep=sleep
+        number, targets, client, max_concurrency=max_concurrency, clock=clock, sleep=sleep,
+        governor=governor,
     )
     return tuple(trace.final_result for trace in traces)

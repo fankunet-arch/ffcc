@@ -231,8 +231,13 @@ class SourceExecutionTrace:
             raise AggregationContractError("SourceExecutionTrace.final_result must be this source's SourceResult")
         if isinstance(self.max_attempts, bool) or not isinstance(self.max_attempts, int) or self.max_attempts < 1:
             raise AggregationContractError("SourceExecutionTrace.max_attempts must be an int >= 1")
-        if not isinstance(self.attempts, tuple) or not self.attempts:
-            raise AggregationContractError("SourceExecutionTrace.attempts must be a non-empty tuple")
+        if not isinstance(self.attempts, tuple):
+            raise AggregationContractError("SourceExecutionTrace.attempts must be a tuple")
+        if not self.attempts:
+            if (self.final_result.error_kind is SourceErrorKind.CIRCUIT_OPEN
+                    and self.deadline_exceeded is False and self.deadline_during is None):
+                return  # no adapter attempt was admitted
+            raise AggregationContractError("empty attempts require CIRCUIT_OPEN")
         if not all(isinstance(a, SourceAttempt) for a in self.attempts):
             raise AggregationContractError("SourceExecutionTrace.attempts must contain SourceAttempt only")
         if [a.sequence for a in self.attempts] != list(range(1, len(self.attempts) + 1)):
@@ -262,6 +267,8 @@ class SourceExecutionTrace:
         else:
             if self.deadline_during is not None:
                 raise AggregationContractError("deadline_during requires deadline_exceeded")
+            if final.error_kind is SourceErrorKind.CIRCUIT_OPEN:
+                return  # previously completed retry attempt(s), then admission was revoked
             if not last.completed:
                 raise AggregationContractError("an attempt is incomplete only when the deadline was exceeded")
             if final.status is not last.status or final.error_kind is not last.error_kind:

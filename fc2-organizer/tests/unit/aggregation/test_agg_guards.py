@@ -79,8 +79,8 @@ def _identifiers(tree):
 
 
 def test_no_circuit_breaker_in_c2():
-    # Identifiers only (docstrings may say what is deliberately NOT implemented yet).
-    for path in PACKAGE.glob("*.py"):
+    # C5 owns the breaker; the C2 retry policy remains unaware of its state.
+    for path in [PACKAGE / "retry.py"]:
         for name in _identifiers(ast.parse(path.read_text(encoding="utf-8"))):
             lowered = name.lower()
             for forbidden in ("circuit", "breaker"):

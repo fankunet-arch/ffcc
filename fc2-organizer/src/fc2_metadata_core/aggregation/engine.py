@@ -10,6 +10,7 @@ The engine only *wires* the three separately testable pieces together:
 It owns no HTTP transport: the caller passes **one** shared
 :class:`SourceHttpClient`, so every source runs through the same client
 lifecycle (Phase 2 requirement) and the caller decides when to close it.
+An optional explicit C5 governor shares host and breaker state across engines.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from fc2_metadata_core.aggregation.policy import AggregationConfigError, Aggrega
 from fc2_metadata_core.http.client import SourceHttpClient
 from fc2_metadata_core.sources.base import require_canonical_number
 from fc2_metadata_core.sources.registry import SourceRegistry
+from fc2_metadata_core.resource_control import SourceResourceGovernor
 
 __all__ = ["MultiSourceEngine", "is_async_get"]
 
@@ -58,7 +60,8 @@ class MultiSourceEngine:
     stateless and reused across lookups.
     """
 
-    def __init__(self, config: AggregationConfig, registry: SourceRegistry, client: SourceHttpClient) -> None:
+    def __init__(self, config: AggregationConfig, registry: SourceRegistry, client: SourceHttpClient,
+                 *, governor: SourceResourceGovernor | None = None) -> None:
         if not isinstance(config, AggregationConfig):
             raise AggregationConfigError("config must be an AggregationConfig")
         if not isinstance(registry, SourceRegistry):
@@ -92,6 +95,12 @@ class MultiSourceEngine:
         self._policy: AggregationPolicy = config.policy()
         self._targets = tuple(targets)
         self._client = client
+        if governor is not None and not isinstance(governor, SourceResourceGovernor):
+            raise AggregationConfigError("governor must be a SourceResourceGovernor")
+        if governor is not None:
+            for target in self._targets:
+                governor.register(target.config.source_id, target.adapter.base_url)
+        self._governor = governor
 
     @property
     def config(self) -> AggregationConfig:
@@ -112,7 +121,8 @@ class MultiSourceEngine:
         require_canonical_number(number)
         started = time.monotonic()
         traces = await execute_sources_traced(
-            number, self._targets, self._client, max_concurrency=self._config.max_concurrency
+            number, self._targets, self._client, max_concurrency=self._config.max_concurrency,
+            governor=self._governor,
         )
         return merge_source_results(
             number,
