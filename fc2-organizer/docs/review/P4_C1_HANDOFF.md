@@ -268,13 +268,205 @@ clean (no output)
 Clean after the Docs Head commit (verify with `git status --porcelain` —
 expected empty once this file is committed).
 
-## 18. Independent Review
+## 18. Independent Review (original round)
 
 ```text
 REQUIRED
 ```
 
-## 19. P4-C1
+## 19. P4-C1 (original round)
+
+```text
+NOT CLOSED
+```
+
+---
+
+# R1 Closure — P4-C1-R-01 (HIGH / BLOCKING)
+
+The section above is the original, as-reviewed P4-C1 submission and is left
+unmodified for history. This section records the R1 incremental-closure
+round.
+
+## R1.1 Coordinates
+
+```text
+Reviewed-Failed Code Head = ffe49927760f57d3ea0179cde22f2c19c8dd10a9
+Previous Docs Head        = 00dc40d0338b75427766c6b768ed572ee16b9ca0
+R1 Code Review Candidate  = 77f928df9e8233ec42f3aa3d5b14291a24c1036a
+R1 Docs Head              = <this commit; see git log after commit>
+R1 Code Review Range      = 00dc40d0338b75427766c6b768ed572ee16b9ca0..77f928df9e8233ec42f3aa3d5b14291a24c1036a
+R1 Docs Review Range      = 77f928df9e8233ec42f3aa3d5b14291a24c1036a..<R1 Docs Head>
+```
+
+Two reviewer outputs existed for the original round. The first was
+`BLOCKED` because its own instructions required reading a
+`fc2-organizer/docs/HANDOFF.md` path that does not exist in this repository
+-- a review-instruction defect, not a P4-C1 implementation defect. Per this
+round's brief, that file was **not** created and the repository structure
+was **not** changed to satisfy it; its same-named `P4-C1-R-01` label is
+**not** what this section closes. The finding closed here is the one from
+the second reviewer output, which performed an actual code read, test
+re-run, and reproduction.
+
+## R1.2 Finding addressed
+
+```text
+P4-C1-R-01
+Severity: HIGH / BLOCKING
+```
+
+**Defect:** `discover_media("mydir")` with a relative root produced a
+`DiscoveredMediaItem.source_path` that was itself still relative
+(`os.path.isabs(...) == False`), violating the frozen contract
+(`source_path` must be absolute -- contract §3). Reproduced directly by the
+reviewer via `chdir` + relative root. The original test suite passed only
+`tmp_path` (already absolute) everywhere, so this path was structurally
+untested.
+
+## R1.3 Exact changed files
+
+```text
+fc2-organizer/src/fc2_organizer/discovery/scanner.py      (M)
+fc2-organizer/src/fc2_organizer/discovery/models.py       (M)
+fc2-organizer/tests/unit/discovery/test_discovery_root_absolutization.py  (new)
+fc2-organizer/docs/review/P4_C1_HANDOFF.md                 (this section)
+```
+
+No other file touched. `docs/specifications/PHASE4_DISCOVERY_CONTRACT.md`
+was **not** modified: it already stated `source_path: str` is "(absolute,
+OS-native separators...)" in §3 -- the contract was already correct; only
+the implementation had not satisfied it.
+
+## R1.4 Repair description
+
+**A. Root absolutization** (`scanner._coerce_root`): after coercing `root`
+to a `Path` (unchanged type-dispatch logic for `str`/`Path`/`os.PathLike`),
+the result is now passed through `Path(os.path.abspath(candidate))` before
+being used anywhere else. `os.path.abspath` was chosen deliberately over
+`Path.resolve()`: `abspath` only joins onto the current working directory
+and normalizes `.`/`..` segments -- it never resolves a symlink. `resolve()`
+would additionally follow a symlinked root or a symlinked intermediate
+path component, silently changing *what* gets scanned; that would be a
+real semantic change to the caller-supplied root and to the (untouched,
+frozen) root-symlink handling, not a pure absolutization, and was
+explicitly out of scope for this fix.
+
+Because every path produced during the walk
+(`DiscoveryResult.root`, every `DiscoveredMediaItem.source_path`) is built
+by `os.scandir`/`os.DirEntry.path` off the directory passed into `_walk`,
+and `_walk`'s very first call in `discover_media` now receives this
+absolutized `root_path`, absolutizing once at the top is sufficient for
+the entire recursive traversal -- no other call site needed a change.
+
+**B. Model invariant** (`DiscoveredMediaItem.__post_init__`): added
+`if not os.path.isabs(self.source_path): raise DiscoveryContractError(...)`
+immediately after the existing non-empty-`str` check. A hand-built
+`DiscoveredMediaItem` with a relative `source_path` is now rejected at
+construction, independent of whether the scanner itself is correct --
+closing the "model trusts the scanner" gap the reviewer's reproduction
+exposed conceptually.
+
+Nothing else in either file changed. Symlink/junction detection
+(`_is_symlink`, `is_reparse_point`), the deterministic sort/traversal
+order, extension-policy matching, failure-isolation seams
+(`_list_directory_sorted`, `_stat_entry`), and root-typed-error semantics
+(`_check_root`) are byte-for-byte unchanged.
+
+## R1.5 New regression tests
+
+`tests/unit/discovery/test_discovery_root_absolutization.py` (10 tests),
+all using a genuinely relative root (via `monkeypatch.chdir` + a bare
+relative directory name, not `tmp_path` directly):
+
+* relative root -> absolute `source_path`
+* relative root -> correct `relative_path`
+* relative root -> `source_path` identifies the real underlying file (stat
+  + read back its content)
+* relative root -> `DiscoveryResult.root` is also absolute
+* `.`-prefixed relative root (`./mydir`) -> absolute `source_path`
+* relative root containing a `..` segment (`sibling/../mydir`) -> absolute
+  `source_path`
+* a plain relative-root scan with no symlinks present still yields zero
+  `DiscoveryIssue`s (proves R1 did not perturb symlink/junction behavior)
+* direct `DiscoveredMediaItem(source_path="relative/a.mp4", ...)` ->
+  `DiscoveryContractError`
+* direct `DiscoveredMediaItem` with an absolute `source_path` -> accepted
+* direct `DiscoveredMediaItem(source_path="mydir\\a.mp4", ...)` (Windows-style
+  relative) -> `DiscoveryContractError`
+
+## R1.6 Targeted test result
+
+```text
+109 passed, 3 skipped
+```
+
+(99 pre-existing P4-C1 tests + 10 new, all green; the 3 skips are the
+same pre-existing real-directory-symlink-privilege skips from the original
+round, unaffected by this fix.)
+
+## R1.7 Full-suite result
+
+```text
+2470 passed, 3 skipped
+```
+
+`2460 (original P4-C1 full-suite baseline) + 10 (new) = 2470`. No
+pre-existing test was modified, newly failing, or newly skipped.
+
+## R1.8 Reviewer reproduction — re-verified directly
+
+Ran the equivalent of the reviewer's reproduction by hand, outside pytest,
+against the fixed code:
+
+```text
+mkdir mydir; create mydir/a.mp4; chdir to the parent; discover_media("mydir")
+
+source_path: C:\Users\Ctg\AppData\Local\Temp\tmp90nqlzuu\mydir\a.mp4
+os.path.isabs(source_path) == True
+relative_path == "a.mp4"
+result.root == C:\Users\Ctg\AppData\Local\Temp\tmp90nqlzuu\mydir  (absolute)
+os.path.isfile(source_path) == True
+```
+
+Also directly verified `.\mydir` and `foo\..\mydir` relative forms both
+resolve to the same absolute, correct target, and that hand-constructing
+`DiscoveredMediaItem(source_path="relative\a.mp4", ...)` now raises
+`DiscoveryContractError`.
+
+## R1.9 `git diff --check`
+
+```text
+clean (no output)
+```
+
+## R1.10 `git status --porcelain`
+
+Clean after the R1 code commit; clean again after this R1 docs commit
+(verify with `git status --porcelain`).
+
+## R1.11 Carried non-blocking findings (unchanged, not addressed by R1)
+
+```text
+P4-C1-R-02  MEDIUM
+P4-C1-R-03  LOW
+P4-C1-R-04  LOW
+P4-C1-R-05  LOW
+```
+
+All four were explicitly judged `non-blocking / carried` by the second
+reviewer output. Per this round's brief, none is addressed here: no
+anti-TOCTOU rewrite of the scanner, no symlink/junction architecture
+expansion, no extension-policy redesign, and no scope expansion to close a
+LOW finding. They remain open for a future round.
+
+## R1.12 Independent R1 Closure Review
+
+```text
+REQUIRED
+```
+
+## R1.13 P4-C1
 
 ```text
 NOT CLOSED
