@@ -60,6 +60,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from fc2_metadata_core.aggregation.policy import MAPPING_MERGE_FIELDS, SCALAR_MERGE_FIELDS
+from fc2_metadata_core.aggregation.retry import RETRY_ELIGIBLE_KINDS
 from fc2_metadata_core.errors import FC2MetadataCoreError
 from fc2_metadata_core.models.metadata import NormalizedMetadata
 from fc2_metadata_core.models.source_result import (
@@ -118,6 +119,38 @@ def _is_number(value: object) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
 
 
+# -- C2-L2 (closed at P4-C3): engine-impossible trace states ---------------------------------------------------------
+# The execution boundary (``execution.py``) is the only producer of traces, and these two checks pin its shapes into the
+# public model so a hand-built or foreign trace cannot claim something the engine never does. They are module-level
+# functions (looked up at call time) so the mutation-style closure test can revert exactly them.
+
+
+def _check_incomplete_attempt(attempt: "SourceAttempt") -> None:
+    """``completed=False`` is reserved for an attempt the source wall-clock deadline cut off, which the engine records
+    as ``NETWORK_ERROR`` / ``SOURCE_DEADLINE`` -- never as a success or any other outcome."""
+    if not attempt.completed and (
+        attempt.status is not SourceStatus.NETWORK_ERROR or attempt.error_kind is not SourceErrorKind.SOURCE_DEADLINE
+    ):
+        raise AggregationContractError(
+            "an incomplete attempt (cut off by the source deadline) must be NETWORK_ERROR / SOURCE_DEADLINE"
+        )
+
+
+def _check_retry_shape(attempts: "tuple[SourceAttempt, ...]", deadline_during: str | None) -> None:
+    """The engine starts another attempt (or a backoff before one) only after a failure whose structured
+    ``error_kind`` is retry-eligible (``retry.RETRY_ELIGIBLE_KINDS``; a policy may only narrow that set). So no attempt
+    may follow ``SUCCESS`` / ``NOT_FOUND`` / ``BLOCKED`` / ... and no backoff may follow one either."""
+    for attempt in attempts[:-1]:
+        if attempt.error_kind not in RETRY_ELIGIBLE_KINDS:
+            raise AggregationContractError(
+                "an attempt may be followed by another only if it failed with a retry-eligible error_kind"
+            )
+    if deadline_during == "backoff" and attempts[-1].error_kind not in RETRY_ELIGIBLE_KINDS:
+        raise AggregationContractError(
+            "deadline during backoff means the last attempt ended in a retry-eligible failure"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class FieldConflict:
     """A resolved disagreement between sources, for inspection only.
@@ -173,7 +206,8 @@ class SourceAttempt:
     ``elapsed_ms`` is measured by the engine around the attempt, so it is real
     even when the adapter-returned ``SourceResult.elapsed_ms`` is 0 (P2-R-07).
     ``completed`` is ``False`` only for an attempt cut off by the source's
-    wall-clock deadline. ``backoff_before_seconds`` is the pause that preceded
+    wall-clock deadline, which is always recorded as ``NETWORK_ERROR`` /
+    ``SOURCE_DEADLINE`` (enforced, C2-L2). ``backoff_before_seconds`` is the pause that preceded
     this attempt (``0.0`` for the first). Nothing here can hold a response body,
     cookie or credential: only status, structured kind and timings.
     """
@@ -199,6 +233,7 @@ class SourceAttempt:
             raise AggregationContractError("SourceAttempt.elapsed_ms must be a finite number >= 0")
         if not isinstance(self.completed, bool):
             raise AggregationContractError("SourceAttempt.completed must be a bool")
+        _check_incomplete_attempt(self)
         if not _is_number(self.backoff_before_seconds) or self.backoff_before_seconds < 0:
             raise AggregationContractError("SourceAttempt.backoff_before_seconds must be a finite number >= 0")
         if self.sequence == 1 and self.backoff_before_seconds != 0:
@@ -217,6 +252,11 @@ class SourceExecutionTrace:
     ``completed=False``) or ``"backoff"`` (the pause before attempt ``n + 1``
     ran out, so **attempt ``n + 1`` never started** -- it is absent from
     ``attempts``). ``final_result`` is the one result the merge used.
+
+    C2-L2 (closed at P4-C3): every attempt but the last, and the last one when the
+    deadline ran out during a backoff, must have failed with a retry-eligible
+    ``error_kind`` (``retry.RETRY_ELIGIBLE_KINDS``) -- the engine never retries, or
+    backs off after, ``SUCCESS`` / ``NOT_FOUND`` / ``BLOCKED`` / any other outcome.
     """
 
     source_id: str
@@ -257,6 +297,7 @@ class SourceExecutionTrace:
             raise AggregationContractError("an attempt that succeeded cannot be followed by another")
         if not isinstance(self.deadline_exceeded, bool):
             raise AggregationContractError("deadline_exceeded must be a bool")
+        _check_retry_shape(self.attempts, self.deadline_during if self.deadline_exceeded else None)
         last = self.attempts[-1]
         final = self.final_result
         if self.deadline_exceeded:

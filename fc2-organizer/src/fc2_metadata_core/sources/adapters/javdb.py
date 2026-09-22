@@ -63,7 +63,6 @@ hit" is reported as ``INVALID_RESPONSE`` -- never as ``NOT_FOUND``.
 
 from __future__ import annotations
 
-import html
 from bisect import bisect_left
 from typing import NamedTuple
 
@@ -194,9 +193,9 @@ def _parse_item(
         attrs = parse_attrs(anchor.attrs, max_attrs=_MAX_ATTRS_PER_TAG)
         if _is_detail_path(attrs.get("href", "")):
             href = attrs["href"]
-            # Historical behaviour kept as-is (double unescape is a tracked
-            # LOW backlog item, P2-R-10, not part of C0 / C0-R1).
-            attr_title = clean_text(html.unescape(attrs.get("title", "")))
+            # parse_attrs returns the raw, still entity-encoded value and
+            # clean_text decodes entities exactly once (P2-R-10, closed at P4-C3).
+            attr_title = clean_text(attrs.get("title", ""))
             break
         scan_from = anchor.end
 
