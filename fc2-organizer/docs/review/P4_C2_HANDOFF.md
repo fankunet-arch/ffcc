@@ -710,3 +710,286 @@ NOT CLOSED
 ```text
 NOT CLOSED
 ```
+
+---
+
+# R2 Closure -- P4-C2-R1-01
+
+The two sections above (original P4-C2, R1) are left unmodified for
+history. This section records the R2 incremental-closure round.
+
+## R2.1 Coordinates
+
+```text
+R1 Reviewed-Failed Code Head = d43608645a960401c0cf0cc03d56418bdfa760be
+Previous Docs Head           = bb8b78ffabf2b4a66c342813b089675b08b29d78
+R2 Code Review Candidate     = f56bfeef9fac2bd6a2e11e6e9065d3aea1b05ee7
+R2 Docs Head                 = <this commit; see git log after commit>
+R2 Code Review Range         = bb8b78ffabf2b4a66c342813b089675b08b29d78..f56bfeef9fac2bd6a2e11e6e9065d3aea1b05ee7
+R2 Docs Review Range         = f56bfeef9fac2bd6a2e11e6e9065d3aea1b05ee7..<R2 Docs Head>
+```
+
+```text
+P4-C2-GOV-01: REMAINS CLOSED (reverified, R2.5)
+P4-C2-GOV-02: REMAINS CLOSED (reverified, R2.5)
+P4-C2-GOV-03: REMAINS CLOSED (reverified, R2.5)
+P4-C2-R1-01:  CLOSED by this round (R2.5 Repro A/C/D)
+```
+
+## R2.2 Finding addressed
+
+```text
+P4-C2-R1-01
+Severity: HIGH / BLOCKING
+```
+
+**Defect:** R1's fix for P4-C2-GOV-02 switched
+`fc2_organizer.planning.paths.is_contained_within` from
+`os.path.normpath(...).split(os.sep)` to `pathlib.Path(...).parts` to fix a
+trailing-empty-segment bug on bare drive/UNC roots. `pathlib.PurePath.parts`
+is a pure string-splitting operation, though -- it does **not** collapse
+`.`/`..` segments. Consequently a candidate whose *raw* segments happened
+to start with the root's segments compared as "contained" even when the
+path's actual lexical meaning (what it would resolve to once `..` is
+accounted for) escapes the root entirely:
+
+```text
+root:      C:\library
+candidate: C:\library\..\outside\FC2-1234567.mp4
+
+R1's Path(...).parts comparison: ('C:\\', 'library', 'outside_wrongly_seen_as_child')
+  -- wrong: raw segments ('C:\\', 'library', '..', 'outside', 'FC2-1234567.mp4')
+     happen to start with the root's ('C:\\', 'library'), so the naive
+     comparison said "contained" == True
+
+actual lexical meaning: C:\outside\FC2-1234567.mp4 -- outside C:\library entirely
+```
+
+The same hazard applied to `C:\library\FC2-1\..\..\outside\...` and to the
+POSIX equivalent `/library/../outside/file`.
+
+## R2.3 Exact changed files
+
+```text
+fc2-organizer/src/fc2_organizer/planning/paths.py                     (M)
+fc2-organizer/tests/unit/planning/test_planning_paths.py              (M)
+fc2-organizer/tests/unit/planning/test_planning_models.py             (M)
+fc2-organizer/docs/review/P4_C2_HANDOFF.md                            (this section)
+```
+
+`planner.py`, `models.py` (other than the test file), `policy.py`,
+`errors.py` were **not** touched -- the defect and its fix are entirely
+contained within `paths.is_contained_within`'s own segment-computation
+logic; nothing about the public API, error taxonomy, or default layout
+changed. `PHASE4_ORGANIZE_PLAN_CONTRACT.md` was **not** touched this round:
+its section 11 already promised pure-lexical containment and an
+independent model-layer re-check; neither promise changed, only the
+implementation's correctness in fulfilling it.
+
+## R2.4 Normalize-then-split strategy
+
+```python
+candidate_parts = Path(os.path.normpath(candidate)).parts
+root_parts = Path(os.path.normpath(root)).parts
+```
+
+`os.path.normpath` is run on **both** strings *before* splitting into
+parts. This composes the fix for both hazards without reintroducing either:
+
+* **R1-01's hazard** (un-collapsed `.`/`..`) is closed because `normpath`
+  lexically collapses `.`/`..` first -- still pure string manipulation, zero
+  filesystem access (no `stat`/`exists`/`resolve`/`realpath`).
+* **GOV-02's original hazard** (a bare anchor's trailing separator producing
+  a spurious empty `str.split(os.sep)` segment) is *not* reintroduced,
+  because the fix never returns to plain `str.split(os.sep)` -- `Path(...).parts`
+  is still used for the actual segmentation, and `normpath` never leaves a
+  bare root's trailing separator in a form that would trip `Path.parts`'s
+  anchor-collapsing (`os.path.normpath("C:\\\\")` is `"C:\\"`,
+  `Path("C:\\").parts` is `('C:\\',)`, unchanged from R1's behavior).
+
+**Anchor clamping verified directly** (not assumed): `os.path.normpath`
+clamps a leading `..` at a drive or UNC-share anchor exactly the way real
+Windows path resolution does --
+`os.path.normpath(r"\\server\share\..\other\x")` yields
+`\\server\share\other\x` (stays **inside** the share), never
+`\\server\other\x` (which would be a different share). This mirrors the
+drive-root `..`-clamping precedent already established for this project by
+the P4-C1-R2-01/R3 rounds' independent `GetFullPathNameW` verification (R3.5
+of the P4-C1 handoff) -- `..` cannot cross a drive-letter or UNC-share
+boundary on Windows, by the OS's own lexical rules, not merely by this
+package's convention.
+
+**Consequence for the "different share" test list item:** the brief's
+section 7 UNC example (`\\server\share\..\other\FC2-1234567`) is therefore
+*correctly* judged **contained** (its true lexical meaning stays inside
+`share`, it never actually reaches `other`) -- this is the right answer
+under genuine Windows lexical semantics, not an escape being wrongly
+accepted. A candidate that names a genuinely different share **from the
+start** (`\\server\other\FC2-1234567`, never reached via `..`) remains
+correctly rejected, unchanged from GOV-02 (`test_different_unc_share_from_the_start_is_still_not_contained`).
+
+## R2.5 Direct reproductions (outside pytest)
+
+```text
+Repro A -- dot-dot escape correctly rejected:
+  is_contained_within(r"C:\library\..\outside\file.mp4", r"C:\library") -> False
+  -> PASS (P4-C2-R1-01 closed)
+
+Repro B -- bare drive root still correctly contains its child (GOV-02 not regressed):
+  is_contained_within(r"C:\FC2-1234567", "C:\\") -> True
+  -> PASS
+
+Repro C -- UNC root child / different share:
+  is_contained_within(r"\\server\share\FC2-1234567", "\\server\share\") -> True
+  is_contained_within(r"\\server\other\FC2-1234567", "\\server\share\") -> False
+  is_contained_within(r"\\server\share\a\..\FC2-1234567", "\\server\share\") -> True
+  is_contained_within(r"\\server\share\..\other\FC2-1234567", "\\server\share\") -> True
+    (clamped at the share boundary -- see R2.4; this is the lexically
+    correct verdict, not a residual defect)
+  -> PASS
+
+Repro D -- hand-built OrganizePlan with dot-dot-escaping target fails closed:
+  OrganizePlan(..., target_media_path=PlannedPath(r"C:\library\..\outside\FC2-1234567.mp4"), ...)
+  -> raised TargetEscapesLibraryRootError:
+     "OrganizePlan.target_media_path ('C:\\library\\..\\outside\\FC2-1234567.mp4')
+      is not contained under library_root ('C:\\library')"
+  -> PASS (contract section 11's promised model-layer re-check verified for real)
+
+Repro E -- POSIX /library/../outside:
+  Host is Windows (os.name == 'nt') -> NOT RUN as a live filesystem-path
+  reproduction on this host, honestly reported. Platform-correct pure-
+  semantics unit coverage exists instead
+  (TestIsContainedWithinPosixDotDot, 4 tests, @pytest.mark.skipif(os.name
+  == "nt", ...)) and will execute for real with no code change required on
+  a POSIX host. Sanity-checked by source inspection that
+  is_contained_within's implementation calls the OS-native
+  os.path.normpath (which dispatches to posixpath.normpath on a real
+  POSIX host), not a Windows-only helper.
+```
+
+This host is Windows (win32, Python 3.12.10), so Repros A-D ran for real;
+Repro E's platform-specific runtime execution is honestly reported as
+NOT RUN with equivalent coverage in place, per the issuing instruction's
+explicit allowance.
+
+## R2.6 Targeted tests
+
+```text
+223 passed, 10 skipped
+```
+
+Command: `python -m pytest tests/unit/planning tests/contract/test_planning_architecture.py -q`
+(212 prior tests + 11 new passing + 6 new POSIX-gated skips, all green;
+the 10 skips = 4 pre-existing POSIX-gated skips from R1 + 6 new
+POSIX-gated skips from R2, all correctly inert on this Windows host).
+
+## R2.7 Full suite
+
+```text
+2703 passed, 14 skipped
+```
+
+Command: `python -m pytest -q`. `2692 (R1 full-suite baseline) + 11 (new
+R2 tests, passing on this host) = 2703`; `8 (R1 baseline skips) + 6 (new
+R2 POSIX-gated skips) = 14`. No pre-existing test was modified, newly
+failing, or newly skipped for a different reason than before.
+
+## R2.8 GOV-01/02/03 reverified unchanged
+
+* **GOV-01 (network guard):** untouched this round --
+  `test_planning_synthetic_gate.py` was not in the R2 changed-files list
+  (section R2.3). Full-suite pass count confirms
+  `test_synthetic_gate_no_network_import_reachable` and its planted-import
+  proof tests are still green.
+* **GOV-02 (drive/UNC containment):** re-verified directly, R2.5 Repro B/C
+  -- the exact GOV-02 reproductions (`C:\` contains `C:\FC2-1234567`;
+  `\\server\share\` contains its child; a different drive/share is
+  excluded) still pass, now composed with the R1-01 dot-collapsing fix
+  rather than superseded by it.
+* **GOV-03 (fully-qualified library_root boundary):** untouched this round
+  -- `is_fully_qualified_absolute_root` was not modified; its own test
+  class (`TestIsFullyQualifiedAbsoluteRoot`) and the planner-level tests
+  are unchanged and still green in the full-suite run.
+
+## R2.9 Preserved behaviors (not regressed)
+
+Same checklist as R1.9, reverified via the full-suite regression count:
+Deep Immutability, Canonical Number Boundary, Metadata minimum-success
+validation, Source Identity, Default Layout, Title Isolation, `OutputPolicy`
+artifact naming, Collision = FAIL CLOSED, Overwrite = NEVER (frozen, no
+field/parameter added), Windows component validation, no filesystem
+mutation, filesystem-state independence, architecture boundary, package
+import safety, determinism -- all unchanged. `build_organize_plan` itself
+was not modified this round (section R2.3); identical input continues to
+produce an identical plan, and every plan's targets continue to be
+contained (existing planner-level tests, unmodified, still pass) --
+the R1-01 defect was only reachable through a *hand-built* `OrganizePlan`
+or a direct `is_contained_within` call, never through the public
+`build_organize_plan` entry point, since every caller-controlled path
+component it builds from is already validated separator/`..`-free before
+being joined (`validate_path_component`). No new planner-level test was
+therefore needed to prove no regression there; the model-layer and
+helper-level tests are where this defect could actually manifest.
+
+## R2.10 Carried findings (explicitly not addressed this round)
+
+```text
+P4-C2-R1-02
+  -> CARRIED / LOW (bare "\\server" may be accepted by
+     is_fully_qualified_absolute_root; not touched -- GOV-03's
+     implementation was not modified this round, so this behavior is
+     unchanged from R1)
+
+metadata.number != canonical_number identity gap
+  -> CARRIED (contract section 9 defines metadata as validation-only;
+     must close before OrganizePlan/metadata/NFO publication binding)
+
+OrganizePlan operation-graph model-level hardening
+  -> CARRIED (executor-entry hardening, deferred to when an executor
+     actually consumes an arbitrary OrganizePlan)
+
+overwrite executor semantics
+  -> frozen NEVER (unchanged); a future executor must enforce it; not a
+     P4-C2 plan-field defect, no field/parameter added this round
+
+CON.txt / COM(super-1).jpg style contract-external Windows edge cases
+  -> not addressed (out of the frozen contract's scope)
+
+All prior carried debts unchanged:
+P4-C1-R-02, P4-C1-R-03, P4-C1-R-04, P4-C1-R-05,
+C2-L2, P2-R-05, P2-R-06, P2-R-07, P2-R-10,
+C3-N1, C3-N2, C3-N3, C3-N4,
+C4-N1, C4-R1-N1, C4-R1-N2, C4-R1-N3,
+F3, F5, C5-R1-L1
+```
+
+## R2.11 `git diff --check`
+
+```text
+clean (no output)
+```
+
+## R2.12 `git status --porcelain`
+
+Clean after the R2 code commit; clean again after this R2 docs commit
+(verify with `git status --porcelain`). No stray files (`_tmp_probe_r2.py`,
+`_tmp_repro_r2.py` used during development were deleted before either
+commit and never staged).
+
+## R2.13 Independent R2 Closure Review
+
+```text
+REQUIRED
+```
+
+## R2.14 P4-C2
+
+```text
+NOT CLOSED
+```
+
+## R2.15 Phase 4
+
+```text
+NOT CLOSED
+```
