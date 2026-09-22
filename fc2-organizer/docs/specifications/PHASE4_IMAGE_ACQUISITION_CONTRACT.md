@@ -1,19 +1,21 @@
 # FC2 Organizer -- Phase 4 / P4-C5 Image Acquisition Contract
 
-Status: **draft, substeps 1-4 of P4-C5** (foundation + binary transport + JPEG validation + acquisition orchestration frozen; independent review pending).
+Status: **frozen candidate, P4-C5 substeps 1-5 complete** (foundation + binary transport + JPEG validation + acquisition orchestration + synthetic gate; independent review REQUIRED).
 Package: `fc2_organizer.images` (`__init__.py`, `errors.py`, `models.py`, `policy.py`, `urls.py`, `transport.py`, `jpeg.py`, `acquisition.py`).
 Frozen Base: `97f6aeba8d11d9bc8a29d5397b9a1e1711d36cd6`
 Substep 1 Head: `a961dda486bc8377bd2cec8ae9dd107f5379eba4`
 Substep 2 Head: `d7c1bd9173cb88be399368a4a7a9083f52f73e72`
 Substep 3 Head: `4c780a88dd97613e97fe6a0f139deddcbfb40066`
+Substep 4 Head: `9fff05ec1e8dbec3fce65dd9453fa41b8a4b786e`
 Branch: `claude/phase4-c5-image-acquisition`
 
 Sections marked **IMPLEMENTED IN SUBSTEP 2** describe the binary HTTP transport
 (section 12); **IMPLEMENTED IN SUBSTEP 3** marks the JPEG-only content policy,
 structural validation and dimension caps (section 13); **IMPLEMENTED IN
-SUBSTEP 4** marks the `acquire_images` orchestration (section 14). Sections
-marked **PENDING IN LATER P4-C5 SUBSTEP** describe work that is *not*
-implemented: the synthetic image gate and the final P4-C5 closure handoff.
+SUBSTEP 4** marks the `acquire_images` orchestration (section 14);
+**IMPLEMENTED IN SUBSTEP 5** marks the synthetic image gate (section 15).
+Sections without a substep marker were frozen in substep 1. Nothing in this
+contract is pending; explicit non-scope is listed in section 16.
 
 ## 1. Scope
 
@@ -22,7 +24,7 @@ images for one film from the candidate image URLs of its metadata, with bounded
 time, redirects and memory, and report every per-candidate failure in a
 structured, secret-free form.
 
-**Substep 1 (this substep) delivers only:**
+**Substep 1 delivers only:**
 
 1. the `fc2_organizer.images` package skeleton;
 2. immutable value models (section 3-6);
@@ -50,9 +52,14 @@ mapping, candidate-count cap, extrafanart cap, total-result cap, artifact
 construction, failure ordering, cancellation semantics and sensitive-data
 exclusion.
 
-**Not yet implemented** (section 11): the synthetic image gate and the final
-P4-C5 closure handoff. Out of P4-C5 scope entirely: writing images to disk,
-path mapping, overwrite checks, resize / crop / transcode.
+**Substep 5 delivers only** (section 15, IMPLEMENTED IN SUBSTEP 5): the
+400-record synthetic image gate, the full-package regression and this frozen
+contract; the review handoff is `docs/review/P4_C5_HANDOFF.md` (docs-only commit).
+No functionality was added in substep 5.
+
+Out of P4-C5 scope entirely (section 16): filesystem writing / materialization,
+overwrite / collision, resize / crop / transcode, NFO modification, CLI / UI,
+persistence, Amane.
 
 ## 2. Roles
 
@@ -322,8 +329,9 @@ meta-path level; public API contains no deferred entry point).
 | connection-time resolved-address check / DNS rebinding | NOT ADDRESSED (see 8.5, 12.11) |
 | `acquire_images` API, role mapping, candidate ordering / fallback, role isolation | IMPLEMENTED IN SUBSTEP 4 (14.1-14.4, 14.10) |
 | failure mapping and ordering, artifact construction, cancellation, sensitive-data exclusion | IMPLEMENTED IN SUBSTEP 4 (14.5-14.6, 14.10-14.12) |
-| synthetic acquisition gate | PENDING IN LATER P4-C5 SUBSTEP |
-| final P4-C5 handoff | PENDING IN LATER P4-C5 SUBSTEP |
+| synthetic acquisition gate, full-package regression | IMPLEMENTED IN SUBSTEP 5 (15) |
+| final P4-C5 handoff | COMPLETED IN SUBSTEP 5 -- `docs/review/P4_C5_HANDOFF.md` (docs-only commit) |
+| P4-C5 closure | NOT CLOSED -- independent review REQUIRED |
 
 ## 12. Binary HTTP transport -- IMPLEMENTED IN SUBSTEP 2
 
@@ -783,4 +791,75 @@ catching `BaseException`, skipping the URL pre-check, mapping timeouts to
 `TRANSPORT_ERROR`, accepting tuple subclasses, and continuing a single role
 after its first success each makes `test_image_acquisition.py` fail.
 
-P4-C5: **NOT CLOSED**. Phase 4: **NOT CLOSED**.
+## 15. Synthetic image gate -- IMPLEMENTED IN SUBSTEP 5
+
+Test: `tests/unit/images/test_image_synthetic_gate.py`.
+
+* **400** synthetic `PublicationRecord`s (200 `SUCCESS`, 200 `PARTIAL`), built
+  with the real `build_organize_plan` and `NormalizedMetadata`, acquired through
+  a scripted in-memory `ImageHttpClient` (no network of any kind).
+* 13 scenario families: no candidates; poster first success; poster fallback
+  (1-3 failures then success, across `None` / `image/jpeg` / mixed-case with
+  parameters / `application/octet-stream` / `image/pjpeg` media types); poster
+  all-fail; fanart + thumb; extrafanart with 0..6 candidates mixed success /
+  failure; the role-isolation scenario; candidate-count limit (with a role
+  exactly at the limit); extrafanart success limit; total-result cap (exact
+  boundary accepted / exceeded -> stop); duplicate content across all roles;
+  secret sentinels; full mix.
+* Failure variants: HTTP 404 / 403 / 429 / 500, timeout, connection error,
+  redirect limit, unsafe redirect, oversized response, `image/png` and
+  `text/html` media types, malformed JPEG, oversized and zero dimensions, a
+  client raising an ordinary exception, unsafe IP URL, `*.localhost` URL,
+  relative (invalid) URL, secret-query URL timing out. **Every**
+  `ImageFailureKind` is produced at least once.
+* Expectations come from the case definitions, never from the production
+  result: exact request order, max one request in flight, failure tuples
+  `(role, candidate_index, kind, http_status)`, per-role artifact role / index /
+  bytes / width / height / size / SHA-256 (computed by the test from the fixture
+  bytes), extrafanart order and `total_bytes`.
+* Determinism: every case is re-run on a fresh event loop; results and request
+  order are equal. This proves the algorithm is deterministic for a fixed
+  response script -- it makes **no** claim about real network responses.
+* Sensitive data: with `?token=SUPERSECRET` URLs, `SECRET_RESPONSE_BODY` in
+  refused bodies and `SECRET_EXCEPTION_TEXT` in client exceptions, no result
+  `repr` / `str`, failure `repr`, or node of the result object graph contains a
+  secret or a URL, and the graph holds no exception, `ImageHttpResponse`,
+  `httpx.Response` / `Request` / `Headers` / `Cookies`, traceback, dict or list.
+* Filesystem: the whole gate runs under traps on `open`, `io.open`, `os`
+  (`open`, `stat`, `lstat`, `listdir`, `scandir`, `mkdir`, `makedirs`,
+  `remove`, `unlink`, `rename`, `replace`, `rmdir`, `getcwd`, `walk`),
+  `os.path` (`exists`, `isfile`, `isdir`, `getsize`, `realpath`), `pathlib.Path`
+  file methods and `shutil` copy / move / rmtree -- **0 hits** (a positive
+  control proves the traps fire).
+* Cancellation regression: a client raising `asyncio.CancelledError`
+  mid-acquisition propagates it, records no failure and requests no further
+  candidate; `KeyboardInterrupt` / `SystemExit` / `GeneratorExit` propagate.
+* Direct reproductions A-H (poster 404 fallback; public -> private redirect via
+  the real `HttpxImageClient` over `httpx.MockTransport` never requesting the
+  private target; valid JPEG declared `image/png`; malformed JPEG; total cap
+  stop; fanart failure isolation; secret token; cancellation identity).
+
+Mutation check: 8 of the 9 substep-4 acquisition mutants are also killed by the
+gate alone; the ninth (accepting `tuple` subclasses) cannot arise from valid
+records and is killed by `test_image_acquisition.py`.
+
+## 16. Package state and explicit non-scope (frozen)
+
+Implementation state: every section of this contract (1-15) is implemented;
+nothing is pending inside P4-C5. P4-C5 closure still requires independent
+review.
+
+P4-C5 produces **in-memory artifacts only** (`ImageAcquisitionResult`). It does
+**not** do, and no later substep of P4-C5 will do:
+
+* filesystem writing or image materialization (no file is created, and no role
+  is mapped to a path);
+* overwrite / collision decisions;
+* resize, crop, re-encode or transcode;
+* NFO modification (the NFO still carries no artwork reference);
+* CLI / UI;
+* persistence / caching;
+* Amane integration;
+* DNS resolution or DNS-rebinding defence (sections 8.5, 12.11).
+
+P4-C5: **NOT CLOSED**. Phase 4: **NOT CLOSED**. Independent review: **REQUIRED**.
