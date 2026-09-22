@@ -180,3 +180,44 @@ class TestOrganizePlanContract:
         library_root = r"C:\library"
         with pytest.raises(TargetEscapesLibraryRootError):
             _valid_plan(library_root=library_root, target_directory=PlannedPath(library_root))
+
+    # -- P4-C2-R1-01 model-layer regression --------------------------------
+    #
+    # Contract section 11 promises OrganizePlan.__post_init__ independently
+    # re-checks containment. A ``..``-escaping target must be caught here
+    # too, not only by the ``paths.is_contained_within`` unit tests --
+    # a hand-built plan (bypassing ``build_organize_plan`` entirely) is
+    # exactly the scenario this model-layer check exists for.
+
+    @pytest.mark.skipif(os.name != "nt", reason="Windows drive-root escape form")
+    def test_dotdot_escaping_target_media_path_raises_target_escapes_error(self):
+        with pytest.raises(TargetEscapesLibraryRootError):
+            _valid_plan(
+                target_media_path=PlannedPath(r"C:\library\..\outside\FC2-1234567.mp4")
+            )
+
+    @pytest.mark.skipif(os.name != "nt", reason="Windows drive-root escape form")
+    def test_dotdot_escaping_poster_path_raises_target_escapes_error(self):
+        with pytest.raises(TargetEscapesLibraryRootError):
+            _valid_plan(poster_path=PlannedPath(r"C:\library\..\outside\poster.jpg"))
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX escape form")
+    def test_posix_dotdot_escaping_target_media_path_raises_target_escapes_error(self):
+        with pytest.raises(TargetEscapesLibraryRootError):
+            _valid_plan(
+                source_path="/downloads/a.mp4",
+                library_root="/library",
+                target_directory=PlannedPath("/library/FC2-1234567"),
+                target_media_path=PlannedPath("/library/../outside/FC2-1234567.mp4"),
+                nfo_path=PlannedPath("/library/FC2-1234567/FC2-1234567.nfo"),
+                poster_path=PlannedPath("/library/FC2-1234567/poster.jpg"),
+                fanart_path=PlannedPath("/library/FC2-1234567/fanart.jpg"),
+                thumb_path=PlannedPath("/library/FC2-1234567/thumb.jpg"),
+                extrafanart_directory=PlannedPath("/library/FC2-1234567/extrafanart"),
+                operations=(
+                    PlannedOperation(
+                        kind=PlannedOperationKind.CREATE_DIRECTORY,
+                        target=PlannedPath("/library/FC2-1234567"),
+                    ),
+                ),
+            )

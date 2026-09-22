@@ -101,25 +101,50 @@ def is_contained_within(candidate: str, root: str) -> bool:
     back on Windows). ``candidate == root`` is *not* considered contained (a
     target must be strictly inside the root, never the root itself).
 
-    Uses ``pathlib.Path(...).parts`` rather than
-    ``os.path.normpath(...).split(os.sep)`` (P4-C2-GOV-02): a bare drive
-    root (``C:\\``) or a UNC share root (``\\\\server\\share\\``) normalizes
-    to a string *ending* in the separator, so a naive ``str.split(os.sep)``
-    produces a spurious trailing empty segment that inflates the root's
-    part count and makes an actual child (``C:\\FC2-1234567``) wrongly
-    compare as "not contained" (``len(candidate_parts) <= len(root_parts)``
-    trips even though the candidate genuinely nests under the root).
-    ``pathlib`` collapses a drive-and-root or a UNC-share-and-root into a
-    single anchor part (``('C:\\\\',)`` / ``('\\\\\\\\server\\\\share\\\\',)``),
-    which has no such artifact and still performs zero filesystem access
-    (``PurePath``/``Path`` construction and ``.parts`` are purely lexical --
-    no ``stat``/``exists``/``resolve``). This also naturally rejects a
-    same-string-prefix sibling (``C:\\library2`` is not "under"
-    ``C:\\library``) since comparison is segment-based, never
+    **Two lexical hazards, both handled (P4-C2-GOV-02, then P4-C2-R1-01):**
+
+    1. A bare drive root (``C:\\``) or a UNC share root (``\\\\server\\share\\``)
+       normalizes to a string *ending* in the separator. A naive
+       ``str.split(os.sep)`` on that string produces a spurious trailing
+       empty segment that inflates the root's part count, making an actual
+       child (``C:\\FC2-1234567``) wrongly compare as "not contained"
+       (GOV-02). Fixed by using ``pathlib.Path(...).parts``, which collapses
+       a drive-and-root or a UNC-share-and-root into a single anchor part
+       (``('C:\\\\',)`` / ``('\\\\\\\\server\\\\share\\\\',)``) with no such
+       artifact.
+    2. ``pathlib.PurePath.parts`` alone does **not** collapse ``.``/``..``
+       segments -- it is a pure string-splitting operation. Left
+       unaddressed, ``is_contained_within(r"C:\\library\\..\\outside\\x",
+       r"C:\\library")`` would wrongly return ``True``: the raw segments
+       ``('C:\\\\', 'library', '..', 'outside', 'x')`` happen to start with
+       the root's segments, even though the path's actual *lexical meaning*
+       (what it would resolve to) is ``C:\\outside\\x`` -- outside the root
+       entirely (P4-C2-R1-01, the GOV-02 fix's own regression). Fixed by
+       running ``os.path.normpath`` on both ``candidate`` and ``root``
+       *before* splitting into parts: ``normpath`` collapses ``.``/``..``
+       lexically (still zero filesystem access -- pure string
+       manipulation, no ``stat``/``exists``/``resolve``) while correctly
+       clamping a leading ``..`` at the drive/UNC-share anchor exactly the
+       way real Windows path resolution does (verified: ``normpath`` on
+       ``\\\\server\\share\\..\\other\\x`` yields
+       ``\\\\server\\share\\other\\x`` -- clamped to stay inside the share,
+       matching the drive-root precedent already established for this
+       project by P4-C1-R2-01/R3's ``GetFullPathNameW`` findings -- never
+       ``\\\\server\\other\\x``, which would be a different share
+       entirely). Composing both fixes (``normpath`` first, then
+       ``Path(...).parts`` on the *normalized* string) inherits neither
+       hazard: ``normpath`` never strips a bare root's own trailing
+       separator down to something ``Path.parts`` would mis-segment (a bare
+       ``C:\\`` normalizes to ``C:\\``, unchanged), and ``Path.parts`` no
+       longer has to deal with un-collapsed ``.``/``..`` segments because
+       ``normpath`` already removed them.
+
+    This still rejects a same-string-prefix sibling (``C:\\library2`` is not
+    "under" ``C:\\library``) since comparison is segment-based, never
     ``str.startswith``.
     """
-    candidate_parts = Path(candidate).parts
-    root_parts = Path(root).parts
+    candidate_parts = Path(os.path.normpath(candidate)).parts
+    root_parts = Path(os.path.normpath(root)).parts
 
     if len(candidate_parts) <= len(root_parts):
         return False

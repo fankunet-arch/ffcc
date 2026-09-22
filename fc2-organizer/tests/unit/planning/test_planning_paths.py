@@ -200,6 +200,106 @@ class TestIsContainedWithin:
         # because one string starts with the other.
         assert not is_contained_within(r"C:\library2\FC2-1234567", r"C:\library\\")
 
+    # -- P4-C2-R1-01 regression coverage -----------------------------------
+    #
+    # The GOV-02 fix switched to ``pathlib.Path(...).parts``, which splits
+    # segments but does **not** collapse ``.``/``..``. A candidate whose raw
+    # segments happen to start with the root's segments could still
+    # *lexically resolve* to somewhere outside the root once ``..`` is
+    # accounted for. These tests prove that hazard is now closed for a
+    # normal (non-anchor) root, a bare drive root, and a UNC share root.
+
+    def test_dotdot_escaping_normal_root_is_not_contained(self):
+        assert not is_contained_within(r"C:\library\..\outside\file.mp4", r"C:\library")
+
+    def test_dotdot_dotdot_escaping_normal_root_is_not_contained(self):
+        assert not is_contained_within(
+            r"C:\library\a\..\..\outside\file.mp4", r"C:\library"
+        )
+
+    def test_dot_segment_does_not_escape_normal_root(self):
+        # A "." segment never changes which directory a path names, so this
+        # must remain contained -- proves the fix doesn't overcorrect into
+        # rejecting harmless "." segments.
+        assert is_contained_within(r"C:\library\.\movie\file.mp4", r"C:\library")
+
+    @pytest.mark.skipif(os.name != "nt", reason="drive-root path forms are Windows-native")
+    def test_dotdot_escaping_subdirectory_still_contained_under_drive_root(self):
+        # "C:\library\..\FC2-1234567" lexically resolves to
+        # "C:\FC2-1234567" -- it escapes "library" but not the *drive*
+        # root, so relative to "C:\" it is correctly still contained. This
+        # is the precise case P4-C2-R1-01 must get right in both
+        # directions: correctly reject an escape from the relevant root
+        # (covered above/below) while not overcorrecting into rejecting a
+        # path that genuinely still resolves inside a *wider* root.
+        assert is_contained_within(r"C:\library\..\FC2-1234567", "C:\\")
+
+    @pytest.mark.skipif(os.name != "nt", reason="drive-root path forms are Windows-native")
+    def test_dotdot_escaping_bare_drive_root_relative_to_its_own_child_is_not_contained(self):
+        # Relative to the narrower root "C:\library" specifically (not the
+        # bare drive), the same escape must be rejected.
+        assert not is_contained_within(r"C:\library\..\FC2-1234567", r"C:\library")
+
+    @pytest.mark.skipif(os.name != "nt", reason="drive-root path forms are Windows-native")
+    def test_drive_root_containment_still_correct_after_dotdot_fix(self):
+        # GOV-02's own regressions, reverified after the R1-01 fix.
+        assert is_contained_within(r"C:\FC2-1234567", r"C:\\")
+        assert not is_contained_within(r"D:\FC2-1234567", r"C:\\")
+
+    @pytest.mark.skipif(os.name != "nt", reason="UNC path forms are Windows-native")
+    def test_dotdot_within_unc_share_is_still_contained(self):
+        assert is_contained_within(r"\\server\share\a\..\FC2-1234567", r"\\server\share\\")
+
+    @pytest.mark.skipif(os.name != "nt", reason="UNC path forms are Windows-native")
+    def test_dotdot_at_unc_share_boundary_stays_clamped_inside_share(self):
+        # Windows lexically clamps ".." at a UNC share boundary exactly as
+        # it clamps at a drive root (verified directly via os.path.normpath
+        # -- "\\server\share\..\other\x" normalizes to
+        # "\\server\share\other\x", *not* "\\server\other\x"; this mirrors
+        # the drive-root ".." clamping already established for this project
+        # by the P4-C1-R2-01/R3 GetFullPathNameW findings). The lexically
+        # correct verdict is therefore "still contained" -- not a naive
+        # "different share" rejection, since the path never actually names
+        # a different share once its true lexical meaning is resolved.
+        assert is_contained_within(r"\\server\share\..\other\FC2-1234567", r"\\server\share\\")
+
+    @pytest.mark.skipif(os.name != "nt", reason="UNC path forms are Windows-native")
+    def test_different_unc_share_from_the_start_is_still_not_contained(self):
+        # Unlike the ".." case above, a candidate that is a genuinely
+        # different share *from the start* (never reached via ".." escape)
+        # must remain rejected -- this is GOV-02's own regression,
+        # reverified unchanged after the R1-01 fix.
+        assert not is_contained_within(r"\\server\other\FC2-1234567", r"\\server\share\\")
+
+    def test_dotdot_escaping_posix_root_is_not_contained(self):
+        if os.name == "nt":
+            pytest.skip("exercised for real only on a POSIX host; see POSIX section below")
+        assert not is_contained_within("/library/../outside/file", "/library")
+
+
+class TestIsContainedWithinPosixDotDot:
+    """POSIX-specific ``.``/``..`` escape coverage (P4-C2-R1-01), gated to
+    only run on a genuine POSIX host -- a POSIX-style forward-slash string
+    is not meaningful input on Windows in the way this test needs (it would
+    still be parsed, but not testing the platform semantics the brief asks
+    for; contract section 10)."""
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX absolute path forms")
+    def test_direct_child_is_contained(self):
+        assert is_contained_within("/library/movie/file.mp4", "/library")
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX absolute path forms")
+    def test_dotdot_escape_is_not_contained(self):
+        assert not is_contained_within("/library/../outside/file", "/library")
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX absolute path forms")
+    def test_dotdot_dotdot_escape_is_not_contained(self):
+        assert not is_contained_within("/library/a/../../outside/file", "/library")
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX absolute path forms")
+    def test_dot_segment_does_not_escape(self):
+        assert is_contained_within("/library/./movie/file", "/library")
+
 
 class TestIsFullyQualifiedAbsoluteRoot:
     """P4-C2-GOV-03: ``library_root`` must be an unambiguous, fully-qualified
