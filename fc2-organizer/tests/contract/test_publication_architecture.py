@@ -171,4 +171,4 @@ def test_amane_is_not_actually_installed_in_this_test_environment():
 def test_organizer_package_now_has_exactly_discovery_planning_and_publication():
     """P4-C3 scope guard: no fourth package (renderer, executor, ...) was started early."""
     top_level_dirs = {p.name for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"}
-    assert top_level_dirs == {"discovery", "planning", "publication", "nfo"}  # P4-C4 added nfo
+    assert top_level_dirs == {"discovery", "planning", "publication", "nfo", "images"}  # P4-C4 added nfo
