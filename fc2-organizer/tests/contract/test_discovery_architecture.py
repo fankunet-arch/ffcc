@@ -164,6 +164,12 @@ def test_amane_is_not_actually_installed_in_this_test_environment():
 
 
 def test_organizer_package_has_no_other_stray_top_level_modules_yet():
-    """P4-C1 scope guard: the only subpackage under fc2_organizer is discovery."""
+    """P4-C1 scope guard: originally pinned "only discovery exists yet"
+    (its own docstring anticipated a next package). P4-C2 added
+    ``fc2_organizer.planning`` as a sibling, read-only-consuming package
+    (never modifying discovery); this assertion is updated accordingly --
+    see ``tests/contract/test_planning_architecture.py`` for the equivalent
+    P4-C2-side guard and ``docs/review/P4_C2_HANDOFF.md`` for why this one
+    line in an otherwise-frozen P4-C1 file was touched."""
     top_level_dirs = {p.name for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"}
-    assert top_level_dirs == {"discovery"}
+    assert top_level_dirs == {"discovery", "planning"}
