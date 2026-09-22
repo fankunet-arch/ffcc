@@ -42,15 +42,34 @@ __all__ = ["discover_media"]
 
 
 def _coerce_root(root: object) -> Path:
+    """Coerce ``root`` to an **absolute** ``Path`` (P4-C1-R-01).
+
+    ``os.path.abspath`` -- not ``Path.resolve()`` -- is used deliberately:
+    ``abspath`` only joins a relative path onto the current working
+    directory and normalizes ``.``/``..`` segments; it never resolves a
+    symlink. ``resolve()`` would follow a symlinked root (or a symlinked
+    intermediate component) and silently change *what* gets scanned, which
+    would be a real semantic change to the caller-supplied root, not a pure
+    absolutization. The existing "never follow a symlink/junction found
+    *during traversal*" policy (section 11) is about entries discovered
+    below the root, and is untouched by this.
+
+    Every path built during the walk (``DiscoveryResult.root``, every
+    ``DiscoveredMediaItem.source_path``) is derived from this absolute
+    ``Path`` via ``os.scandir``/``os.DirEntry.path``, so absolutizing here
+    once is sufficient for the whole traversal.
+    """
     if isinstance(root, Path):
-        return root
-    if isinstance(root, str):
+        candidate = root
+    elif isinstance(root, str):
         if not root:
             raise DiscoveryInputError("discover_media root must not be an empty string")
-        return Path(root)
-    if isinstance(root, os.PathLike):
-        return Path(os.fspath(root))
-    raise DiscoveryInputError(f"discover_media root must be a str or os.PathLike, got {type(root).__name__}")
+        candidate = Path(root)
+    elif isinstance(root, os.PathLike):
+        candidate = Path(os.fspath(root))
+    else:
+        raise DiscoveryInputError(f"discover_media root must be a str or os.PathLike, got {type(root).__name__}")
+    return Path(os.path.abspath(candidate))
 
 
 def _check_root(root_path: Path) -> None:

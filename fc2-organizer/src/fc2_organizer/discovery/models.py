@@ -10,6 +10,7 @@ non-serializable value.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import Enum
 
@@ -62,6 +63,12 @@ class DiscoveredMediaItem:
     Identity within a ``DiscoveryResult`` is ``(source_path, index)`` --
     never a parsed FC2 number (section 7.4): the same number appearing under
     two different directories is two independent items.
+
+    ``source_path`` must be an absolute path (P4-C1-R-01): a relative
+    ``source_path`` cannot be safely reopened by a caller that has since
+    changed its working directory, and silently accepting one here would
+    let a scanner regression (or a hand-built instance) reintroduce exactly
+    the bug this invariant closes.
     """
 
     index: int
@@ -73,6 +80,10 @@ class DiscoveredMediaItem:
     def __post_init__(self) -> None:
         _require_non_negative_int(self.index, "DiscoveredMediaItem.index")
         _require_str(self.source_path, "DiscoveredMediaItem.source_path")
+        if not os.path.isabs(self.source_path):
+            raise DiscoveryContractError(
+                f"DiscoveredMediaItem.source_path must be an absolute path, got {self.source_path!r}"
+            )
         _require_str(self.relative_path, "DiscoveredMediaItem.relative_path")
         _require_str(self.extension, "DiscoveredMediaItem.extension")
         if not self.extension.startswith("."):
