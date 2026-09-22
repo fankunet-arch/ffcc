@@ -1022,14 +1022,103 @@ P4-C1-R-05  LOW     -- CARRIED / non-blocking
 
 None closed, upgraded, or removed by R3.
 
-## R3.16 Independent R3 Closure Review
+## R3.16 Independent R3 Closure Review (original round)
 
 ```text
 REQUIRED
 ```
 
-## R3.17 P4-C1
+## R3.17 P4-C1 (original round)
 
 ```text
 NOT CLOSED
+```
+
+---
+
+# Final Closure — P4-C1
+
+The sections above (original P4-C1, R1, R2, R3) are left unmodified for
+history. This section is a docs-only governance record of the final
+independent closure decision; it introduces no code or test change and
+freezes no new technical claim beyond what R1/R2/R3 already established.
+
+```text
+Phase:                       4
+Package:                     P4-C1 Recursive Media Discovery
+Status:                      CLOSED
+Final Level:                 Level 1 PASS
+Final Reviewed Code Head:    c4f5a415d8fd8d0d56ff4ee227e7b87a01fbe79f
+Previous Docs Head:          b90a95eda22a2ef12406c623bca7365602088e99
+```
+
+## Final findings disposition
+
+```text
+P4-C1-R-01     CLOSED
+P4-C1-R1-01    CLOSED
+P4-C1-R2-01    CLOSED
+
+P4-C1-R-02     CARRIED / non-blocking
+P4-C1-R-03     CARRIED / non-blocking
+P4-C1-R-04     CARRIED / non-blocking
+P4-C1-R-05     CARRIED / non-blocking
+```
+
+**All blocking P4-C1 findings are closed. Remaining findings are
+explicitly carried as non-blocking** -- they were not fixed, not
+downgraded, and not reopened by this closure; see R1.11/R2.16/R3.15 above
+for what each concerns and why none was addressed in-round.
+
+## Independent closure evidence
+
+Two independent R3 closure reviews were obtained, both **PASS**:
+
+* A Windows-side independent review reran the suite directly on a
+  Windows host and reported real numbers:
+
+  ```text
+  Targeted: 119 passed / 4 skipped
+  Full suite: 2480 passed / 4 skipped
+  ```
+
+  and independently re-verified, for real: an ordinary relative root, a
+  Windows rooted-relative root, a Windows same-drive drive-relative root,
+  a Windows cross-drive drive-relative root (against a genuine second
+  drive letter, cross-checked with an independent Win32 API oracle), and
+  a Windows junction + `..` (native path-resolution match, not the POSIX
+  symlink outcome).
+
+* A second, independent review ran on a POSIX environment and
+  independently verified the POSIX symlink + `..` case directly (real
+  `os.symlink`, not simulated) -- confirming `discover_media` preserves
+  the caller's actual filesystem-resolved target through a symlink
+  component followed by `..`, the one case the Windows-side review could
+  not itself execute (no `SeCreateSymbolicLinkPrivilege` on that host; see
+  R1/R2/R3 "Platform-Specific Tests Not Run").
+
+Together these two independent reviews cover all three blocking findings'
+closure evidence: P4-C1-R-01 and P4-C1-R2-01 on the Windows side, and
+P4-C1-R1-01 on both the Windows junction side (native-resolution match)
+and the POSIX symlink side (component-wise identity preserved) -- the two
+platform-specific halves of the same underlying contract
+("absolutization must not change what the caller's path physically
+names").
+
+## Scope of this closure
+
+This closes **P4-C1** (recursive media discovery) only. It does not close
+Phase 4 as a whole, and does not authorize starting any later Phase 4
+package (P4-C2, NFO, images, organizer plan, filesystem executor, or any
+other later package) -- those each require their own frozen contract and
+their own review cycle, per the project's phase-gate governance.
+
+```text
+Phase 4: NOT CLOSED
+```
+
+## Final status
+
+```text
+P4-C1: CLOSED
 ```
