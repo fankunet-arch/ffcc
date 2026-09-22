@@ -11,15 +11,27 @@ These tests exercise a genuinely relative root by changing the process
 working directory to a temporary parent and passing a bare relative
 directory name, exactly like the reviewer's reproduction
 (``mkdir mydir; create mydir/a.mp4; discover_media("mydir")``).
+
+R2 note (P4-C1-R1-01): the R1 fix above used ``os.path.abspath``, which
+lexically collapses a ``..`` segment *before* any filesystem access --
+wrong when a symlink/junction sits before the ``..`` (see
+``test_discovery_symlink_dotdot_identity.py`` for the real-filesystem
+identity proof). The three ``test_coerce_root_*`` tests below are the
+platform-independent, no-filesystem-required regression guard for that
+specific defect: they assert ``_coerce_root`` never folds ``..`` away
+itself, regardless of whether a real symlink/junction is available on the
+host running the tests.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
 from fc2_organizer.discovery import DiscoveredMediaItem, DiscoveryContractError, discover_media
+from fc2_organizer.discovery import scanner
 
 
 @pytest.fixture
@@ -84,13 +96,57 @@ def test_relative_root_with_dotdot_segment_yields_absolute_source_path(tmp_path,
     assert os.path.isfile(item.source_path)
 
 
-def test_relative_root_does_not_change_symlink_or_junction_semantics(relative_root_tree):
-    """R1 must not touch symlink/junction policy while fixing absolutization
-    -- a plain relative-root scan with no symlinks present must still yield
-    zero issues, exactly as before."""
+def test_relative_root_with_no_symlinks_present_yields_zero_issues(relative_root_tree):
+    """Absolutization must not itself manufacture spurious DiscoveryIssues
+    on an ordinary tree that contains no symlink/junction at all. This does
+    **not** exercise symlink/junction traversal policy (that requires an
+    actual symlink/junction on disk -- see
+    ``test_discovery_symlink_dotdot_identity.py`` for that, per the R2
+    review note that a same-named R1 test overclaimed what it tested)."""
     result = discover_media(relative_root_tree)
 
     assert result.issues == ()
+
+
+def test_coerce_root_does_not_lexically_collapse_dotdot_in_relative_root(monkeypatch):
+    """Core P4-C1-R1-01 regression guard, independent of any real
+    filesystem object: ``_coerce_root`` must only *prefix* the current
+    working directory onto a relative root -- it must never fold a ``..``
+    segment away itself (that is exactly what ``os.path.abspath`` did in
+    R1, and exactly what let a symlink/junction target get silently
+    substituted). A ``.`` segment may still be dropped by plain ``pathlib``
+    joining -- that is always lexically safe (see the next test)."""
+    monkeypatch.setattr(scanner.os, "getcwd", lambda: str(Path("C:/base") if os.name == "nt" else Path("/base")))
+
+    result = scanner._coerce_root(os.path.join("link", "..", "mydir"))
+
+    expected = Path("C:/base" if os.name == "nt" else "/base") / "link" / ".." / "mydir"
+    assert result == expected
+    assert ".." in result.parts
+
+
+def test_coerce_root_does_not_lexically_collapse_dotdot_in_absolute_root(monkeypatch):
+    """An already-absolute root must be returned completely untouched --
+    including any ``..`` segment it contains -- never run through
+    ``abspath``/``normpath``/``resolve`` (all of which would silently fold
+    it)."""
+    base = Path("C:/base") if os.name == "nt" else Path("/base")
+    absolute_with_dotdot = base / "link" / ".." / "mydir"
+
+    result = scanner._coerce_root(str(absolute_with_dotdot))
+
+    assert result == absolute_with_dotdot
+    assert ".." in result.parts
+
+
+def test_coerce_root_still_absolutizes_a_plain_relative_root(monkeypatch):
+    fake_cwd = Path("C:/base") if os.name == "nt" else Path("/base")
+    monkeypatch.setattr(scanner.os, "getcwd", lambda: str(fake_cwd))
+
+    result = scanner._coerce_root("mydir")
+
+    assert result == fake_cwd / "mydir"
+    assert result.is_absolute()
 
 
 def test_discovered_media_item_rejects_relative_source_path():

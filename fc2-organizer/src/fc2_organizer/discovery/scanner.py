@@ -42,22 +42,50 @@ __all__ = ["discover_media"]
 
 
 def _coerce_root(root: object) -> Path:
-    """Coerce ``root`` to an **absolute** ``Path`` (P4-C1-R-01).
+    """Coerce ``root`` to an **absolute, lexically-unmodified** ``Path``
+    (P4-C1-R-01, tightened by P4-C1-R1-01).
 
-    ``os.path.abspath`` -- not ``Path.resolve()`` -- is used deliberately:
-    ``abspath`` only joins a relative path onto the current working
-    directory and normalizes ``.``/``..`` segments; it never resolves a
-    symlink. ``resolve()`` would follow a symlinked root (or a symlinked
-    intermediate component) and silently change *what* gets scanned, which
-    would be a real semantic change to the caller-supplied root, not a pure
-    absolutization. The existing "never follow a symlink/junction found
-    *during traversal*" policy (section 11) is about entries discovered
-    below the root, and is untouched by this.
+    This must produce an *absolute OS-native path*, not a *canonicalized /
+    normalized / resolved physical path* -- those are not the same thing
+    when a relative segment (``.``/``..``) sits on either side of a
+    symlink or a Windows junction/reparse point.
+
+    ``os.path.abspath`` (P4-C1-R-01's original fix) is **not used**: despite
+    its name, ``abspath`` first lexically normalizes the whole path
+    (collapsing ``a/../b`` to ``b``) *before* any filesystem lookup ever
+    happens. For an ordinary directory that lexical collapse is harmless.
+    For ``link/../mydir`` where ``link`` is a symlink or junction, it is
+    wrong: the real filesystem resolves ``..`` *after* traversing into
+    wherever ``link`` actually points, which is not necessarily anywhere
+    near ``link``'s own parent directory. Lexically collapsing first (as
+    ``abspath``/``normpath`` do) silently substitutes a different physical
+    directory for the one the caller's path string actually names --
+    exactly the P4-C1-R1-01 regression the independent reviewer reproduced.
+    ``Path.resolve()``/``os.path.realpath`` are equally wrong here for the
+    same reason, plus they additionally resolve the root itself through any
+    symlink, which P4-C1-R-01's original fix already correctly rejected.
+
+    The fix: absolute-ize only by prefixing the current working directory
+    onto a *relative* root -- never rewriting the segments that were
+    already there. ``pathlib``'s ``/`` join (unlike ``os.path.normpath``/
+    ``abspath``) never collapses ``..`` and only drops a redundant ``.``
+    segment, which is always lexically safe (a bare ``.`` never changes
+    which directory a path names, with or without symlinks in the way).
+    An already-absolute root is returned completely untouched, including
+    any ``..``/symlink-sensitive segments it contains.
 
     Every path built during the walk (``DiscoveryResult.root``, every
-    ``DiscoveredMediaItem.source_path``) is derived from this absolute
-    ``Path`` via ``os.scandir``/``os.DirEntry.path``, so absolutizing here
-    once is sufficient for the whole traversal.
+    ``DiscoveredMediaItem.source_path``) is derived from this ``Path`` via
+    plain ``os.scandir``/``os.DirEntry.path`` string concatenation (never
+    re-normalized), so any ``..``/symlink segment present here is carried
+    through unresolved into every result path. Every real filesystem call
+    made along the way (``os.stat``, ``os.scandir``) still receives that
+    same literal string and resolves it exactly the way the OS resolves any
+    path -- component by component, following a symlink/junction/reparse
+    point exactly where the caller's original path said to -- so scan
+    *behavior* (what gets discovered) is governed by the OS's own path
+    resolution, never by an early, symlink-blind, in-process string
+    rewrite.
     """
     if isinstance(root, Path):
         candidate = root
@@ -69,7 +97,10 @@ def _coerce_root(root: object) -> Path:
         candidate = Path(os.fspath(root))
     else:
         raise DiscoveryInputError(f"discover_media root must be a str or os.PathLike, got {type(root).__name__}")
-    return Path(os.path.abspath(candidate))
+
+    if not candidate.is_absolute():
+        candidate = Path(os.getcwd()) / candidate
+    return candidate
 
 
 def _check_root(root_path: Path) -> None:
