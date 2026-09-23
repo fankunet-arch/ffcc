@@ -1,10 +1,17 @@
 # FC2 Organizer -- Phase 4 / P4-C6 Atomic Artifact Materialization Contract
 
-Status: **substep 1 frozen candidate** (atomic single-artifact primitive). Later
-substeps are marked **PENDING IN LATER P4-C6 SUBSTEP**. Independent review REQUIRED.
-Package: `fc2_organizer.materialization` (`__init__.py`, `errors.py`, `models.py`, `atomic.py`).
+Status: **substeps 1-2 frozen candidate** (atomic single-artifact primitive; artifact
+mapping + single-artifact materializer). Anything still open is marked **PENDING IN
+LATER P4-C6 SUBSTEP** (section 25). Independent review REQUIRED.
+Package: `fc2_organizer.materialization` (`__init__.py`, `errors.py`, `models.py`, `atomic.py`,
+`artifacts.py`, `mapping.py`).
 Frozen Base: `e44790f57004825957f2212921171667e7c576cf`
+Substep 1 Head: `b088db8acb2c4ae47037d58546000c41543b73b1`
 Branch: `claude/phase4-c6-atomic-materialization`
+
+Sections 1-15 were frozen in substep 1 and are **unchanged in substep 2** except
+for the additive notes marked *(substep 2)*. Sections 16-24 are **IMPLEMENTED IN
+SUBSTEP 2**.
 
 ## 1. Scope
 
@@ -26,6 +33,14 @@ Substep 1 does **not**: execute or read an `OrganizePlan`, move media, create
 any directory (target directory or `extrafanart/`), map NFO / image roles to
 paths, materialize in batch, move across volumes, preflight writability, or
 orchestrate operations.
+
+**Substep 2 delivers only** (sections 16-24): the artifact kinds and request
+model, the pure `build_artifact_requests` mapping (plan + rendered NFO `str` +
+acquired images -> ordered requests), the frozen NFO UTF-8 rule, image byte
+identity, deterministic extrafanart naming, and the single-artifact wrapper
+`materialize_artifact(request)`. It still does not create directories, move
+media, read or execute `OrganizePlan.operations`, orchestrate several
+artifacts, or roll anything back.
 
 ## 2. Separation from P4-C7 (frozen)
 
@@ -52,8 +67,9 @@ Synchronous. Exactly two positional parameters; there is **no** `overwrite`,
 The failure-injection seam (`atomic._FS`) is private and not exported.
 
 The layer accepts only exact bytes. It does not accept `PublicationRecord`,
-`OrganizePlan`, `AcquiredImage` or NFO `str`; mapping those to bytes/paths is
-**PENDING IN LATER P4-C6 SUBSTEP**.
+`OrganizePlan`, `AcquiredImage` or NFO `str`. *(substep 2)* Mapping those to
+paths/bytes is the separate `mapping` module (section 17); the primitive itself
+is unchanged.
 
 ## 4. Input boundary (frozen)
 
@@ -179,7 +195,13 @@ MaterializationError(Exception)
 +-- ArtifactWriteError                                            .stage: ArtifactWriteStage (WRITE|FLUSH|CLOSE), .errno
 +-- ArtifactPublishError                                          .errno
 +-- ArtifactCleanupError                                          .target_published, .primary, .errno
++-- ArtifactMappingError(MaterializationError, ValueError)        .reason: MappingRejectionReason   (substep 2)
 ```
+
+*(substep 2)* `MappingRejectionReason`: `NFO_EMPTY`, `NFO_NOT_UTF8_ENCODABLE`,
+`PLAN_PATH_INVALID`, `IMAGE_INVALID`, `EXTRAFANART_LIMIT`, `DUPLICATE_TARGET`.
+`MaterializationModelError` also covers an invalid `ArtifactWriteRequest`;
+`MaterializationInputError` also covers a wrong-type mapping / wrapper input.
 
 No failure escapes as a bare `OSError` / `ValueError`. Messages are fixed
 wording: no target path, no temp path / token, no payload, no `OSError`
@@ -225,6 +247,8 @@ because the guarantee is the publish primitive's (section 7).
 * No reverse dependency: nothing else under `src` imports it;
   `fc2_organizer/__init__.py` does not eagerly import it.
 * No `executor.py`, `planner.py`, `move.py`, `orchestrator.py`.
+* *(substep 2)* The stdlib-only rule above applies to every module **except
+  `mapping.py`** (section 23). `artifacts.py` is stdlib / own-package only.
 * Top-level `fc2_organizer` subpackages are now
   `{"discovery", "planning", "publication", "nfo", "images", "materialization"}`;
   the four existing package-set scope guards were updated by one line each.
@@ -253,11 +277,176 @@ private seam on NTFS, which supports hard links). Tests that create real
 symlinks skip on hosts without symlink privilege (Windows without Developer
 Mode); junctions and the `lstat` simulation cover that host.
 
-## 16. PENDING IN LATER P4-C6 SUBSTEP
+## 16. Artifact kinds and request model (IMPLEMENTED IN SUBSTEP 2)
 
-* artifact mapping (plan role -> path -> bytes);
-* NFO materialization (`render_movie_nfo` text -> UTF-8 bytes -> `nfo_path`);
-* image materialization (`AcquiredImage` -> `poster` / `fanart` / `thumb`);
-* extrafanart materialization (into an existing `extrafanart/`; directory
-  creation remains P4-C7);
+```python
+class ArtifactKind(Enum):
+    NFO = "nfo"; POSTER = "poster"; FANART = "fanart"; THUMB = "thumb"; EXTRAFANART = "extrafanart"
+
+@dataclass(frozen=True, slots=True)
+class ArtifactWriteRequest:
+    kind: ArtifactKind
+    target_path: str          # non-empty exact str
+    content: bytes            # exact bytes, excluded from repr
+    ordinal: int | None = None  # exact int >= 1 iff kind is EXTRAFANART, else None
+```
+
+Exact-type validated (`MaterializationModelError`; `bool` is not an `int`,
+subclasses never pass). It stores **no** `PublicationRecord`, `AcquiredImage`,
+`OrganizePlan`, URL, HTTP data or exception -- only a path and bytes. Both are
+exported from `fc2_organizer.materialization`.
+
+## 17. Pure mapping API (IMPLEMENTED IN SUBSTEP 2)
+
+```python
+from fc2_organizer.materialization.mapping import build_artifact_requests
+
+build_artifact_requests(
+    plan: OrganizePlan,               # exact type
+    nfo_text: str,                    # exact type; already rendered (P4-C4)
+    images: ImageAcquisitionResult,   # exact type; already acquired (P4-C5)
+) -> tuple[ArtifactWriteRequest, ...]
+```
+
+* Input identity first, in this order: `type(plan) is OrganizePlan`,
+  `type(nfo_text) is str`, `type(images) is ImageAcquisitionResult`, else
+  `MaterializationInputError` -- **before any attribute or method** of a
+  rejected object is touched (a subclass's hooks never run).
+* Pure and deterministic: **zero filesystem access** (only the lexical
+  `os.path.join`), no clock, randomness, network, NFO rendering or image
+  acquisition. Identical inputs give an equal tuple.
+* Never reads `OrganizePlan.operations` (behaviourally and AST-enforced),
+  never re-parses / re-validates `plan.canonical_number`.
+* Each plan path read must be an exact `PlannedPath` whose `absolute_path` is a
+  non-empty exact `str` (`PLAN_PATH_INVALID` otherwise, e.g. a forged plan).
+* All request target paths must be distinct (case-insensitively on Windows);
+  otherwise `DUPLICATE_TARGET` (defends against a forged plan; a real P4-C2
+  plan never collides).
+
+## 18. Mapping order (frozen)
+
+```text
+NFO                                   always, exactly one
+POSTER                                iff images.poster is not None
+FANART                                iff images.fanart is not None
+THUMB                                 iff images.thumb  is not None
+EXTRAFANART x N                       images.extrafanart, in tuple order
+```
+
+The extrafanart order is the `ImageAcquisitionResult.extrafanart` tuple order
+(itself the P4-C5 candidate order), never re-sorted by `candidate_index`, size or hash.
+
+## 19. NFO -> bytes (frozen)
+
+`nfo_text.encode("utf-8", errors="strict")` -- exactly that, nothing else:
+no BOM is added, newlines are not changed (`\r\n` stays `\r\n`), nothing is
+stripped, Unicode is not normalized, the XML is not re-parsed or rewritten, and
+a caller-supplied leading U+FEFF is encoded as-is (not removed). Target:
+`plan.nfo_path`. An empty `str` -> `ArtifactMappingError(NFO_EMPTY)` (an empty
+`.nfo` is never a valid P4-C4 render); a lone surrogate ->
+`NFO_NOT_UTF8_ENCODABLE`, raised with no chained `UnicodeEncodeError`.
+
+## 20. Image mapping (frozen)
+
+| `ImageAcquisitionResult` field | required role | kind | target |
+|---|---|---|---|
+| `poster` | `ImageRole.POSTER` | `POSTER` | `plan.poster_path` |
+| `fanart` | `ImageRole.FANART` | `FANART` | `plan.fanart_path` |
+| `thumb` | `ImageRole.THUMB` | `THUMB` | `plan.thumb_path` |
+| each of `extrafanart` | `ImageRole.EXTRAFANART` | `EXTRAFANART` | section 21 |
+
+* A missing (`None`) image produces **no request and no failure**. There is
+  **no cross-role fallback** (e.g. fanart never fills an absent poster).
+* `request.content` **is** `AcquiredImage.content` (same object): no
+  re-encode, resize, crop, transcode, copy or re-validation.
+* Identical bytes in several roles or repeated in extrafanart are **not**
+  de-duplicated; each yields its own request and file.
+* An image that is not an exact `AcquiredImage` of the expected role with exact
+  `bytes` content (only possible with a forged result) -> `IMAGE_INVALID`.
+
+## 21. Extrafanart naming (frozen)
+
+No earlier frozen document names extrafanart files (the v1.0 spec, P4-C2 and
+P4-C5 fix only the `extrafanart/` directory), so substep 2 freezes:
+
+```text
+<plan.extrafanart_directory>/extrafanart-001.jpg
+<plan.extrafanart_directory>/extrafanart-002.jpg
+...
+```
+
+* `ordinal` = 1-based position in `images.extrafanart`; name =
+  `f"extrafanart-{ordinal:03d}.jpg"` (`extrafanart_filename(ordinal)`).
+* Never derived from a URL basename, title, hash, `candidate_index` or randomness.
+* Range `1..999` (`MAX_EXTRAFANART_ORDINAL`). The P4-C5 default cap is 12, but
+  `ImageAcquisitionPolicy.max_extrafanart` has no upper bound, so more than 999
+  entries -> `ArtifactMappingError(EXTRAFANART_LIMIT)` for the whole mapping --
+  **fail closed, never truncated**.
+* The directory is **not created** here; if it does not exist, the write of
+  each extrafanart request fails with the primitive's `ParentDirectoryMissingError`.
+
+## 22. Single-artifact materializer (frozen)
+
+```python
+from fc2_organizer.materialization import materialize_artifact
+
+materialize_artifact(request: ArtifactWriteRequest) -> MaterializedArtifact
+```
+
+* `type(request) is ArtifactWriteRequest`, else `MaterializationInputError`
+  (no hook of a subclass runs, the primitive is not reached).
+* Its only action: `materialize_atomic_bytes(request.target_path, request.content)`.
+  It returns that result and lets every typed error through unchanged.
+* **One call = one artifact.** It therefore inherits sections 4-13 verbatim:
+  overwrite = NEVER for the NFO, poster, fanart, thumb and every extrafanart
+  file (`TargetExistsError`, no suffix); missing parent -> `ParentDirectoryError`
+  family, never `mkdir`.
+
+## 23. No multi-artifact orchestration, no mkdir, no MOVE_MEDIA (frozen)
+
+* There is no `materialize_all`, `execute_plan`, `apply_operations`,
+  `transaction` or `rollback_all`. Writing several artifacts, their order,
+  partial-failure policy and any directory creation belong to the P4-C7
+  executor.
+* Because every call handles exactly one request, there is **no concept of
+  rollback** here: if the NFO was written and a later poster write fails, the
+  NFO stays (tested).
+* No `mkdir` / `makedirs` anywhere in the package (AST-enforced); the target
+  directory and `extrafanart/` must already exist.
+* `MOVE_MEDIA`, `CREATE_DIRECTORY`, `ENSURE_EXTRAFANART_DIRECTORY` and all
+  other `PlannedOperation`s are never read or executed.
+
+**Architecture of `mapping.py` (frozen).** The only module that imports
+another `fc2_organizer` package: exactly the `fc2_organizer.planning` and
+`fc2_organizer.images` **public packages** (models only: `OrganizePlan`,
+`PlannedPath`, `AcquiredImage`, `ImageAcquisitionResult`, `ImageRole`) plus
+`os`. Never `fc2_metadata_core`, `amane`, `httpx`, `images.transport`,
+`images.acquisition`, `nfo` (the renderer is not called; only its output `str`
+is consumed), `publication`, `discovery`, or `atomic` / `artifacts`. Its only
+`os` call is `os.path.join`. Because `fc2_organizer.planning` loads
+`fc2_metadata_core` transitively, `mapping` is **not** imported by
+`materialization/__init__.py` (a bare `import fc2_organizer.materialization`
+still loads no planning / images / core module); import it explicitly. A
+runtime test proves `mapping` imports and works with `amane`, `httpx`,
+`images.transport`, `images.acquisition`, `nfo` and `publication` blocked.
+
+## 24. Test matrix (substep 2)
+
+| requirement | test file |
+|---|---|
+| NFO-only / full manifest, missing optional images (7 combinations), no cross-role fallback, fixed order, exact targets, determinism | `tests/unit/materialization/test_materialization_mapping.py` |
+| extrafanart order (tuple, not `candidate_index`), `extrafanart-001..012.jpg`, no URL/title/hash, `1..999` bound, >999 fails closed | `test_materialization_mapping.py` |
+| exact UTF-8, Unicode / emoji, CRLF / whitespace / U+FEFF / decomposed form preserved, no BOM, empty NFO, unencodable NFO (unchained) | `test_materialization_mapping.py` |
+| image bytes identity (`is`), duplicate bytes not de-duplicated, request holds no foreign object | `test_materialization_mapping.py` |
+| hostile `str` NFO subclass, plan / images subclass (zero attribute access), wrong types, forged path / colliding paths / wrong-role image | `test_materialization_mapping.py` |
+| canonical number not re-parsed, `operations` not consulted, zero filesystem calls (os / os.path / open / primitive trapped) | `test_materialization_mapping.py` |
+| request model rules, exactly five kinds | `test_materialization_mapping.py` |
+| NFO / poster / extrafanart / full manifest written, exact bytes, sha256 / size | `tests/unit/materialization/test_materialization_artifacts.py` |
+| existing target of every kind -> `TargetExistsError`, untouched, no leftover temp | `test_materialization_artifacts.py` |
+| missing target directory / `extrafanart/` -> `ParentDirectoryMissingError`, never created (`mkdir` trapped) | `test_materialization_artifacts.py` |
+| no rollback of an earlier success; wrapper only delegates; non-request / subclass rejected | `test_materialization_artifacts.py` |
+| mapping / wrapper architecture, `__init__` never loads mapping | `tests/contract/test_materialization_architecture.py` |
+
+## 25. PENDING IN LATER P4-C6 SUBSTEP
+
 * final P4-C6 handoff.

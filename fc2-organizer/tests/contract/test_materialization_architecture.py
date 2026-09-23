@@ -10,6 +10,13 @@ Substep 1 is a standalone, stdlib-only primitive:
 * never ``os.replace``, never any directory creation / removal / listing / globbing call;
 * nothing else in ``src`` imports ``materialization``; ``fc2_organizer/__init__.py`` does not
   eagerly import it; no executor / planner / move / orchestrator module exists.
+
+Substep-2 exception (frozen): ``mapping.py`` is the **only** module that may import another
+``fc2_organizer`` package, and only the ``fc2_organizer.planning`` / ``fc2_organizer.images``
+*public* packages (never their submodules, never ``images.transport`` / ``images.acquisition``)
+plus ``os`` (lexical ``os.path.join`` only). It never reads ``operations``, never writes, and is
+not imported by ``materialization/__init__.py`` (``planning`` loads ``fc2_metadata_core``).
+``artifacts.py`` (single-artifact wrapper) is stdlib/own-package only and only calls the primitive.
 """
 
 from __future__ import annotations
@@ -24,14 +31,24 @@ ORGANIZER_SRC_ROOT = SRC_ROOT / "fc2_organizer"
 MAT_SRC_ROOT = ORGANIZER_SRC_ROOT / "materialization"
 CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 
-_EXPECTED_MODULES = {"__init__.py", "errors.py", "models.py", "atomic.py"}
+_EXPECTED_MODULES = {"__init__.py", "errors.py", "models.py", "atomic.py", "artifacts.py", "mapping.py"}
+_MAPPING_MODULE = "mapping.py"
+_MAPPING_ALLOWED = {
+    "__future__", "os", "fc2_organizer.images", "fc2_organizer.planning",
+    "fc2_organizer.materialization.errors", "fc2_organizer.materialization.models",
+}
+_ARTIFACTS_ALLOWED = {
+    "__future__", "fc2_organizer.materialization.atomic", "fc2_organizer.materialization.errors",
+    "fc2_organizer.materialization.models",
+}
 _ALLOWED_STDLIB = {
     "__future__", "dataclasses", "enum", "errno", "hashlib", "ntpath", "os", "posixpath", "re",
     "secrets", "stat", "typing",
 }
 _PER_MODULE_ALLOWED = {
     "errors.py": {"__future__", "enum"},
-    "models.py": {"__future__", "dataclasses", "re", "fc2_organizer.materialization.errors"},
+    "models.py": {"__future__", "dataclasses", "enum", "re", "fc2_organizer.materialization.errors"},
+    "artifacts.py": _ARTIFACTS_ALLOWED,
 }
 _FOREIGN_NAMES = {
     "OrganizePlan", "PlannedOperation", "PlannedOperationKind", "AcquiredImage", "PublicationRecord",
@@ -75,7 +92,11 @@ def _call_names(tree: ast.AST) -> list[tuple[int, str | None, ast.AST]]:
     return out
 
 
-def test_package_has_exactly_the_substep1_modules():
+def _non_mapping_files() -> list[Path]:
+    return [p for p in _source_files(MAT_SRC_ROOT) if p.name != _MAPPING_MODULE]
+
+
+def test_package_has_exactly_the_substep1_and_substep2_modules():
     assert MAT_SRC_ROOT.is_dir()
     names = {p.name for p in _source_files(MAT_SRC_ROOT)}
     assert names == _EXPECTED_MODULES
@@ -84,7 +105,7 @@ def test_package_has_exactly_the_substep1_modules():
 
 
 def test_imports_only_allowed_stdlib_and_itself():
-    for path in _source_files(MAT_SRC_ROOT):
+    for path in _non_mapping_files():
         for module in _imported_modules(_tree(path)):
             if module.startswith("fc2_organizer.materialization"):
                 continue
@@ -97,7 +118,7 @@ def test_errors_and_models_have_narrower_allow_lists():
 
 
 def test_no_forbidden_dependency_text():
-    for path in _source_files(MAT_SRC_ROOT):
+    for path in _non_mapping_files():
         tree = _tree(path)
         for module in _imported_modules(tree):
             assert not module.startswith((
@@ -209,7 +230,7 @@ def test_bare_import_of_fc2_organizer_does_not_load_materialization():
         _purge()
 
 
-def test_public_api_is_the_substep1_primitive_only():
+def test_public_api_is_the_substep1_primitive_plus_substep2_single_artifact_api():
     _purge()
     try:
         mat = importlib.import_module("fc2_organizer.materialization")
@@ -219,10 +240,96 @@ def test_public_api_is_the_substep1_primitive_only():
             "MaterializationModelError", "ParentDirectoryError", "ParentDirectoryMissingError",
             "ParentNotDirectoryError", "ParentRejectionReason", "TargetExistsError", "TargetInaccessibleError",
             "TemporaryCreateError", "ArtifactWriteError", "ArtifactWriteStage", "ArtifactPublishError",
-            "ArtifactCleanupError",
+            "ArtifactCleanupError", "ArtifactMappingError", "MappingRejectionReason", "ArtifactKind",
+            "ArtifactWriteRequest", "materialize_artifact",
         }
+        assert "fc2_organizer.materialization.mapping" not in sys.modules
+        assert "fc2_organizer.planning" not in sys.modules and "fc2_organizer.images" not in sys.modules
+        assert not hasattr(mat, "build_artifact_requests")
         for deferred in ("materialize_plan", "materialize_nfo", "materialize_images", "execute", "move_media",
-                         "ensure_directory", "overwrite"):
+                         "ensure_directory", "overwrite", "materialize_all", "execute_plan", "apply_operations",
+                         "transaction", "rollback_all"):
             assert not hasattr(mat, deferred)
     finally:
         _purge()
+
+
+# --------------------------------------------------------------------------- substep 2
+
+
+def test_mapping_imports_only_planning_and_images_public_packages():
+    modules = _imported_modules(_tree(MAT_SRC_ROOT / _MAPPING_MODULE))
+    assert modules <= _MAPPING_ALLOWED, modules - _MAPPING_ALLOWED
+    for module in modules:
+        assert not module.startswith((
+            "fc2_metadata_core", "amane", "httpx", "fc2_organizer.images.", "fc2_organizer.planning.",
+            "fc2_organizer.nfo", "fc2_organizer.publication", "fc2_organizer.discovery",
+            "fc2_organizer.materialization.atomic", "fc2_organizer.materialization.artifacts",
+        )), module
+
+
+def test_mapping_is_pure_never_reads_operations_and_never_writes():
+    tree = _tree(MAT_SRC_ROOT / _MAPPING_MODULE)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            assert node.attr != "operations", f"mapping.py:{node.lineno}: reads .operations"
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            assert node.value != "operations", f"mapping.py:{node.lineno}: 'operations' literal"
+    forbidden = _FORBIDDEN_CALL_NAMES | {
+        "open", "stat", "lstat", "exists", "isdir", "isfile", "lexists", "link", "rename", "unlink",
+        "materialize_atomic_bytes", "materialize_artifact", "render_movie_nfo", "acquire_images",
+        "build_organize_plan", "is_valid_fc2_number", "normalize", "sha256", "token_hex", "now", "random",
+    }
+    for lineno, name, func in _call_names(tree):
+        assert name not in forbidden, f"mapping.py:{lineno}: call to {name!r}"
+        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == "os":
+            raise AssertionError(f"mapping.py:{lineno}: os.{func.attr} call")
+        if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Attribute)
+                and isinstance(func.value.value, ast.Name) and func.value.value.id == "os"):
+            # the only os.* call is the lexical os.path.join
+            assert (func.value.attr, func.attr) == ("path", "join"), (lineno, func.attr)
+
+
+def test_artifacts_wrapper_only_calls_the_primitive():
+    tree = _tree(MAT_SRC_ROOT / "artifacts.py")
+    names = {name for _, name, _ in _call_names(tree)}
+    assert names <= {"type", "MaterializationInputError", "materialize_atomic_bytes"}, names
+
+
+def test_package_init_never_imports_mapping():
+    modules = _imported_modules(_tree(MAT_SRC_ROOT / "__init__.py"))
+    assert "fc2_organizer.materialization.mapping" not in modules
+    assert not any(m.startswith(("fc2_organizer.planning", "fc2_organizer.images")) for m in modules)
+
+
+class _BlockTransportFinder:
+    def find_spec(self, fullname, path=None, target=None):
+        if (fullname.split(".")[0] in {"amane", "httpx", "requests", "socket", "ssl"}
+                or fullname in _BLOCKED_EXACT
+                or fullname.startswith(("fc2_organizer.images.transport", "fc2_organizer.images.acquisition",
+                                        "fc2_organizer.nfo", "fc2_organizer.publication"))):
+            raise ImportError(f"materialization.mapping attempted to import forbidden module: {fullname}")
+        return None
+
+
+def test_mapping_works_with_transport_nfo_publication_and_amane_blocked():
+    _purge()
+    saved = {name: sys.modules.pop(name) for name in list(sys.modules)
+             if name.split(".")[0] in {"amane", "httpx", "requests"}}
+    blocker = _BlockTransportFinder()
+    sys.meta_path.insert(0, blocker)
+    try:
+        mapping = importlib.import_module("fc2_organizer.materialization.mapping")
+        images = importlib.import_module("fc2_organizer.images")
+        planning = importlib.import_module("fc2_organizer.planning")
+        assert mapping.extrafanart_filename(1) == "extrafanart-001.jpg"
+        assert callable(mapping.build_artifact_requests) and images.ImageAcquisitionResult().extrafanart == ()
+        assert hasattr(planning, "OrganizePlan")
+        loaded = set(sys.modules)
+        assert not any(n.startswith(("fc2_organizer.images.transport", "fc2_organizer.images.acquisition",
+                                     "fc2_organizer.nfo", "fc2_organizer.publication", "httpx", "amane"))
+                       for n in loaded)
+    finally:
+        sys.meta_path.remove(blocker)
+        _purge()
+        sys.modules.update(saved)

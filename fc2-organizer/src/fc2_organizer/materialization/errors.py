@@ -37,6 +37,8 @@ __all__ = [
     "ArtifactWriteStage",
     "ArtifactPublishError",
     "ArtifactCleanupError",
+    "ArtifactMappingError",
+    "MappingRejectionReason",
 ]
 
 
@@ -58,6 +60,17 @@ class ParentRejectionReason(Enum):
     MISSING = "missing"
     NOT_A_DIRECTORY = "not_a_directory"
     INACCESSIBLE = "inaccessible"
+
+
+class MappingRejectionReason(Enum):
+    """Why ``build_artifact_requests`` refused a plan / NFO / image combination (substep 2)."""
+
+    NFO_EMPTY = "nfo_empty"
+    NFO_NOT_UTF8_ENCODABLE = "nfo_not_utf8_encodable"
+    PLAN_PATH_INVALID = "plan_path_invalid"
+    IMAGE_INVALID = "image_invalid"
+    EXTRAFANART_LIMIT = "extrafanart_limit"
+    DUPLICATE_TARGET = "duplicate_target"
 
 
 class ArtifactWriteStage(Enum):
@@ -172,3 +185,14 @@ class ArtifactCleanupError(MaterializationError):
         self.errno = _errno_or_none(errno)
         state = "published" if target_published else "not published"
         super().__init__(f"owned temporary file could not be removed (target {state})")
+
+
+class ArtifactMappingError(MaterializationError, ValueError):
+    """The already-typed inputs cannot be mapped to artifact write requests (substep 2).
+
+    Carries only a :class:`MappingRejectionReason`; never a path, NFO text or image bytes.
+    """
+
+    def __init__(self, reason: MappingRejectionReason) -> None:
+        self.reason = reason
+        super().__init__(f"artifact mapping rejected: {reason.value}")
