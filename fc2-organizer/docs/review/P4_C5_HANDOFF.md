@@ -505,3 +505,145 @@ Independent Re-review = REQUIRED
 P4-C5               = NOT CLOSED
 Phase 4             = NOT CLOSED
 ```
+
+
+---
+
+# Final Closure -- P4-C5 Image Acquisition
+
+Sections above are unchanged. This section is append-only and docs-only: it records
+the final closure of P4-C5. No code, test or contract file is touched, and no later
+package is started.
+
+## F.1 Closure record
+
+```text
+Phase                        = 4
+Package                      = P4-C5 Image Acquisition
+Branch                       = claude/phase4-c5-image-acquisition
+Status                       = CLOSED
+Final Review                 = Incremental Level 1 PASS
+Final Reviewed Code Head     = 65036e3857f87d821b5b282d7162ddbdabd42773
+Previous Docs Head           = b0ee039a83228dc42d900b6423e2a4f0274a7926
+Closure Docs Head            = <this commit; its parent is the Previous Docs Head>
+```
+
+Verified before this change: `git fetch --all --tags`; HEAD ==
+`origin/claude/phase4-c5-image-acquisition` == `b0ee039`; working tree clean. No
+rebase / amend / squash / force push.
+
+## F.2 Review history
+
+```text
+Initial Level 1 review      (code 3ef881b, docs d8831d2)
+  P4-C5-R-01 -- HIGH    response / stream cleanup raising an ordinary exception bypassed
+                        the image transport error boundary: raw httpx exception,
+                        httpx.Request and the token-bearing URL could escape.
+  P4-C5-R-02 -- MEDIUM  a contract-accepted huge deadline (e.g. 10**400) leaked a bare
+                        OverflowError.
+
+R1 remediation
+  R1 Code Review Candidate = 65036e3857f87d821b5b282d7162ddbdabd42773
+  R1 Docs Head             = b0ee039a83228dc42d900b6423e2a4f0274a7926
+
+Independent Incremental Level 1 re-review (d8831d2..65036e3, 65036e3..b0ee039)
+  Verdict = PASS
+  P4-C5-R-01 = CLOSED
+  P4-C5-R-02 = CLOSED
+```
+
+Both findings are closed and are no longer carried.
+
+## F.3 R1 independent evidence (reviewer's own results)
+
+```text
+Context Handshake                  = PASS
+Diff Scope                         = PASS
+P4-C5-R-01                         = CLOSED
+Cleanup Error Mapping              = PASS
+Sensitive-Data Boundary            = PASS
+Cancellation / Fatal Preservation  = PASS
+P4-C5-R-02                         = CLOSED
+Huge Deadline Boundary             = PASS
+Normal Deadline Regression         = PASS
+Transport Regression               = PASS
+
+Independent probes                 = 434 PASS / 0 FAIL
+Targeted: test_image_transport.py  = 166 passed / 0 failed / 0 skipped
+Targeted: images + architecture    = 632 passed / 0 failed / 0 skipped
+Full Suite                         = 3852 passed / 14 skipped / 0 failed
+git diff --check                   = clean on both R1 code and docs ranges
+
+New Findings                       = NONE
+Blocking Findings                  = NONE
+```
+
+## F.4 Final package state
+
+```text
+URL safety                  = CLOSED / accepted
+Redirect safety             = CLOSED / accepted
+Binary streaming bounds     = CLOSED / accepted
+Deadline handling           = CLOSED / accepted
+Transport error boundary    = CLOSED / accepted
+JPEG / Content-Type         = CLOSED / accepted
+Dimension validation        = CLOSED / accepted
+Candidate ordering          = CLOSED / accepted
+Role isolation              = CLOSED / accepted
+Candidate limits            = CLOSED / accepted
+Extrafanart limit           = CLOSED / accepted
+Total-result memory cap     = CLOSED / accepted
+Cancellation                = CLOSED / accepted
+Sensitive-data exclusion    = CLOSED / accepted
+Architecture boundary       = CLOSED / accepted
+Synthetic gate              = CLOSED / accepted
+```
+
+## F.5 Documented non-blocking boundaries (not findings)
+
+These are known boundaries recorded in the contract (see section 20). They are not
+new findings and do not block P4-C5:
+
+* DNS rebinding: not defended in P4-C5.
+* JPEG validation: structural only, not a full decoder guarantee.
+* Hostile `NormalizedMetadata` subclass: covered by the carried P4-C4-R-01 context.
+
+## F.6 Carried findings
+
+```text
+P4-C4-R-01 -- LOW
+P4-C3-R-01 -- LOW
+P4-C3-R-02 -- LOW
+P4-C2-R1-02 -- LOW
+OrganizePlan operation-graph hardening
+overwrite executor semantics = NEVER
+extended Windows reserved names
+P4-C1-R-02..R-05
+P2-R-05
+P2-R-06
+P2-R-07
+C3-N1..N4
+C4-N1
+C4-R1-N1..N3
+F3
+F5
+C5-R1-L1
+fc2db_net release normalization = un-numbered upstream observation
+```
+
+Not carried (CLOSED in P4-C5): P4-C5-R-01, P4-C5-R-02.
+Closed earlier, not re-carried: P4-C2 metadata identity gap, C2-L2, P2-R-10.
+
+## F.7 Final status
+
+```text
+P4-C5-R-01    = CLOSED
+P4-C5-R-02    = CLOSED
+New Findings  = NONE
+Blocking      = NONE
+Targeted      = 632 passed / 0 failed / 0 skipped
+Full Suite    = 3852 passed / 14 skipped / 0 failed
+P4-C5         = CLOSED
+Phase 4       = NOT CLOSED
+Next Package  = NOT STARTED
+```
