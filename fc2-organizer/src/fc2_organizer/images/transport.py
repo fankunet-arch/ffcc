@@ -28,6 +28,12 @@ outside any ``except`` block, so ``__cause__`` / ``__context__`` are ``None`` an
 ``httpx`` exception, request, response, header mapping or redirect URL is
 reachable from the raised error. ``asyncio.CancelledError`` and every other
 non-``Exception`` ``BaseException`` propagate untouched.
+
+Cleanup (R1, contract section 12.9a): closing a response or its byte iterator runs
+through :func:`_cleanup`, which turns an ordinary cleanup ``Exception`` into a fresh
+error *value* (same type-based mapping) and never lets it replace a primary outcome:
+an already-decided error value is kept, and a propagating cancellation / fatal
+``BaseException`` is re-raised as the original object after cleanup.
 """
 
 from __future__ import annotations
@@ -37,7 +43,7 @@ import math
 import re
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Protocol
+from typing import Awaitable, Callable, Protocol
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -214,6 +220,33 @@ def _map_exception(exc: Exception) -> ImageTransportError:
     return ImageTransportError()
 
 
+async def _cleanup(close: Callable[[], Awaitable[object]]) -> ImageTransportError | None:
+    """Run one cleanup step (``response.aclose`` / byte-iterator ``aclose``).
+
+    An ordinary ``Exception`` becomes a fresh, argument-less error value via the same
+    type-based :func:`_map_exception` (httpx close / network -> ``ImageConnectionError``,
+    anything else -> ``ImageTransportError``). The value is created, never raised, so it
+    has no ``__cause__`` / ``__context__`` / traceback. A cancellation / fatal
+    ``BaseException`` raised by the cleanup itself propagates unchanged."""
+    try:
+        await close()
+    except Exception as exc:
+        return _map_exception(exc)
+    return None
+
+
+def _deadline_delay(deadline_seconds: int | float) -> float | None:
+    """``deadline_seconds`` as the float ``asyncio.timeout`` needs, or ``None`` when an
+    (already validated, positive) ``int`` is too large to be represented as a float.
+    Decided by exception type (``OverflowError`` of the conversion), never by message."""
+    if type(deadline_seconds) is float:
+        return deadline_seconds
+    try:
+        return float(deadline_seconds)
+    except OverflowError:
+        return None
+
+
 class HttpxImageClient:
     """Production :class:`ImageHttpClient`: one shared ``httpx.AsyncClient`` per instance.
 
@@ -282,8 +315,13 @@ class HttpxImageClient:
     async def _get_within_deadline(
         self, url: str, deadline_seconds: float, max_redirects: int, max_bytes: int
     ) -> ImageHttpResponse | ImageError:
+        delay = _deadline_delay(deadline_seconds)
+        if delay is None:
+            # R1 / P4-C5-R-02: accepted by policy, not representable by the event loop's
+            # float clock. Nothing is sent; a fresh fixed-message error is returned.
+            return ImageTransportError()
         try:
-            async with asyncio.timeout(deadline_seconds) as scope:
+            async with asyncio.timeout(delay) as scope:
                 return await self._follow(url, scope, max_redirects, max_bytes)
         except TimeoutError:
             # Only asyncio.timeout's own expiry reaches here: _follow turns every ordinary
@@ -325,19 +363,33 @@ class HttpxImageClient:
                 return self._closed_or(_map_exception(exc))
             finally:
                 self._client.cookies.clear()  # never carry a server cookie to any later hop
+            # Closes without draining: a redirect / non-200 / over-cap body is never read on.
             try:
-                status = response.status_code
-                if type(status) is not int or not 100 <= status <= 599 or status in REDIRECT_STATUSES:
-                    return ImageTransportError()
-                content_type = _media_type(response.headers)
-                if status != 200:
-                    return ImageHttpResponse(status_code=status, content_type=content_type, content=b"")
-                return await self._read_body(response, content_type, max_bytes)
-            except Exception as exc:
-                return self._closed_or(_map_exception(exc))
-            finally:
-                # Closes without draining: a redirect / non-200 / over-cap body is never read on.
-                await response.aclose()
+                outcome = await self._response_outcome(response, max_bytes)
+            except BaseException:
+                # Only cancellation / fatal reaches here (_response_outcome returns ordinary
+                # failures as values). Cleanup's ordinary error is discarded; the original
+                # object is re-raised.
+                await _cleanup(response.aclose)
+                raise
+            cleanup_error = await _cleanup(response.aclose)
+            if cleanup_error is not None and not isinstance(outcome, ImageError):
+                return self._closed_or(cleanup_error)  # the primary error, if any, wins
+            return outcome
+
+    async def _response_outcome(
+        self, response: httpx.Response, max_bytes: int
+    ) -> ImageHttpResponse | ImageError:
+        try:
+            status = response.status_code
+            if type(status) is not int or not 100 <= status <= 599 or status in REDIRECT_STATUSES:
+                return ImageTransportError()
+            content_type = _media_type(response.headers)
+            if status != 200:
+                return ImageHttpResponse(status_code=status, content_type=content_type, content=b"")
+            return await self._read_body(response, content_type, max_bytes)
+        except Exception as exc:
+            return self._closed_or(_map_exception(exc))
 
     def _build_request(self, url: str, timeout_seconds: float | None) -> httpx.Request | None:
         """A request carrying only the fixed headers, built directly (not via the client's
@@ -364,13 +416,23 @@ class HttpxImageClient:
         # Content-Encoding is identity (checked above), so aiter_bytes() yields the raw bytes
         # unchanged; unlike aiter_raw() it also serves an already-buffered response.
         chunks = response.aiter_bytes()
+        too_large = False
         try:
             async for chunk in chunks:
                 if len(buffer) + len(chunk) > max_bytes:
-                    return ImageResponseTooLargeError()  # stop: no further chunk is pulled
+                    too_large = True  # stop: no further chunk is pulled
+                    break
                 buffer += chunk
-        finally:
-            await chunks.aclose()
+        except BaseException:
+            # The primary failure (ordinary, cancellation or fatal) keeps precedence:
+            # cleanup's ordinary error is discarded and the original object re-raised.
+            await _cleanup(chunks.aclose)
+            raise
+        cleanup_error = await _cleanup(chunks.aclose)
+        if too_large:
+            return ImageResponseTooLargeError()
+        if cleanup_error is not None:
+            return self._closed_or(cleanup_error)
         return ImageHttpResponse(status_code=200, content_type=content_type, content=bytes(buffer))
 
     def _closed_or(self, error: ImageTransportError) -> ImageTransportError:

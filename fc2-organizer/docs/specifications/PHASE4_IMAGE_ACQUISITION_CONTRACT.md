@@ -451,6 +451,18 @@ hop. Each hop's httpx timeout extension is set to the *remaining* budget, and
 any httpx timeout (`ConnectTimeout`, `ReadTimeout`, `WriteTimeout`,
 `PoolTimeout`) or builtin `TimeoutError` maps to the same `ImageTimeoutError`.
 
+**Unrepresentable deadline (R1, closes P4-C5-R-02).** The accepted input domain
+is unchanged: policy and `get()` still accept any exact positive `int` (and any
+finite positive `float`). Before any request is built, `get()` converts the
+deadline to the float the event-loop clock needs. That decision is made by
+exception type (the conversion's `OverflowError`), never by message. When an
+`int` is too large to be a float (e.g. `10**400`, `10**309`, `2**1024`), nothing
+is sent and `get()` raises a fresh, fixed-message `ImageTransportError`
+(`TRANSPORT_ERROR`) with `__cause__` / `__context__` `None`. No `OverflowError`,
+`ValueError` or library exception escapes. Every representable deadline
+(`15.0`, `1`, `10**308`, `1e300`, `sys.float_info.max`) behaves exactly as
+before.
+
 ### 12.8 Content-Type extraction (no policy)
 
 `content_type` is the `Content-Type` media type: the text before the first `;`,
@@ -479,6 +491,29 @@ never contain a URL, query, body, library message or exception `repr`.
 unchanged (it is never mapped). `KeyboardInterrupt`, `SystemExit`,
 `GeneratorExit` and every other non-`Exception` `BaseException` propagate
 untouched. Only ordinary `Exception`s are mapped.
+
+### 12.9a Cleanup boundary (R1, closes P4-C5-R-01)
+
+Closing a response (`response.aclose()`) and closing its byte iterator are both
+cleanup steps. They run through one helper (`_cleanup`) and never through a bare
+`finally`:
+
+| situation | result |
+|---|---|
+| cleanup raises an httpx `NetworkError` (incl. `CloseError`) / `ProtocolError` / `ProxyError` | fresh `ImageConnectionError` value |
+| cleanup raises an httpx `TimeoutException` / builtin `TimeoutError` | fresh `ImageTimeoutError` value |
+| cleanup raises any other ordinary `Exception` | fresh `ImageTransportError` value |
+| primary outcome is already an error value (e.g. `TOO_LARGE`, mid-stream read / connection error) and cleanup fails | the **primary** error is kept; the cleanup error is discarded |
+| primary outcome is an `ImageHttpResponse` (200 with body, or any non-200 status) and cleanup fails | the cleanup error value (fail closed) |
+| primary path is propagating `asyncio.CancelledError`, `KeyboardInterrupt`, `SystemExit`, `GeneratorExit` or any other non-`Exception` `BaseException` | cleanup runs; its ordinary error is discarded; the **original object** is re-raised unchanged (a deadline expiry therefore still becomes `ImageTimeoutError`) |
+| cleanup itself raises cancellation / a fatal `BaseException` | propagates unchanged: never swallowed, never mapped |
+
+Classification uses the same type-based mapping as section 12.9 and never looks
+at a message. Mapped values are created, not raised, inside the worker. They
+reach the caller only through `get()`'s single raise outside any `except`
+block. So `__cause__` / `__context__` are `None`, and no original exception,
+`httpx.Request`, `httpx.Response`, URL, query token, library message or
+cleanup traceback is reachable from the error.
 
 ### 12.10 Lifecycle
 

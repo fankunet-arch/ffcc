@@ -689,3 +689,296 @@ def test_error_hierarchy_and_failure_kinds():
             cls(f"message with {URL}")  # no caller-supplied message can be injected
     assert ImageRedirectError(UrlRejectionReason.LOCALHOST).failure_kind is ImageFailureKind.UNSAFE_URL
     assert ImageRedirectError(UrlRejectionReason.MALFORMED).failure_kind is ImageFailureKind.INVALID_URL
+
+
+# --- R1 / P4-C5-R-01: cleanup exceptions stay inside the transport error boundary -------------------
+
+SECRET_EXCEPTION_TEXT = "SECRET_EXCEPTION_TEXT"
+TOKEN_URL = "https://example.com/x.jpg?token=SUPERSECRET"
+R1_LEAKS = (SECRET_EXCEPTION_TEXT, "SUPERSECRET", "token=", "example.com", "x.jpg", "httpx", "CloseError",
+            "ReadError", "<Request", "<Response")  # httpx object reprs (the types are checked in the graph walk)
+
+
+def _close_error() -> Exception:
+    return httpx.CloseError(f"{SECRET_EXCEPTION_TEXT} {TOKEN_URL}", request=httpx.Request("GET", TOKEN_URL))
+
+
+class CleanupFailingStream(httpx.AsyncByteStream):
+    """A response body whose ``aclose`` raises ``close_exc``. ``primary`` (if given) is raised
+    by the iterator after ``fail_after`` chunks; ``hang`` makes the body block after its chunks."""
+
+    def __init__(self, chunks, close_exc, *, primary=None, fail_after=0, hang=False):
+        self.chunks = list(chunks)
+        self.close_exc = close_exc
+        self.primary = primary
+        self.fail_after = fail_after
+        self.hang = hang
+        self.pulled = 0
+        self.close_calls = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self) -> bytes:
+        if self.primary is not None and self.pulled >= self.fail_after:
+            raise self.primary
+        if self.pulled < len(self.chunks):
+            self.pulled += 1
+            return self.chunks[self.pulled - 1]
+        if self.hang:
+            await asyncio.sleep(3600)
+        raise StopAsyncIteration
+
+    async def aclose(self) -> None:
+        self.close_calls += 1
+        raise self.close_exc
+
+
+def _walk_error(error: BaseException) -> list[object]:
+    """Everything reachable from a raised error except its own ``__traceback__``."""
+    found, stack, seen = [], [error], set()
+    while stack:
+        obj = stack.pop()
+        if id(obj) in seen:
+            continue
+        seen.add(id(obj))
+        found.append(obj)
+        if isinstance(obj, BaseException):
+            stack.extend(obj.args)
+            stack.extend(v for v in (obj.__cause__, obj.__context__) if v is not None)
+            stack.extend(getattr(obj, "__dict__", {}).values())
+            stack.extend(getattr(obj, "__notes__", []))
+            if hasattr(obj, "reason"):
+                stack.append(obj.reason)
+        elif isinstance(obj, (tuple, list)):
+            stack.extend(obj)
+    return found
+
+
+def assert_r1_clean(error: BaseException) -> None:
+    assert_clean_error(error)
+    assert error.__cause__ is None and error.__context__ is None
+    rendered = " ".join([str(error), repr(error), repr(error.args)])
+    for leaked in R1_LEAKS:
+        assert leaked not in rendered, leaked
+    for obj in _walk_error(error):
+        assert not isinstance(obj, (httpx.Request, httpx.Response, httpx.HTTPError)), type(obj)
+        assert obj is error or not isinstance(obj, BaseException), type(obj)
+        if isinstance(obj, str):
+            assert SECRET_EXCEPTION_TEXT not in obj and "SUPERSECRET" not in obj
+    # the raise point is get() itself: no frame of the worker / cleanup path, and no frame local
+    # anywhere in the traceback holds an httpx exception, request or response
+    tb = error.__traceback__
+    while tb is not None:
+        assert tb.tb_frame.f_code.co_name not in ("_follow", "_read_body", "_cleanup", "_response_outcome")
+        for value in tb.tb_frame.f_locals.values():
+            assert not isinstance(value, (httpx.Request, httpx.Response, httpx.HTTPError)), type(value)
+        tb = tb.tb_next
+
+
+def _single(stream: CleanupFailingStream, status: int = 200, headers=None) -> Recorder:
+    return Recorder({"/poster.jpg": httpx.Response(status, headers=headers or {}, stream=stream)})
+
+
+@pytest.mark.parametrize("status", [404, 500, 204])
+def test_r1_non_200_cleanup_httpx_close_error_is_connection_error(status):
+    stream = CleanupFailingStream([b"<html>error page</html>"], _close_error())
+    error = fetch_error(_single(stream, status))
+    assert type(error) is ImageConnectionError
+    assert stream.pulled == 0 and stream.close_calls >= 1
+    assert_r1_clean(error)
+
+
+def test_r1_non_200_cleanup_ordinary_exception_is_transport_error():
+    stream = CleanupFailingStream([b"x"], RuntimeError(f"{SECRET_EXCEPTION_TEXT} {TOKEN_URL}"))
+    error = fetch_error(_single(stream, 404))
+    assert type(error) is ImageTransportError
+    assert_r1_clean(error)
+
+
+@pytest.mark.parametrize(
+    ("close_exc", "expected"),
+    [(_close_error, ImageConnectionError), (lambda: ValueError(f"{SECRET_EXCEPTION_TEXT} {TOKEN_URL}"),
+                                             ImageTransportError)],
+    ids=["httpx-CloseError", "ValueError"],
+)
+def test_r1_200_success_cleanup_error_fails_closed_typed(close_exc, expected):
+    stream = CleanupFailingStream([JPEG[:100], JPEG[100:]], close_exc())
+    error = fetch_error(_single(stream, 200, {"Content-Type": "image/jpeg"}))
+    assert type(error) is expected
+    assert stream.pulled == 2 and stream.close_calls >= 1
+    assert_r1_clean(error)
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_r1_too_large_cleanup_error_keeps_primary_too_large(declared):
+    stream = CleanupFailingStream([b"x" * 10] * 5, _close_error())
+    headers = {"Content-Length": "50"} if declared else {}
+    error = fetch_error(_single(stream, 200, headers), max_bytes=25)
+    assert type(error) is ImageResponseTooLargeError
+    assert stream.pulled <= 3 and stream.close_calls >= 1
+    assert_r1_clean(error)
+
+
+def test_r1_mid_stream_read_error_plus_cleanup_error_keeps_primary_connection_error():
+    read = httpx.ReadError(f"{SECRET_EXCEPTION_TEXT} {TOKEN_URL}", request=httpx.Request("GET", TOKEN_URL))
+    stream = CleanupFailingStream([b"x"] * 5, RuntimeError(SECRET_EXCEPTION_TEXT), primary=read, fail_after=2)
+    error = fetch_error(_single(stream))
+    assert type(error) is ImageConnectionError
+    assert_r1_clean(error)
+
+
+def test_r1_timeout_during_body_with_cleanup_error_is_timeout():
+    stream = CleanupFailingStream([b"x"], _close_error(), hang=True)
+    error = fetch_error(_single(stream), deadline_seconds=0.2)
+    assert type(error) is ImageTimeoutError
+    assert stream.close_calls >= 1
+    assert_r1_clean(error)
+
+
+def test_r1_timeout_during_body_with_cleanup_ordinary_exception_is_timeout():
+    stream = CleanupFailingStream([b"x"], RuntimeError(SECRET_EXCEPTION_TEXT), hang=True)
+    error = fetch_error(_single(stream, 200), deadline_seconds=0.2)
+    assert type(error) is ImageTimeoutError
+    assert_r1_clean(error)
+
+
+def test_r1_caller_cancellation_with_cleanup_error_propagates_cancellation():
+    stream = CleanupFailingStream([b"x"], _close_error(), hang=True)
+
+    async def scenario():
+        task = asyncio.create_task(fetch(_single(stream), deadline_seconds=3600))
+        while stream.pulled < 1:
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.02)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError) as info:
+            await task
+        return info.value
+
+    cancelled = run(scenario())
+    assert type(cancelled) is asyncio.CancelledError
+    assert stream.close_calls >= 1
+
+
+class _R1Fatal(BaseException):
+    pass
+
+
+@pytest.mark.parametrize(
+    "primary_factory",
+    [asyncio.CancelledError, _R1Fatal, KeyboardInterrupt, SystemExit, GeneratorExit],
+    ids=["CancelledError", "custom-BaseException", "KeyboardInterrupt", "SystemExit", "GeneratorExit"],
+)
+@pytest.mark.parametrize("cleanup_factory", [_close_error, lambda: RuntimeError(SECRET_EXCEPTION_TEXT)],
+                         ids=["httpx-CloseError", "RuntimeError"])
+def test_r1_primary_cancellation_or_fatal_is_the_same_object_after_failing_cleanup(primary_factory, cleanup_factory):
+    primary = primary_factory()
+    stream = CleanupFailingStream([b"x"] * 3, cleanup_factory(), primary=primary, fail_after=1)
+
+    async def scenario():
+        try:
+            await fetch(_single(stream), deadline_seconds=3600)
+        except BaseException as exc:  # capture in the same task: identity is preserved
+            return exc
+        return None
+
+    raised = run(scenario())
+    assert raised is primary
+    assert stream.close_calls >= 1
+    assert not isinstance(raised.__context__, (httpx.HTTPError, RuntimeError))
+
+
+@pytest.mark.parametrize("fatal_factory", [_R1Fatal, KeyboardInterrupt, asyncio.CancelledError])
+def test_r1_cancellation_or_fatal_raised_by_cleanup_itself_is_not_swallowed_or_mapped(fatal_factory):
+    fatal = fatal_factory()
+    stream = CleanupFailingStream([b"<html>x</html>"], fatal)
+
+    async def scenario():
+        try:
+            await fetch(_single(stream, 404), deadline_seconds=3600)
+        except BaseException as exc:
+            return exc
+        return None
+
+    assert run(scenario()) is fatal
+
+
+def test_r1_cleanup_helper_maps_by_type_never_by_message():
+    async def boom(exc):
+        raise exc
+
+    async def scenario():
+        mapped = [
+            await transport_module._cleanup(lambda: boom(httpx.CloseError("timed out"))),
+            await transport_module._cleanup(lambda: boom(RuntimeError("connection reset / CloseError"))),
+            await transport_module._cleanup(lambda: boom(httpx.ReadTimeout("x"))),
+        ]
+        ok = await transport_module._cleanup(lambda: asyncio.sleep(0))
+        return mapped, ok
+
+    (close, other, timeout), ok = run(scenario())
+    assert type(close) is ImageConnectionError  # message says "timed out": the type decides
+    assert type(other) is ImageTransportError  # message says "connection reset": the type decides
+    assert type(timeout) is ImageTimeoutError
+    assert ok is None
+    for error in (close, other, timeout):
+        assert error.__cause__ is None and error.__context__ is None and error.__traceback__ is None
+
+
+def test_r1_successful_cleanup_still_returns_response_unchanged():
+    class OkStream(CleanupFailingStream):
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    stream = OkStream([JPEG], None)
+    response = run(fetch(_single(stream, 200, {"Content-Type": "image/jpeg"})))
+    assert response.content == JPEG and response.status_code == 200 and stream.close_calls >= 1
+
+
+# --- R1 / P4-C5-R-02: huge but policy-valid deadlines never leak OverflowError -------------------------
+
+
+@pytest.mark.parametrize("deadline", [10**400, 10**309, 2**1024], ids=["10**400", "10**309", "2**1024"])
+def test_r2_unrepresentable_int_deadline_is_typed_transport_error_and_sends_nothing(deadline):
+    recorder = Recorder({"/poster.jpg": httpx.Response(200, content=JPEG)})
+    with pytest.raises(ImageError) as info:
+        run(fetch(recorder, deadline_seconds=deadline))
+    error = info.value
+    assert type(error) is ImageTransportError
+    assert error.failure_kind is ImageFailureKind.TRANSPORT_ERROR
+    assert not isinstance(error, (OverflowError, ValueError))
+    assert recorder.requests == []
+    assert_clean_error(error)
+    assert error.__cause__ is None and error.__context__ is None
+
+
+def test_r2_policy_domain_unchanged_huge_int_deadline_still_accepted():
+    from fc2_organizer.images import ImageAcquisitionPolicy
+
+    assert ImageAcquisitionPolicy(request_deadline_seconds=10**400).request_deadline_seconds == 10**400
+
+
+def test_r2_huge_deadline_never_raises_overflow_error_at_all():
+    recorder = Recorder({"/poster.jpg": httpx.Response(200, content=JPEG)})
+    try:
+        run(fetch(recorder, deadline_seconds=10**400))
+    except OverflowError:  # pragma: no cover - the regression this guards against
+        pytest.fail("OverflowError leaked from HttpxImageClient.get")
+    except ImageTransportError:
+        pass
+
+
+@pytest.mark.parametrize("deadline", [15.0, 1, 5, 3600, 10**300, 10**308, 1e300, 1.7976931348623157e308])
+def test_r2_normal_and_large_representable_deadlines_do_not_regress(deadline):
+    recorder = Recorder({"/poster.jpg": httpx.Response(200, headers={"Content-Type": "image/jpeg"}, content=JPEG)})
+    response = run(fetch(recorder, deadline_seconds=deadline))
+    assert response.status_code == 200 and response.content == JPEG
+    assert len(recorder.requests) == 1
+
+
+def test_r2_deadline_delay_conversion_is_type_based():
+    assert transport_module._deadline_delay(15.0) == 15.0
+    assert transport_module._deadline_delay(1) == 1.0 and type(transport_module._deadline_delay(1)) is float
+    assert transport_module._deadline_delay(10**308) == 1e308
+    assert transport_module._deadline_delay(10**400) is None
