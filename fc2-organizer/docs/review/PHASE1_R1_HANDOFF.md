@@ -264,4 +264,4 @@ Windows NOT run（与最初的 Phase 1 提交相同；本轮 R1 的改动是纯�
 `fc2_metadata_core` 仍然与 `amane` 完全解耦，已由未改变且仍然通过的
 `tests/contract/test_core_independent_of_amane.py` 再次验证）。
 
-## Phase 2 尚未开始
+## Phase 2 尚未开始（NOT started）

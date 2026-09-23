@@ -97,7 +97,7 @@ backoff_before_seconds)`）、`final_result`、`max_attempts`、`deadline_exceed
 **只有最终结果会被合并**：第 1 次 attempt 瞬时失败 + 第 2 次 attempt 成功 ⇒ 该来源算作成功，聚合结果为 `SUCCESS`
 （不是 `PARTIAL`），第一次失败在 trace 中可见；两次都失败 ⇒ 该来源算作失败，聚合结果为 `PARTIAL`。
 
-## P2-R-07 — 未关闭
+## P2-R-07 — 未关闭（NOT closed）
 
 已重新评估：**部分缓解，仍为 LOW。** engine 现在自己测量每次 attempt 的 `elapsed_ms`，因此即使 adapter 上报
 `SourceResult.elapsed_ms == 0.0`，诊断信息也是正确的；adapter 上报的这个字段本身被刻意保持不变。
@@ -159,7 +159,7 @@ transport（8）→ source/base/common 分类（302）→ 聚合 config/models/�
 重试行为** — 重试已通过离线测试证明（包括使用真实 transport 的生产路径），并没有声称经过线上验证。
 `not_found` 结果正确地从未被重试。这是一次冒烟检查，而不是覆盖率声明。
 
-## 50-ID 门槛 — 未运行 / 延后
+## 50-ID 门槛 — 未运行（NOT RUN）/ 延后（DEFERRED）
 
 在冻结的 50-ID 集合上 ≥ 90 % `number + title` 的门槛**没有运行**，也没有作出任何声明。
 

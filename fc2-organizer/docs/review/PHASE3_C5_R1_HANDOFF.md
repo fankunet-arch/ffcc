@@ -73,7 +73,7 @@ docs/review/PHASE3_C5_R1_HANDOFF.md                          (new: this file)
 
 ## 7. 状态
 
-**C5 代码：** 未改变 / 冻结于 `fb4dddaf4ef00ed201c94d9a7e29d1e86a20f17d`。
+**C5 代码：** 未改变（UNCHANGED）/ 冻结（FROZEN）于 `fb4dddaf4ef00ed201c94d9a7e29d1e86a20f17d`。
 **下一阶段：** NOT STARTED。
 
 READY FOR C5-R1 DOCS-ONLY INDEPENDENT CLOSURE REVIEW

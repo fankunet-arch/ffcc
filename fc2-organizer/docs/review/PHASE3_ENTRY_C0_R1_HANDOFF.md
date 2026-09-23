@@ -30,7 +30,7 @@ Branch:
 claude/phase-0-amane-integration-fnvhpq
 ```
 
-**这不是 PASS 声明。Phase 3 的功能实现尚未开始；Phase 3 Aggregator Lock 没有解除。**
+**这不是 PASS 声明。Phase 3 的功能实现尚未开始（has NOT started）；Phase 3 Aggregator Lock 没有解除。**
 
 ## C0-R1-01 — 原始复现（独立复查者）
 

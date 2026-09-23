@@ -103,7 +103,7 @@ AggregationResult  SUCCESS | PARTIAL | FAILED + every SourceResult        models
 | **P2-R-08** 格式错误的 `base_url` → 原始异常 | **在 Phase 3 配置边界上 CLOSED。** `validate_base_url` 在构造 `SourceConfig` 时运行，拒绝以下情况（领域错误 `AggregationConfigError`，在任何网络活动之前）：缺少 scheme、缺少 host、非 http(s)、userinfo、query/fragment、端口错误、host 非法、任何控制字符（CR/LF/NUL/TAB）、空格、反斜杠、非 ASCII、> 2048 个字符。adapter 没有被重写。（`test_agg_config.py`：9 个合法 + 33 个非法 URL。） |
 | **P2-R-09** httpx 超时不是墙钟上界 | **在调度器边界上 CLOSED。** 每个来源整个 `fetch` 的 deadline（见上文）；一个持续缓慢推进的来源仍然会被切断（有测试）。局限：吞掉 `CancelledError` 的 adapter 无法被中断（已采用的 adapter 都不会这样做）。 |
 | **P2-R-11** registry 的创建边界 | **CLOSED。** `create()` 返回一个 `source_id` 等于所请求 id 的 `SourceAdapter`，否则抛出 `SourceFactoryError` / `InvalidSourceAdapterError` / `SourceIdMismatchError`（都是 `SourceRegistryError`）；不可调用的 factory 在 `register` 时被拒绝；仍然支持类以外的 factory。复现并关闭了复查者的两个例子（`alias_x` → `Fc2dbNetAdapter`、`lambda **k: 42`）。 |
-| **P2-R-12** 分类上的细微差别（5xx → `INVALID_RESPONSE`、部分解码错误 → `NETWORK_ERROR`、重试语义） | **已重新评估 → 重新延后到 Phase 3 的韧性 / 重试子阶段。** 原因：C1 只对 `SourceStatus` 做*隔离和聚合*；它不根据状态做任何重试、退避或熔断决策，因此 C1 中没有任何内容依赖细粒度分类，而现在重写 Phase 2 的失败词汇只会是投机性的。这不是遗漏。线上观察到的实际影响：一次瞬时的 av123 HTTP 500 会成为 `INVALID_RESPONSE` → 计为运行性失败 → 聚合结果 `PARTIAL`（见下文）。 |
+| **P2-R-12** 分类上的细微差别（5xx → `INVALID_RESPONSE`、部分解码错误 → `NETWORK_ERROR`、重试语义） | **已重新评估（RE-EVALUATED）→ 重新延后（RE-DEFERRED）到 Phase 3 的韧性 / 重试子阶段。** 原因：C1 只对 `SourceStatus` 做*隔离和聚合*；它不根据状态做任何重试、退避或熔断决策，因此 C1 中没有任何内容依赖细粒度分类，而现在重写 Phase 2 的失败词汇只会是投机性的。这不是遗漏。线上观察到的实际影响：一次瞬时的 av123 HTTP 500 会成为 `INVALID_RESPONSE` → 计为运行性失败 → 聚合结果 `PARTIAL`（见下文）。 |
 
 ## 变更文件（`26ac537..652f1de`，21 个文件，+3341/−7）
 
@@ -177,7 +177,7 @@ engine 的行为符合设计：`FC2-4825061` 的结果为 **PARTIAL**（`javdb` 
 "unexpected HTTP 500"，`fc2db_net` = not_found），`FC2-4824605` 为 **PARTIAL**，标题来自 `fc2db_net`。
 这正是预期的 `PARTIAL` 语义，也是一个具体的例子，说明一旦有了重试，P2-R-12（5xx 分类）为什么重要。
 
-## 50-ID 验收门槛 — 未运行，延后
+## 50-ID 验收门槛 — 未运行（NOT RUN），延后（DEFERRED）
 
 v1.0 门槛（冻结的 50-ID 有效集合，≥ 90 % 获得 `number + title`）**没有**运行，也**没有**作出任何声明。
 它需要一份冻结的 ID 列表和一个实时覆盖子阶段；这里没有为了满足它而临时拼凑番号。上面的 7 个探测集合 ID 只是冒烟检查，

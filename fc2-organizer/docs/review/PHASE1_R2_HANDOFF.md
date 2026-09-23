@@ -242,4 +242,4 @@ F5
 本轮**没有**触碰 `tests/contract/test_core_independent_of_amane.py` 的 `CORE_MODULES` 发现机制，
 以及“已安装 Amane 的环境”断言。
 
-## Phase 2 尚未开始
+## Phase 2 尚未开始（NOT started）

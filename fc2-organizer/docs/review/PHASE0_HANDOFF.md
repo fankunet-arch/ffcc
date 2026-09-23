@@ -106,7 +106,7 @@ Windows NOT run（本次会话运行环境为 Linux 容器，Phase 0 不要求 W
 - Amane 主程序功能的通用审计（仅审插件 API / 番号解析 / 批量任务 / 资源整理 / 版本兼容五个指定切面）。
 - Windows 平台验证。
 
-## 下一阶段尚未开始
+## 下一阶段尚未开始（Next phase NOT started）
 
 Phase 1（冻结公共数据契约：`NormalizedMetadata` / `SourceResult` / 番号标准化模块）**尚未开始编码**，`fc2-organizer/src/` 与 `fc2-organizer/tests/` 保持规格书要求的空占位状态。在独立复查给出 PASS 之前不会进入 Phase 1。
 

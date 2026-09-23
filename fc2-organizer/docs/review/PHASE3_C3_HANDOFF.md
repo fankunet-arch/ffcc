@@ -80,7 +80,7 @@ C3 Base 3b5ac61
 | **C2-L2** — 公开模型 `SourceExecutionTrace` 允许 engine 永远不会产生的状态（SUCCESS 之后的退避期间出现 deadline、未完成的 SUCCESS attempt、`SOURCE_DEADLINE` 以外 kind 的未完成 attempt、`NOT_FOUND` 之后重试） | **LOW / DEFERRED（未改变）** | 50-ID 门槛不需要它。**在任何批处理 API 把 trace 暴露给更广泛的调用方之前重新评估。** |
 | **C2-L3** — `aggregation/__init__.py` 的 docstring 仍然说重试 / 退避不在范围内 | **CLOSED（文档）** | 按真实的 C1+C2 架构重写。 |
 | **C2-L4** — C2 handoff 中说 “the base commit has 732 tests” | **CLOSED（文档）** | 在 `PHASE3_C2_HANDOFF.md` 中添加了可见的更正说明（C1 base 收集到 **731** 个；732 = 在 C2 树中运行的 C1 测试，F4 在那里自动发现了新增的 `retry.py`）。原文和历史都没有被触碰。 |
-| **C2-L5** — 同时出现的不同致命 `BaseException` | **已记录** | `PHASE3_RESILIENCE_CONTRACT.md` §4：*只传播一个致命异常，以原始对象传播；实现不会保留多个致命异常。* 由 `test_agg_c3_simultaneous_fatal.py` 固定下来（一个原始对象，没有异常组，相同运行下是确定的）。没有重新设计仲裁机制。 |
+| **C2-L5** — 同时出现的不同致命 `BaseException` | **已记录（DOCUMENTED）** | `PHASE3_RESILIENCE_CONTRACT.md` §4：*只传播一个致命异常，以原始对象传播；实现不会保留多个致命异常。* 由 `test_agg_c3_simultaneous_fatal.py` 固定下来（一个原始对象，没有异常组，相同运行下是确定的）。没有重新设计仲裁机制。 |
 
 **其他待办：** P2-R-07 **部分缓解，仍为 LOW**（没有修复；证据使用的是 engine 的 attempt 计时
 `engine_elapsed_ms`，而不是 adapter 上报的 `SourceResult.elapsed_ms`）· P2-R-05 LOW · P2-R-06 LOW · P2-R-10 LOW ·

@@ -210,7 +210,7 @@ Windows 平台实测
 Amane 集成运行
 ```
 
-## 下一阶段尚未开始
+## 下一阶段尚未开始（Next phase NOT started）
 
 ```text
 Phase 2 NOT started

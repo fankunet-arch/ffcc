@@ -186,6 +186,6 @@ python tools/probe_sources.py adapter --source av123     FC2-4825061 FC2-4979299
 - 推送状态：Phase 2（截至 Docs Head `4e7883e87bd6195080d1eb5afcefda0a8897600d`）
   已推送到 `origin/claude/phase-0-amane-integration-fnvhpq`，并已通过独立复查（PASS WITH NON-BLOCKING NOTES）。
 
-## Phase 3 尚未开始
+## Phase 3 尚未开始（NOT started）
 
 没有做任何聚合、跨来源调度、字段级合并、重试策略或 Amane adapter 工作。
