@@ -265,3 +265,112 @@ Independent Review   : REQUIRED
 P4-C6                : NOT CLOSED
 Phase 4              : NOT CLOSED
 ```
+
+## 25. Final Closure（最终关闭）
+
+本节起正文使用简体中文；代码名、SHA、API、命令与枚举保留英文原文。
+
+### 25.1 关闭坐标
+
+```text
+Phase                     = 4
+Package                   = P4-C6 Atomic Artifact Materialization
+Status                    = CLOSED
+Final Reviewed Code Head  = 8f845b429b6b35f86038b393a2c98864f35a68b0
+Previous Docs Head        = a059c08a976c6585534aca195546d6081c9f9fd9
+P4-C6 Closure Docs Head   = 本提交（见 `git log -1 -- fc2-organizer/docs/review/P4_C6_HANDOFF.md`）
+```
+
+### 25.2 独立复查 A
+
+结论：**PASS**。
+
+Reviewer A 在候选代码上独立执行并得到：
+
+```text
+materialization          : 303 passed / 5 skipped
+architecture             : 97 passed / 0 skipped
+full suite               : 4172 passed / 19 skipped / 0 failed
+Direct reproductions     : PASS
+Windows barrier race     : PASS
+multi-process race       : 20 rounds × 6 processes PASS
+mutation                 : 12 / 12 mutants killed
+Findings                 : NONE
+Blocking Findings        : NONE
+```
+
+Reviewer A 记录的证据缺口：Windows 真实 symlink 用例因权限不足未执行；POSIX 原生主机未执行（该缺口已由 Reviewer B 补足，见 25.3）。
+
+### 25.3 独立复查 B
+
+结论：**BLOCKED — 仅限证据环境**。
+
+需要明确说明，这**不是实现层面的 FAIL**：
+
+```text
+Implementation correctness findings : NONE
+P4-C6-R-*                           : NONE
+```
+
+BLOCKED 的原因只有复查环境的限制：没有可执行的候选 checkout，因此无法独立运行 targeted pytest、full pytest 和本地 `git diff --check`。这些缺失的证据已由 Reviewer A 的独立执行补足。
+
+同时，Reviewer B 提供了开发阶段缺少的重要独立证据，即 Linux/POSIX 原生主机执行：
+
+```text
+Linux/POSIX native                  : EXECUTED
+POSIX os.link no-replace            : PASS
+existing regular target             : EEXIST / PASS
+existing symlink                    : EEXIST / preserved / PASS
+dangling symlink                    : EEXIST / preserved / PASS
+native POSIX barrier race           : exactly one winner / PASS
+```
+
+因此两份复查报告是互补证据，彼此不构成否决。
+
+### 25.4 合并关闭判断
+
+两份复查的证据合并后满足关闭条件（Combined Evidence: **SATISFIED**）。各项裁决如下：
+
+```text
+Atomic primitive                   : ACCEPTED
+Overwrite NEVER                    : ACCEPTED
+Windows no-replace strategy        : ACCEPTED
+POSIX link+unlink strategy         : ACCEPTED
+Temp ownership                     : ACCEPTED
+Failure cleanup                    : ACCEPTED
+Cancellation / fatal propagation   : ACCEPTED
+Concurrent race                    : ACCEPTED
+Path boundary                      : ACCEPTED
+Artifact mapping                   : ACCEPTED
+NFO encoding                       : ACCEPTED
+Image byte identity                : ACCEPTED
+Extrafanart naming                 : ACCEPTED
+Single-artifact materializer       : ACCEPTED
+Partial-success semantics          : ACCEPTED
+Architecture                       : ACCEPTED
+Integrated synthetic gate          : ACCEPTED
+
+New Findings                       : NONE
+Blocking Findings                  : NONE
+```
+
+### 25.5 保留的证据说明（非阻塞）
+
+1. **Windows 真实 symlink**：开发者与复查者的主机均缺少 symlink 权限，未执行。junction 用例与不依赖主机的 `lstat` 模拟已执行。
+2. **POSIX 原生主机**：Reviewer B 已独立执行，结果 PASS（见 25.3）。第 22 节中“NOT YET OBSERVED”的开发阶段记录由此补足。
+3. **不支持 hard link 的 POSIX 文件系统**：在这类文件系统上，发布步骤会以 `ArtifactPublishError` fail closed（不会回退到 `rename` / `replace`）。这是已冻结的设计与兼容性边界，不属于当前的正确性问题。
+
+### 25.6 最终状态
+
+```text
+Independent Review A   : PASS
+Independent Review B   : BLOCKED due environment/evidence only
+                         No implementation finding
+Combined Evidence      : SATISFIED
+New Findings           : NONE
+Blocking Findings      : NONE
+P4-C6                  : CLOSED
+Phase 4                : NOT CLOSED
+```
+
+后续 P4-C7 不在本包范围内，尚未开始。
