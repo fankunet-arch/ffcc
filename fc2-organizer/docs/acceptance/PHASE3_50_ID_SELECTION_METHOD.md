@@ -1,211 +1,208 @@
-# Phase 3 C3 — 50-ID coverage set: selection method
+# Phase 3 C3 — 50-ID 覆盖集合：选取方法
 
-> **Status: v2 is in force (see "Amendment v2" at the end).** The v1 text below is kept unchanged as history.
-> Where v2 differs — pool observability (§3), sampling eligibility (§4) — the v2 rules replace the v1 rules;
-> everything else (purpose, validity evidence, freeze / run / what counts in §6) still applies as written.
+> **状态：v2 现行有效（见文末“Amendment v2”）。** 下方 v1 文本作为历史原样保留。
+> v2 与 v1 不同之处——候选池可观测性（§3）、抽样资格（§4）——以 v2 规则取代 v1 规则；
+> 其余内容（目的、有效性证据、§6 中的冻结 / 运行 / 计数口径）仍按原文适用。
 
-Method id: `PHASE3-50ID-SELECTION-v1` (historical), now `PHASE3-50ID-SELECTION-v2`. Executable form:
-`tools/select_50id_set.py`. The v1 text was committed **before** the candidate pool existed and before any
-aggregate lookup was run for acceptance. Nothing below is tuned to engine results, and the engine never sees the pool.
+方法 id：`PHASE3-50ID-SELECTION-v1`（历史），现为 `PHASE3-50ID-SELECTION-v2`。可执行形式：
+`tools/select_50id_set.py`。v1 文本在候选池存在**之前**、且在为验收运行任何聚合查询之前即已提交。
+下文没有任何内容按引擎结果调整，引擎也从不接触候选池。
 
-## 1. Purpose and the rule that matters most
+## 1. 目的与最重要的规则
 
-The gate asks: *of 50 FC2 IDs that are known to be real, how many does the aggregation engine turn into
-canonical number + non-empty title?* That number is meaningless if the 50 were picked by looking at which IDs
-the engine can resolve. Therefore:
+该 gate 要回答：*在 50 个已知真实存在的 FC2 ID 中，聚合引擎能把多少个转化为
+canonical number + 非空标题？* 如果这 50 个是通过观察引擎能解析哪些 ID 挑出来的，
+这个数字就毫无意义。因此：
 
-* The 50 IDs are fixed **before** the primary run and are never changed afterwards.
-* Whether an ID is "known-valid" is decided from **public references that are not the engine's sources**
-  (`fc2db_net`, `javdb`, `av123`). The pool builder and the selector do not import the engine, the adapters or
-  the transport (a test enforces it).
-* Selection is a pure function of the pool file: same pool → same 50 IDs. No randomness, no seed, no clock,
-  no human judgement.
+* 这 50 个 ID 在 primary run **之前**固定，之后永不更改。
+* 一个 ID 是否“known-valid”，由**非引擎来源的公开参考**判定
+  （引擎来源为 `fc2db_net`、`javdb`、`av123`）。候选池构建器与选取器不 import 引擎、适配器或
+  transport（有测试强制约束）。
+* 选取是候选池文件的纯函数：相同候选池 → 相同的 50 个 ID。无随机性、无 seed、无时钟、
+  无人工判断。
 
-## 2. Validity evidence ("known-valid")
+## 2. 有效性证据（“known-valid”）
 
-| Reference | Role | How it is used |
+| 参考 | 作用 | 使用方式 |
 |---|---|---|
-| **R1 — `sukebei.nyaa.si` torrent listing** | enumeration + validity | public search `FC2-PPV-<prefix>*` (first result page). An ID counts only if a torrent *name* contains `FC2-PPV-<number>` (usual spellings). |
-| **R2 — `netflav.com` search** | corroboration | public search by number. Counts only if an embedded result's `code` is **exactly** that number (fuzzy neighbours never count). |
-| Phase 2 frozen set | provenance for the 7 mandatory IDs | recorded in addition to R1/R2 for those IDs. |
+| **R1 — `sukebei.nyaa.si` 种子列表** | 枚举 + 有效性 | 公开搜索 `FC2-PPV-<prefix>*`（第一页结果）。仅当某个种子*名称*包含 `FC2-PPV-<number>`（常见写法）时该 ID 才计入。 |
+| **R2 — `netflav.com` 搜索** | 佐证 | 按编号公开搜索。仅当嵌入结果的 `code` **恰好**等于该编号时才计入（模糊近邻永不计入）。 |
+| Phase 2 冻结集合 | 7 个强制 ID 的来源出处 | 对这些 ID 在 R1/R2 之外额外记录。 |
 
-Recorded per ID: canonical number, which references confirmed it, a note, the UTC validation date. **Never**
-recorded: response bodies, headers, cookies, tokens, account data. An ID confirmed by exactly one external
-reference is labelled *single-source validation* in its note.
+每个 ID 记录：canonical number、哪些参考确认了它、备注、UTC 验证日期。**永不**
+记录：响应体、headers、cookies、tokens、账号数据。恰好被一个外部参考确认的 ID
+在备注中标注为 *single-source validation*。
 
-Known limitation (stated up front, not hidden): R1 and R2 are independent *services* from the three engine
-sources, but they are not independent *origins* — all of them ultimately reflect FC2 Content Market catalogue
-data, and aggregators partly overlap. Requiring R2 corroboration therefore biases the set towards IDs that are
-publicly indexed by more than one site, which may make coverage look somewhat better than for an arbitrary FC2
-file. The reviewer should weigh that; the alternative (single-reference IDs) trades it for weaker validity.
+已知局限（事先说明，不加隐藏）：R1 与 R2 相对于三个引擎来源是独立的*服务*，
+但并非独立的*源头*——它们最终都反映 FC2 Content Market 的目录数据，且聚合站点部分重叠。
+因此要求 R2 佐证会使集合偏向被多个站点公开索引的 ID，这可能使覆盖率看起来比任意一个 FC2
+文件的情况略好。复查者应权衡这一点；替代方案（单参考 ID）则以更弱的有效性作为代价。
 
-## 3. Candidate pool (`PHASE3_CANDIDATE_POOL.json`, built by `tools/build_candidate_pool.py`)
+## 3. 候选池（`PHASE3_CANDIDATE_POOL.json`，由 `tools/build_candidate_pool.py` 构建）
 
-1. For each two-digit prefix `10 … 49` (40 prefixes, covering roughly 1.0 M – 4.99 M) query R1 with
-   `FC2-PPV-<prefix>*`. Candidates = 7-digit numbers starting with that prefix that appear in a torrent name.
-2. Keep `4` per prefix at an even stride over the ascending list of that prefix's candidates
-   (`((2j+1)·n)//(2·4)`); all of them if there are ≤ 4.
-3. Look every kept candidate up on R2 (exact-code match).
-4. The 7 Phase 2 frozen IDs are looked up on R1 and R2 the same way and are always in the pool, whatever R1/R2
-   say about them.
-5. Requests are sequential, ≥ 3 s apart, no bypass of any kind; a failed request means "not confirmed by that
-   reference" and is counted in the file.
+1. 对每个两位前缀 `10 … 49`（40 个前缀，大致覆盖 1.0 M – 4.99 M）用
+   `FC2-PPV-<prefix>*` 查询 R1。候选 = 出现在种子名称中、以该前缀开头的 7 位编号。
+2. 每个前缀按该前缀候选升序列表的均匀步长保留 `4` 个
+   （`((2j+1)·n)//(2·4)`）；若 ≤ 4 个则全部保留。
+3. 在 R2 上查询每个保留的候选（精确 code 匹配）。
+4. 7 个 Phase 2 冻结 ID 以同样方式在 R1 与 R2 上查询，且无论 R1/R2 结果如何，
+   它们始终在候选池中。
+5. 请求串行、间隔 ≥ 3 s，不做任何形式的绕过；失败的请求视为“未被该参考确认”，
+   并在文件中计数。
 
-## 4. Selection (`tools/select_50id_set.py`)
+## 4. 选取（`tools/select_50id_set.py`）
 
-1. **Mandatory (7):** `FC2-4825061, FC2-4824605, FC2-4979299, FC2-4976588, FC2-1042815, FC2-4978035,
-   FC2-4972767` are always in the set.
-2. **Eligible for sampling:** pool entries with `external_reference_count ≥ 2` (R1 **and** R2), excluding the 7,
-   canonicalised, de-duplicated, sorted ascending by number.
-3. **Bands (fixed numeric ranges) and quotas for the remaining 43:**
+1. **强制（7 个）：** `FC2-4825061, FC2-4824605, FC2-4979299, FC2-4976588, FC2-1042815, FC2-4978035,
+   FC2-4972767` 始终在集合中。
+2. **抽样资格：** `external_reference_count ≥ 2`（R1 **且** R2）的候选池条目，排除这 7 个，
+   经 canonical 化、去重、按编号升序排序。
+3. **分段（固定数值区间）及其余 43 个的配额：**
 
-| Band | Numbers | Quota |
+| 分段 | 编号 | 配额 |
 |---|---|---|
 | older | `< 2,000,000` | 14 |
 | middle | `2,000,000 – 3,999,999` | 15 |
 | recent | `≥ 4,000,000` | 14 |
 
-4. **Within a band** with `m` eligible members and quota `q`, take the members at indices
-   `((2j+1)·m) // (2q)` for `j = 0 … q-1` — an even stride over the ascending list.
-5. The result is sorted ascending and must be **exactly 50 distinct** IDs. A band with fewer eligible members
-   than its quota is an **error**; the algorithm never silently moves a quota or swaps in another ID.
+4. **分段内**若有 `m` 个合格成员、配额为 `q`，则取下标
+   `((2j+1)·m) // (2q)`（`j = 0 … q-1`）处的成员——即在升序列表上均匀步长抽取。
+5. 结果按升序排序，且必须是**恰好 50 个互不相同**的 ID。合格成员少于配额的分段是**错误**；
+   算法从不静默挪动配额，也不替换为其他 ID。
 
-Diversity by construction: with the 7 mandatory IDs the set contains ≥ 15 older, ≥ 15 middle and ≥ 20 recent
-IDs and spans the range from the 1.0 M region to the 4.9 M region; it cannot be a single consecutive block.
+多样性由构造保证：连同 7 个强制 ID，集合包含 ≥ 15 个 older、≥ 15 个 middle 和 ≥ 20 个 recent
+ID，范围从 1.0 M 区域跨到 4.9 M 区域；它不可能是单个连续区块。
 
-## 5. Amendment policy (pre-selection only)
+## 5. 修订政策（仅限选取前）
 
-If the pool cannot fill a quota, the method may be amended **before the selector is run**, only on the basis of
-pool composition (never engine results), by a separate commit that states what changed and why. After the set
-file is committed no amendment is possible.
+若候选池无法填满某个配额，方法可以在**运行选取器之前**修订，只能依据候选池构成
+（绝不依据引擎结果），并通过一个说明改动内容及原因的独立提交完成。集合文件
+提交后不再允许任何修订。
 
-## 6. Freeze, run, and what counts
+## 6. 冻结、运行与计数口径
 
-* The set is committed alone as `docs(acceptance): freeze Phase 3 50-ID coverage set`; that commit
-  (`PHASE3_C3_SET_HEAD`) must precede the primary run. The runner refuses a primary run from a dirty tree, with
-  an uncommitted/modified set file, or when primary evidence already exists.
-* **Primary run — exactly one.** Real `MultiSourceEngine`, C3 code head, default order
-  `fc2db_net, javdb, av123`, C2 default `RetryPolicy` (2 attempts; 429 / BLOCKED / NOT_FOUND never retried),
-  IDs sequential, ≥ 4 s apart. Its result is the formal numerator/denominator.
-* **Covered** = aggregate status ≠ `FAILED`, metadata present, and `metadata.meets_minimum_success()`
-  (canonical number + non-empty title). `SUCCESS` and `PARTIAL` can both be covered; every `PARTIAL` and every
-  source-level failure is reported separately, so source health is never hidden behind the coverage figure.
-* **Gate:** covered ≥ 45 of 50 (90 %). Meeting it is reported as *numeric threshold met* only — never as a C3
-  PASS; the independent reviewer decides that.
-* **Uncovered IDs are never replaced** and no 51st ID is added. A *diagnostic* re-run may be used to investigate
-  a failure, is recorded separately, and never replaces the primary result.
-* **If an ID in the set turns out not to be a real FC2 product:** it is not swapped quietly. It stays in the
-  denominator of the primary result, is written up as an *invalid-set-item investigation* in the evidence, and the
-  reviewer decides whether a dataset-correction round is allowed.
+* 集合以 `docs(acceptance): freeze Phase 3 50-ID coverage set` 单独提交；该提交
+  （`PHASE3_C3_SET_HEAD`）必须先于 primary run。runner 在以下情况拒绝 primary run：工作树不干净、
+  集合文件未提交/已修改，或 primary 证据已存在。
+* **Primary run——恰好一次。** 使用真实 `MultiSourceEngine`、C3 代码 head、默认顺序
+  `fc2db_net, javdb, av123`、C2 默认 `RetryPolicy`（2 次尝试；429 / BLOCKED / NOT_FOUND 永不重试），
+  ID 串行、间隔 ≥ 4 s。其结果即正式的分子/分母。
+* **Covered** = 聚合状态 ≠ `FAILED`、metadata 存在，且 `metadata.meets_minimum_success()`
+  （canonical number + 非空标题）。`SUCCESS` 与 `PARTIAL` 都可以算 covered；每个 `PARTIAL` 以及每个
+  来源级失败都单独报告，因此来源健康状况永远不会被覆盖率数字掩盖。
+* **Gate：** 50 个中 covered ≥ 45 个（90 %）。达到时只报告为*达到数值阈值*——绝不报告为 C3
+  PASS；由独立复查者裁定。
+* **未覆盖的 ID 永不替换**，也不增加第 51 个 ID。可以用*诊断性*重跑调查失败原因，
+  但其单独记录，且永不取代 primary 结果。
+* **若集合中某个 ID 被证实并非真实的 FC2 产品：** 不会被悄悄替换。它仍留在
+  primary 结果的分母中，在证据中以 *invalid-set-item investigation* 形式记录，并由
+  复查者决定是否允许一轮数据集修正。
 
 ---
 
-# Amendment v2 — `PHASE3-50ID-SELECTION-v2` (pre-selection amendment 1)
+# Amendment v2 — `PHASE3-50ID-SELECTION-v2`（选取前修订 1）
 
-Made under §5 ("amendment policy: pre-selection only, only on pool composition, separate commit"). It is **not**
-a C3 review round (C3 has not been submitted for independent review) and it is **not** based on any engine result.
+依据 §5（“修订政策：仅限选取前、仅依据候选池构成、独立提交”）作出。它**不是**
+一轮 C3 复查（C3 尚未提交独立复查），也**不**基于任何引擎结果。
 
-## A. Historical facts this amendment does not erase
+## A. 本修订不抹除的历史事实
 
-| Item | Value |
+| 项目 | 值 |
 |---|---|
 | C3 base | `3b5ac61a0cc0b2b7467f2f4623c8e9ba94e922fb` |
-| Historical C3 Code Head v1 | `5ad00e525d72759dcff3ae0458a90d8f3b6ac464` |
-| Historical Selection Method v1 Head | `74c98659394223642a41a1e78a9fae7011ba7f00` |
-| C3 Code Head v2 (replaces v1 as the code-review candidate) | `578ed56aff9e3b823b39da74dc0fc10dae63456c` |
-| Formal 50-ID selector run before this amendment | **NOT RUN** |
-| 50-ID set frozen before this amendment | **NO** |
-| Primary coverage gate before this amendment | **NOT RUN** |
-| Aggregation engine used during pool build (attempt 1) | **NO** |
+| 历史 C3 Code Head v1 | `5ad00e525d72759dcff3ae0458a90d8f3b6ac464` |
+| 历史 Selection Method v1 Head | `74c98659394223642a41a1e78a9fae7011ba7f00` |
+| C3 Code Head v2（取代 v1 作为代码复查候选） | `578ed56aff9e3b823b39da74dc0fc10dae63456c` |
+| 本修订之前运行过的正式 50-ID 选取器 | **NOT RUN** |
+| 本修订之前已冻结的 50-ID 集合 | **NO** |
+| 本修订之前的 primary 覆盖 gate | **NOT RUN** |
+| 候选池构建期间（attempt 1）使用了聚合引擎 | **NO** |
 
-## B. Attempt 1 of the candidate pool — audit FAIL, never frozen, never committed
+## B. 候选池 Attempt 1——审计 FAIL，从未冻结，从未提交
 
-Built by the v1 builder (created 2026-09-20T20:59:28Z; file sha256
-`098fc71755d24064802d8ced77f5ad4a66082b7590bec42915fcdfdc62416bfa`, kept only as job-scratch evidence):
+由 v1 构建器生成（创建于 2026-09-20T20:59:28Z；文件 sha256
+`098fc71755d24064802d8ced77f5ad4a66082b7590bec42915fcdfdc62416bfa`，仅作为 job 临时目录证据保留）：
 
-| Measure | Value |
+| 度量 | 值 |
 |---|---|
-| total candidates | 167 (160 enumerated + 7 Phase 2 frozen) |
-| ≥ 2 external references ("dual") | 46 (45 sampled + FC2-4825061) |
-| exactly 1 external reference ("single") | 118 |
-| dual per band, sampled candidates | older **9** (quota 14), middle 34 (quota 15), recent **2** (quota 14) |
-| requests / failures | 214 requests, **41 failed** — recorded as "not confirmed", i.e. **not distinguished from a genuine negative** |
+| 候选总数 | 167（160 个枚举所得 + 7 个 Phase 2 冻结） |
+| ≥ 2 个外部参考（“dual”） | 46（45 个抽样 + FC2-4825061） |
+| 恰好 1 个外部参考（“single”） | 118 |
+| 各分段 dual 数（抽样候选） | older **9**（配额 14）、middle 34（配额 15）、recent **2**（配额 14） |
+| 请求 / 失败 | 214 次请求，**41 次失败**——记录为“未确认”，即**未与真正的否定结果区分** |
 
-Two independent defects, neither related to engine results:
+两个彼此独立的缺陷，均与引擎结果无关：
 
-1. **Composition.** v1 required every sampled ID to have ≥ 2 external references. That was an *extra*
-   strengthening, not part of the original gate ("known-valid IDs; prefer ≥ 2 references; if only one public
-   reference exists, say so explicitly as single-source validation"). With Attempt 1's composition v1 cannot run.
-2. **Observability.** A failed lookup (timeout / 403 / 429 / 5xx) and a successful "no exact match" were both stored
-   as "not confirmed". That can bias which IDs look single- or dual-referenced, and it hides operational failure.
+1. **构成。** v1 要求每个抽样 ID 都有 ≥ 2 个外部参考。这是一项*额外*加强，
+   并非原始 gate 的一部分（“known-valid ID；优先 ≥ 2 个参考；若只有一个公开
+   参考，须明确标注为 single-source validation”）。以 Attempt 1 的构成，v1 无法运行。
+2. **可观测性。** 查询失败（timeout / 403 / 429 / 5xx）与成功返回的“无精确匹配”都被存为
+   “未确认”。这可能使哪些 ID 看起来是单参考或双参考产生偏差，并掩盖运行层面的失败。
 
-## C. What changes in v2
+## C. v2 的变更
 
-### C.1 Builder (§3 replaced)
+### C.1 构建器（取代 §3）
 
-* Every reference lookup ends in **`confirmed`** (valid response, exact evidence), **`negative`** (valid response,
-  no exact evidence) or **`unavailable`** (timeout, connection error, HTTP 403 / 429 / 5xx / any non-200, or an
-  unusable body such as a challenge page). `unavailable` is **never** turned into `negative`.
-* `unavailable` gets **one** polite retry after the same ≥ 3 s delay (no proxy rotation, no bypass, no cookies);
-  `confirmed` and `negative` are never retried. The final state, the attempt count (1 or 2) and a bounded,
-  non-sensitive detail (HTTP status / exception *type* / `exact_match` / `no_exact_match`) are recorded.
-* **Prefix enumeration is all-or-nothing:** if any of the 40 `FC2-PPV-<prefix>*` queries is still `unavailable`
-  after its retry the build fails (non-zero exit, no pool file). It is never read as "zero candidates".
-* An enumerated candidate is R1-confirmed by construction; its R2 (netflav) state is recorded truthfully. R2
-  `unavailable` leaves the candidate a *single-reference* candidate (`external_reference_count = 1`) with the
-  unavailability visible — it is not an R2 negative.
-* The 7 Phase 2 IDs use the same tri-state lookups. Their Phase 2 provenance stays in `validity_sources` but is
-  **never counted** as an external reference (`external_reference_count` counts confirmed R1/R2 only).
-* Pool schema v2: `candidates[]` (each with `number`, `band`, `origin`, `validation_date`, `validity_sources`,
-  `external_reference_count`, `validity_note`, `reference_checks{sukebei,netflav}`), top-level `requests_made`,
-  `retry_requests`, `initial_requests`, `confirmed_checks`, `negative_checks`, `unavailable_checks`,
-  `prefix_enumeration_complete`, and a per-prefix table. Every request is accounted for by exactly one recorded check.
-* **Unchanged:** `PER_PREFIX = 4` (the population is large enough; the deficit is corroboration sparsity, and
-  enlarging the pool would add many requests without fixing it), the 40 prefixes, R1/R2 and their exact-match rules
-  (fuzzy hits, partial numeric matches, title mentions and substrings never count). **No third reference is added**
-  in this round: it would introduce a new parser / network dependency and its own exact-match semantics during
-  acceptance. If the independent reviewer finds single-reference validity too weak for the gate they may require a
-  dataset-strengthening round.
+* 每次参考查询的结果只能是 **`confirmed`**（有效响应，存在精确证据）、**`negative`**（有效响应，
+  无精确证据）或 **`unavailable`**（timeout、连接错误、HTTP 403 / 429 / 5xx / any non-200，或
+  不可用的响应体，例如 challenge 页面）。`unavailable` **永不**被转换为 `negative`。
+* `unavailable` 在同样 ≥ 3 s 延迟后获得**一次**礼貌性重试（不轮换代理、不绕过、不带 cookies）；
+  `confirmed` 与 `negative` 永不重试。记录最终状态、尝试次数（1 或 2）以及有界的、
+  非敏感的细节（HTTP 状态 / 异常*类型* / `exact_match` / `no_exact_match`）。
+* **前缀枚举全有或全无：** 若 40 个 `FC2-PPV-<prefix>*` 查询中任何一个在重试后仍为 `unavailable`，
+  构建即失败（非零退出码，不产生候选池文件）。它绝不会被解读为“零候选”。
+* 枚举所得候选按构造即为 R1-confirmed；其 R2（netflav）状态如实记录。R2
+  `unavailable` 使该候选成为*单参考*候选（`external_reference_count = 1`），且不可用状态
+  可见——它不是 R2 否定结果。
+* 7 个 Phase 2 ID 使用同样的三态查询。它们的 Phase 2 出处保留在 `validity_sources` 中，但
+  **永不计为**外部参考（`external_reference_count` 只统计 confirmed 的 R1/R2）。
+* 候选池 schema v2：`candidates[]`（每项含 `number`、`band`、`origin`、`validation_date`、`validity_sources`、
+  `external_reference_count`、`validity_note`、`reference_checks{sukebei,netflav}`），顶层 `requests_made`、
+  `retry_requests`、`initial_requests`、`confirmed_checks`、`negative_checks`、`unavailable_checks`、
+  `prefix_enumeration_complete`，以及一张按前缀的表。每次请求都恰好对应一条已记录的 check。
+* **不变：** `PER_PREFIX = 4`（总体足够大；缺口在于佐证稀疏，扩大候选池
+  会增加大量请求却无法解决问题）、40 个前缀、R1/R2 及其精确匹配规则
+  （模糊命中、部分数字匹配、标题提及和子串永不计入）。本轮**不增加第三个参考**：
+  那会在验收期间引入新的解析器 / 网络依赖及其自身的精确匹配语义。若独立复查者认为
+  单参考有效性对 gate 而言过弱，可以要求一轮数据集加强。
 
-### C.2 Selection (§4 replaced): dual-first, transparent single-reference fallback
+### C.2 选取（取代 §4）：dual 优先，透明的单参考回退
 
-Mandatory 7, the three numeric bands and the quotas (older 14 / middle 15 / recent 14 = 43) are **unchanged**.
-Sampling eligibility is now two tiers per band, counted from *confirmed* external references only:
+强制 7 个、三个数值分段及配额（older 14 / middle 15 / recent 14 = 43）**不变**。
+抽样资格现在在每个分段内分为两层，只按 *confirmed* 外部参考计数：
 
-| Tier | Rule | `validation_tier` |
+| 层级 | 规则 | `validation_tier` |
 |---|---|---|
-| 1 — preferred | ≥ 2 confirmed external references | `dual_reference` |
-| 2 — fallback | exactly 1 confirmed external reference | `single_reference_fallback` |
-| never eligible | 0 confirmed: zero-reference, negative-only, unavailable-only, Phase-2-provenance-only | — |
+| 1 — 优先 | ≥ 2 个 confirmed 外部参考 | `dual_reference` |
+| 2 — 回退 | 恰好 1 个 confirmed 外部参考 | `single_reference_fallback` |
+| 永不合格 | 0 个 confirmed：零参考、仅 negative、仅 unavailable、仅有 Phase-2 出处 | — |
 
-Per band with quota `q` and ascending tier-1 list `T1` (`m = |T1|`):
+对配额为 `q`、tier-1 升序列表为 `T1`（`m = |T1|`）的每个分段：
 
-* `m ≥ q` → take `q` from `T1` at indices `((2j+1)·m) // (2q)`; **tier 2 is not used at all**.
-* `m < q` → take **all** of `T1`, then `deficit = q − m` from the ascending tier-2 list `T2` (`m' = |T2|`) at indices
-  `((2j+1)·m') // (2·deficit)`. If `m' < deficit` the selection is an **error** (widen the pool; never shift a quota).
+* `m ≥ q` → 在下标 `((2j+1)·m) // (2q)` 处从 `T1` 取 `q` 个；**完全不使用 tier 2**。
+* `m < q` → 取 `T1` **全部**，再从 tier-2 升序列表 `T2`（`m' = |T2|`）在下标
+  `((2j+1)·m') // (2·deficit)` 处取 `deficit = q − m` 个。若 `m' < deficit`，选取即为**错误**（应扩大候选池；绝不挪动配额）。
 
-Illustration only (the formal counts come from the rebuilt, frozen v2 pool): with Attempt 1's shape the older
-band would take its 9 dual + 5 single, middle 15 from its 34 dual only, recent its 2 dual + 12 single.
+仅作示意（正式计数来自重建并冻结的 v2 候选池）：按 Attempt 1 的形态，older
+分段将取其 9 个 dual + 5 个 single，middle 仅从其 34 个 dual 中取 15 个，recent 取其 2 个 dual + 12 个 single。
 
-Mandatory IDs carry `validation_tier = phase2_mandatory`. Each selected ID's `validation_tier`,
-`reference_checks`, `validity_sources` and `validity_note` are in the set file, so a reviewer sees exactly how many of
-the 50 are dual, single-fallback or mandatory. The selector refuses a pool with an incomplete prefix enumeration,
-an old schema, or a candidate whose stored `external_reference_count` disagrees with its own `reference_checks`.
-It stays pure: offline, no randomness, no clock in the selection, no engine, no adapters.
+强制 ID 带 `validation_tier = phase2_mandatory`。每个被选 ID 的 `validation_tier`、
+`reference_checks`、`validity_sources` 与 `validity_note` 都在集合文件中，因此复查者能准确看到
+50 个中有多少是 dual、single-fallback 或 mandatory。选取器拒绝前缀枚举不完整、
+schema 过旧，或某候选存储的 `external_reference_count` 与其自身 `reference_checks` 不一致的候选池。
+它保持纯函数：离线、无随机性、选取中无时钟、无引擎、无适配器。
 
-### C.3 Why single-reference fallback is admissible, and its cost
+### C.3 单参考回退为何可接受，及其代价
 
-The original requirement was known-valid IDs, *preferably* corroborated by ≥ 2 independent public references, with
-single-reference IDs explicitly labelled. v1's "dual only" was stricter than that. v2 keeps dual-first and uses a
-labelled single-reference fallback only to fill a band's deficit. The trade-off is weaker validity evidence for
-those IDs (one torrent-name reference, no aggregator corroboration); it is disclosed per ID, and the fallback is
-chosen by the same blind stride, never by engine outcome. A side effect worth knowing: because tier 1 requires
-netflav corroboration, dual IDs are likelier to be aggregator-indexed than fallback IDs.
+原始要求是 known-valid ID，*优先*由 ≥ 2 个独立公开参考佐证，
+单参考 ID 须明确标注。v1 的“仅 dual”比这更严格。v2 保持 dual 优先，仅在填补分段缺口时
+使用带标注的单参考回退。代价是这些 ID 的有效性证据较弱（只有一个种子名称参考，
+无聚合站点佐证）；这一点按 ID 逐一披露，且回退项由同样的盲步长选出，绝不依据引擎结果。
+一个值得了解的副作用：由于 tier 1 要求 netflav 佐证，dual ID 比回退 ID 更可能被聚合站点索引。
 
-## D. New freeze chain
+## D. 新的冻结链
 
-`C3 Code Head v2` → `Selection Method v2 Head` (this amendment) → **candidate pool rebuilt with builder v2** →
-`Candidate Pool Freeze Head` → selector → `50-ID Set Freeze Head` → **PRIMARY gate** → evidence / handoff docs.
-The pool is rebuilt only after this amendment is committed and pushed; the selector reads only the committed pool;
-the primary gate runs only after the set file is committed. If the v2 pool still cannot fill a band from tier 1 +
-tier 2 the process stops for a decision (third reference / enumeration expansion); nothing is adjusted silently.
+`C3 Code Head v2` → `Selection Method v2 Head`（本修订）→ **用构建器 v2 重建候选池** →
+`Candidate Pool Freeze Head` → 选取器 → `50-ID Set Freeze Head` → **PRIMARY gate** → 证据 / handoff 文档。
+候选池只在本修订提交并推送之后重建；选取器只读取已提交的候选池；
+primary gate 只在集合文件提交之后运行。若 v2 候选池仍无法由 tier 1 + tier 2 填满某个分段，
+流程即停止等待决策（第三个参考 / 扩大枚举）；不做任何静默调整。

@@ -1,38 +1,38 @@
 # SOURCE_VIABILITY - javdb
 
-- **Provider:** JavDB (javdb.com) - public search listing only
-- **Status:** `VERIFIED`
-- **Decision:** ADOPT (search listing only; partial fields)
-- **Adapter:** `fc2_metadata_core.sources.adapters.javdb.JavdbAdapter`
-- **Login/cookie needed:** not required for the search listing (detail pages require login and are never requested)
-- **Cloudflare/anti-bot:** Cloudflare CDN present, no challenge observed; a challenge or a `/login` redirect maps to `BLOCKED`
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** JavDB (javdb.com) - 仅公开搜索列表
+- **状态：** `VERIFIED`
+- **决定：** ADOPT（仅搜索列表；部分字段）
+- **适配器：** `fc2_metadata_core.sources.adapters.javdb.JavdbAdapter`
+- **是否需要登录/cookie：** 搜索列表不需要（详情页需要登录，且从不请求）
+- **Cloudflare/反爬：** 存在 Cloudflare CDN，未观察到 challenge；challenge 或 `/login` 重定向映射为 `BLOCKED`
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-`/search?q=FC2-PPV-<digits>` is a public, server-rendered listing carrying number, Japanese title, release date and cover URL per hit. The **detail page redirects to `/login`**, so actors/tags/runtime are deliberately unavailable from this source.
+`/search?q=FC2-PPV-<digits>` 是公开的服务端渲染列表，每个命中带有编号、日文标题、发行日期和封面 URL。**详情页重定向到 `/login`**，因此该来源有意不提供 actors/tags/runtime。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:58:00 | `https://javdb.com/search?q=FC2-PPV-4825061` | 200 | `JavDB 成人影片數據庫` | - | same |  |
 | 12:58:02 | `https://javdb.com/search?q=FC2-PPV-4824605` | 200 | `JavDB 成人影片數據庫` | - | same |  |
 | 12:58:04 | `https://javdb.com/v/82ZNYd` | 200 | `登入 / JavDB 成人影片數據庫` | - | `https://javdb.com/login` |  |
 
-## Findings
+## 发现
 
-- Search is fuzzy (`4825061` also returns `FC2-1825061`; `4824605` returns only unrelated `FC2-1824605`/`FC2-4724605`). The adapter accepts **only** the hit whose number equals the request, otherwise `NOT_FOUND`. Verified live: `FC2-4824605` gives `NOT_FOUND` even though the page lists two near-misses.
-- A zero-result page carries `<div class="empty-message">暫無內容</div>`; a 200 page with neither a result list nor that marker is `INVALID_RESPONSE`, not `NOT_FOUND`.
-- Detail redirect: `302 https://javdb.com/v/82ZNYd` to `https://javdb.com/login` (manual observations section 3).
-- Coverage on the 7-ID probe set: 6/7 (missing only `FC2-4824605`).
-- Fields returned: number, title, release, cover thumbnail, source URL, JavDB video id (`external_ids['javdb']`).
+- 搜索是模糊的（`4825061` 还会返回 `FC2-1825061`；`4824605` 只返回无关的 `FC2-1824605`/`FC2-4724605`）。适配器**只**接受编号与请求相等的命中，否则为 `NOT_FOUND`。已在线验证：尽管页面列出了两个近似命中，`FC2-4824605` 仍给出 `NOT_FOUND`。
+- 零结果页面带有 `<div class="empty-message">暫無內容</div>`；既无结果列表也无该标记的 200 页面判为 `INVALID_RESPONSE`，而非 `NOT_FOUND`。
+- 详情页重定向：`302 https://javdb.com/v/82ZNYd` 到 `https://javdb.com/login`（人工观察 section 3）。
+- 在 7-ID probe 集合上的覆盖：6/7（只缺 `FC2-4824605`）。
+- 返回字段：编号、标题、发行日期、封面缩略图、来源 URL、JavDB 视频 id（`external_ids['javdb']`）。
 
-## Adapter verification (Phase 2 Gate run, `tools/probe_sources.py adapter --source javdb`, code `3a21c4b`)
+## 适配器验证（Phase 2 Gate run，`tools/probe_sources.py adapter --source javdb`，代码 `3a21c4b`）
 
-Real HTTP through `HttpxTransport`, one request per lookup, about 2.5 s between lookups, no cookies. `SUCCESS` means the adapter's `SourceResult` met minimum success (canonical number + non-empty title).
+通过 `HttpxTransport` 发出真实 HTTP，每次查询一个请求，查询间隔约 2.5 s，不带 cookies。`SUCCESS` 表示适配器的 `SourceResult` 满足最低成功条件（canonical number + 非空标题）。
 
-| UTC | Number | HTTP | SourceStatus | Title (excerpt) | Fields populated |
+| UTC | 编号 | HTTP | SourceStatus | 标题（节选） | 已填充字段 |
 |---|---|---|---|---|---|
 | 13:03:04 | FC2-4825061 | 200 | **success** | 【顔出し】ハーフ美人妻 最初で最後の顔出し未公開動画×2本 ※SNS認証者限定 | number, title, release, thumb_urls, source_urls, external_ids |
 | 13:03:07 | FC2-4824605 | 200 | **not_found** |  |  |
@@ -42,21 +42,21 @@ Real HTTP through `HttpxTransport`, one request per lookup, about 2.5 s between 
 | 13:03:18 | FC2-4978035 | 200 | **success** | 【廃版】大手テレビ局の美女アナウンサーA（元女子アナのFカップ美巨乳） | number, title, release, thumb_urls, source_urls, external_ids |
 | 13:03:21 | FC2-4972767 | 200 | **success** | 身長133cm 18歳。日本×ボリビアの芸能界最小ハーフモデル。衝撃の体格差1.3倍！破壊寸前ま | number, title, release, thumb_urls, source_urls, external_ids |
 
-An earlier identical run at code `45be2b7` (13:00:30-13:01:38) gave the same outcomes.
+更早一次在代码 `45be2b7` 上的相同运行（13:00:30-13:01:38）得到了相同结果。
 
-**Gate result:** 6 known-valid IDs returned `SUCCESS` (FC2-4825061, FC2-4979299, FC2-4976588, FC2-1042815, FC2-4978035, FC2-4972767); requirement is >=2.
+**Gate 结果：** 6 个 known-valid ID 返回 `SUCCESS`（FC2-4825061, FC2-4979299, FC2-4976588, FC2-1042815, FC2-4978035, FC2-4972767）；要求为 >=2。
 
-## Requirement checklist
+## 要求核对清单
 
-| Requirement (spec section 11 / Phase 2) | Met |
+| 要求（规格书 section 11 / Phase 2） | 满足 |
 |---|---|
-| Real HTTP request (not mocked) | yes |
-| Formal adapter actually executed | yes |
-| >=2 distinct known-valid IDs return `SUCCESS` with number + non-empty title | yes (6) |
-| No private login / cookie | yes |
-| No CAPTCHA / Cloudflare bypass | yes (none attempted; a challenge maps to `BLOCKED`) |
-| Offline parser + contract tests | yes (`tests/unit/sources/adapters/test_adapter_javdb.py`, real-response fixtures under `tests/fixtures/sources/`) |
+| 真实 HTTP 请求（非 mock） | 是 |
+| 正式适配器确实被执行 | 是 |
+| >=2 个不同的 known-valid ID 返回带编号 + 非空标题的 `SUCCESS` | 是（6） |
+| 无私有登录 / cookie | 是 |
+| 无 CAPTCHA / Cloudflare 绕过 | 是（未做任何尝试；challenge 映射为 `BLOCKED`） |
+| 离线解析器 + 契约测试 | 是（`tests/unit/sources/adapters/test_adapter_javdb.py`，真实响应 fixture 位于 `tests/fixtures/sources/` 下） |
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
-The most likely of the three to rate-limit or introduce a login/age gate; the adapter makes exactly one request per lookup and Phase 3 must add per-host throttling. This adapter reads one public page per lookup and is not meant for bulk crawling.
+三者中最可能限流或引入登录/年龄验证的一个；适配器每次查询恰好发出一个请求，Phase 3 必须加入按主机的节流。该适配器每次查询读取一个公开页面，不用于批量爬取。

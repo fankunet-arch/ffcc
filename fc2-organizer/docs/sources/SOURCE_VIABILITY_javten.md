@@ -1,27 +1,27 @@
 # SOURCE_VIABILITY - javten
 
-- **Provider:** JavTen (javten.com)
-- **Status:** `BLOCKED`
-- **Decision:** REJECT - Cloudflare challenge
-- **Adapter:** none
-- **Login/cookie needed:** unknown
-- **Cloudflare/anti-bot:** **yes**
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** JavTen (javten.com)
+- **状态：** `BLOCKED`
+- **决定：** REJECT - Cloudflare challenge
+- **适配器：** 无
+- **是否需要登录/cookie：** 未知
+- **Cloudflare/反爬：** **是**
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-Whole site (`/`, `/fc2`, `/search?q=...`) returns HTTP 403; the search request carries `cf-mitigated: challenge` / `Just a moment...`.
+整个站点（`/`、`/fc2`、`/search?q=...`）返回 HTTP 403；搜索请求带有 `cf-mitigated: challenge` / `Just a moment...`。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:58:29 | `https://javten.com/search?q=FC2-PPV-4825061` | 403 | `Just a moment...` | challenge | same |  |
 
-## Findings
+## 发现
 
-- Named in the spec's initial candidate list ('FC2DB/JavTen'); today's evidence is BLOCKED.
+- 规格书的初始候选列表中列出了它（'FC2DB/JavTen'）；今天的证据为 BLOCKED。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
-Re-check if the challenge is dropped.
+若 challenge 被撤掉则重新检查。

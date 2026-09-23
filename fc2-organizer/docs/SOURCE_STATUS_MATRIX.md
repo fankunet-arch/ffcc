@@ -1,50 +1,50 @@
 # SOURCE_STATUS_MATRIX.md
 
-Status: **POPULATED** - every row comes from live probes recorded in
-`docs/source-probes/PHASE2_PROBE_20260920.json` and detailed in `docs/sources/SOURCE_VIABILITY_<id>.md`.
-Nothing here was filled from a search snippet, a remembered name, or an assumption that a site named in the spec is still live.
+状态：**POPULATED** - 每一行都来自记录在
+`docs/source-probes/PHASE2_PROBE_20260920.json` 中、并在 `docs/sources/SOURCE_VIABILITY_<id>.md` 中详述的在线探测。
+这里没有任何内容来自搜索摘要、记忆中的名称，或“规格书中提到的站点仍然在线”的假设。
 
-## Columns
+## 列说明
 
-| Column | Meaning |
+| 列 | 含义 |
 |---|---|
-| Source ID | Stable logical id (`SourceAdapter.source_id`); never changes with mirror domain. |
-| Provider | Human-readable provider/site. |
-| Status | `VERIFIED`, `PARTIAL`, `BLOCKED`, `RATE_LIMITED`, `DEAD`, `REJECTED`, `EXPERIMENTAL`. |
-| Verified IDs | Probe-set numbers that returned `SourceStatus.SUCCESS` (number + non-empty title) through the real adapter in the Gate run. `-` = no adapter. |
-| Cookie | Whether a private cookie/login is required for lookup. |
-| CF | Whether a Cloudflare/anti-bot challenge was observed on the lookup path. |
-| Adopted | Whether a real `SourceAdapter` exists. |
+| Source ID | 稳定的逻辑 id（`SourceAdapter.source_id`）；不随镜像域名变化。 |
+| Provider | 人类可读的提供方/站点。 |
+| Status | `VERIFIED`、`PARTIAL`、`BLOCKED`、`RATE_LIMITED`、`DEAD`、`REJECTED`、`EXPERIMENTAL`。 |
+| Verified IDs | 在 Gate run 中经真实适配器返回 `SourceStatus.SUCCESS`（编号 + 非空标题）的 probe 集合编号。`-` = 无适配器。 |
+| Cookie | 查询是否需要私有 cookie/登录。 |
+| CF | 查询路径上是否观察到 Cloudflare/反爬 challenge。 |
+| Adopted | 是否存在真实的 `SourceAdapter`。 |
 
-## Status matrix
+## 状态矩阵
 
 | Source ID | Provider | Status | Verified IDs | Cookie | CF | Adopted |
 |---|---|---|---|---|---|---|
-| `fc2db_net` | FC2DB (fc2db.net) | **VERIFIED** | 4824605, 4979299, 4976588, 1042815, 4978035, 4972767 | not required | no | yes |
-| `javdb` | JavDB (javdb.com) - public search listing only | **VERIFIED** | 4825061, 4979299, 4976588, 1042815, 4978035, 4972767 | not required (search listing) | no | yes |
-| `av123` | 123AV (123av.com) | **VERIFIED** | 4825061, 4979299, 4978035 | not required | no | yes |
-| `fc2_official` | FC2 Content Market (adult.contents.fc2.com) | **BLOCKED** | - | **login required** | no | no |
-| `fd2ppv` | FD2 (fd2ppv.cc) | **BLOCKED** | - | unknown | **yes** (work pages) | no |
-| `fc2db_com` | FC2DB (fc2db.com - `.com` sibling) | **BLOCKED** | - | unknown | **yes** | no |
-| `javten` | JavTen (javten.com) | **BLOCKED** | - | unknown | **yes** | no |
-| `supjav_missav` | SupJav (supjav.com) and MissAV (missav.ws) | **BLOCKED** | - | unknown | **yes** | no |
-| `fc2ppvdb` | FC2PPVDB (fc2ppvdb.com) | **BLOCKED** | - | unknown | n/a (IP-blocked here) | no |
-| `onejav` | OneJAV (onejav.com) | **BLOCKED** | - | unknown | n/a (IP-blocked here) | no |
-| `fc2cm` | FC2CM (fc2cm.com; spec name 'FC2CMADB') | **PARTIAL** | - | not required | no | no |
-| `javbus` | JavBus (www.javbus.com) | **BLOCKED** | - | age-gate cookie | no (age gate) | no |
-| `netflav` | Netflav (netflav.com) | **EXPERIMENTAL** | - | not required | no | no |
-| `jav_guru` | Jav Guru (jav.guru) | **REJECTED** | - | not required | no | no |
-| `sukebei_nyaa` | Sukebei (sukebei.nyaa.si) | **REJECTED** | - | not required | no | no |
+| `fc2db_net` | FC2DB (fc2db.net) | **VERIFIED** | 4824605, 4979299, 4976588, 1042815, 4978035, 4972767 | 不需要 | 否 | 是 |
+| `javdb` | JavDB (javdb.com) - 仅公开搜索列表 | **VERIFIED** | 4825061, 4979299, 4976588, 1042815, 4978035, 4972767 | 不需要（搜索列表） | 否 | 是 |
+| `av123` | 123AV (123av.com) | **VERIFIED** | 4825061, 4979299, 4978035 | 不需要 | 否 | 是 |
+| `fc2_official` | FC2 Content Market (adult.contents.fc2.com) | **BLOCKED** | - | **需要登录** | 否 | 否 |
+| `fd2ppv` | FD2 (fd2ppv.cc) | **BLOCKED** | - | 未知 | **是**（作品页） | 否 |
+| `fc2db_com` | FC2DB (fc2db.com - `.com` 姊妹站) | **BLOCKED** | - | 未知 | **是** | 否 |
+| `javten` | JavTen (javten.com) | **BLOCKED** | - | 未知 | **是** | 否 |
+| `supjav_missav` | SupJav (supjav.com) 与 MissAV (missav.ws) | **BLOCKED** | - | 未知 | **是** | 否 |
+| `fc2ppvdb` | FC2PPVDB (fc2ppvdb.com) | **BLOCKED** | - | 未知 | n/a（此处 IP 被封） | 否 |
+| `onejav` | OneJAV (onejav.com) | **BLOCKED** | - | 未知 | n/a（此处 IP 被封） | 否 |
+| `fc2cm` | FC2CM (fc2cm.com；规格书名称 'FC2CMADB') | **PARTIAL** | - | 不需要 | 否 | 否 |
+| `javbus` | JavBus (www.javbus.com) | **BLOCKED** | - | 年龄验证 cookie | 否（年龄验证） | 否 |
+| `netflav` | Netflav (netflav.com) | **EXPERIMENTAL** | - | 不需要 | 否 | 否 |
+| `jav_guru` | Jav Guru (jav.guru) | **REJECTED** | - | 不需要 | 否 | 否 |
+| `sukebei_nyaa` | Sukebei (sukebei.nyaa.si) | **REJECTED** | - | 不需要 | 否 | 否 |
 
-## Gate summary
+## Gate 摘要
 
-- Provider entries investigated: **15** (fc2db.com is a sibling of fc2db.net; supjav/missav share one row). The >=5 floor is met; >=3 VERIFIED was reached.
-- **VERIFIED: 3** (`fc2db_net`, `javdb`, `av123`): independent operators and hosts, different page formats. The Phase 2 Gate needs >=2; the strong target of 3 is met.
-- FC2 Official was actually investigated and is **BLOCKED (login wall)**; several aggregator/index candidates were investigated beyond the three adopted.
-- Two candidates (`fc2ppvdb`, `onejav`) could not be evaluated because of an ISP-level IP block on this network; they are *unverified*, not dead. Re-probe from another network before Phase 3 fixes its source list.
-- Independence caveat: all three ultimately mirror FC2 Content Market data and all three sit behind Cloudflare's CDN. They are independent *services*, not independent *origins*; a Cloudflare-wide incident or an FC2 takedown wave would hit all three. Keep FC2 Official (login-gated) and the other documented reserves in mind for Phase 3.
+- 调查的提供方条目：**15** 个（fc2db.com 是 fc2db.net 的姊妹站；supjav/missav 共用一行）。满足 >=5 的下限；达到了 >=3 VERIFIED。
+- **VERIFIED：3** 个（`fc2db_net`、`javdb`、`av123`）：运营方与主机彼此独立，页面格式各不相同。Phase 2 Gate 需要 >=2；3 个的强目标已达成。
+- FC2 Official 确实做了调查，结果为 **BLOCKED（登录墙）**；除三个已采用来源外，还调查了若干聚合/索引类候选。
+- 两个候选（`fc2ppvdb`、`onejav`）因本网络存在 ISP 级 IP 封锁而无法评估；它们是*未验证*，而非失效。应在 Phase 3 确定来源列表前从其他网络重新探测。
+- 独立性说明：三者最终都镜像 FC2 Content Market 数据，且三者都位于 Cloudflare 的 CDN 之后。它们是独立的*服务*，而非独立的*源头*；Cloudflare 范围的故障或 FC2 的下架潮会同时影响三者。Phase 3 应记住 FC2 Official（需登录）及其他已记录的备选来源。
 
-## Per-ID coverage in the Gate run (7-ID probe set)
+## Gate run 中的逐 ID 覆盖（7-ID probe 集合）
 
 | ID | fc2db_net | javdb | av123 |
 |---|---|---|---|
@@ -56,4 +56,4 @@ Nothing here was filled from a search snippet, a remembered name, or an assumpti
 | FC2-4978035 | SUCCESS | SUCCESS | SUCCESS |
 | FC2-4972767 | SUCCESS | SUCCESS | NOT_FOUND |
 
-`NOT_FOUND` here is each site's own answer (a real 404 or no exact hit), never a transport failure.
+此处的 `NOT_FOUND` 是各站点自身的回答（真实的 404 或无精确命中），从不是传输失败。

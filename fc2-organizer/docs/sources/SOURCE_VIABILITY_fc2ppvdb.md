@@ -1,31 +1,31 @@
 # SOURCE_VIABILITY - fc2ppvdb
 
-- **Provider:** FC2PPVDB (fc2ppvdb.com)
-- **Status:** `BLOCKED`
-- **Decision:** REJECT for Phase 2 - cannot be evaluated from this network
-- **Adapter:** none
-- **Login/cookie needed:** unknown
-- **Cloudflare/anti-bot:** unknown (never reached the origin)
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** FC2PPVDB (fc2ppvdb.com)
+- **状态：** `BLOCKED`
+- **决定：** Phase 2 REJECT - 无法从本网络评估
+- **适配器：** 无
+- **是否需要登录/cookie：** 未知
+- **Cloudflare/反爬：** 未知（从未到达源站）
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-Unreachable from this network: HTTPS fails certificate verification and plain HTTP returns a Spanish court-ordered IP-block notice. This is an environment fact, not proof the site is dead.
+从本网络无法访问：HTTPS 证书校验失败，明文 HTTP 返回西班牙法院下令的 IP 封锁通知。这是环境事实，不能证明站点已失效。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:58:16 | `https://fc2ppvdb.com/articles/4825061` | n/a | `` | - | `-` | `HttpConnectionError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate veri` |
 | 12:58:19 | `http://fc2ppvdb.com/articles/4825061` | 200 | `...` | - | same |  |
 
-## Findings
+## 发现
 
-- Resolves to `188.114.96.5`/`188.114.97.5` (shared with `onejav.com`). HTTPS gives `CERTIFICATE_VERIFY_FAILED: self-signed certificate`; the root page once timed out.
-- `http://fc2ppvdb.com/articles/4825061` returns an HTTP 200 notice page: access to this IP blocked per the judgement of 18 Dec 2024 of Juzgado de lo Mercantil nº 6 de Barcelona (LaLiga / Telefónica). Text in manual observations section 4.
-- Certificate verification was **not** disabled and no other route was used. Third-party reports (a 2024 mdcx issue: 'closed by DMCA'; a 2026 analytics page: traffic) are contradictory and were not used as evidence.
-- Because it cannot be probed here it cannot count toward the Gate; re-probe from a network without this block.
+- 解析到 `188.114.96.5`/`188.114.97.5`（与 `onejav.com` 共用）。HTTPS 给出 `CERTIFICATE_VERIFY_FAILED: self-signed certificate`；根页面有一次超时。
+- `http://fc2ppvdb.com/articles/4825061` 返回 HTTP 200 通知页：依据 Juzgado de lo Mercantil nº 6 de Barcelona 于 18 Dec 2024 作出的判决（LaLiga / Telefónica），对该 IP 的访问已被封锁。原文见人工观察 section 4。
+- 证书校验**没有**被关闭，也没有使用其他路由。第三方报告（2024 年的一个 mdcx issue：'closed by DMCA'；2026 年的一个分析页面：有流量）相互矛盾，未被用作证据。
+- 由于无法在此探测，它不能计入 Gate；应从没有该封锁的网络重新探测。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
-If it is alive it is a rich source (actors curated by users, per the mdcx issue); worth re-checking from another network before Phase 3 finalizes its source list.
+若它仍存活，则是一个信息丰富的来源（据 mdcx issue，演员由用户整理）；值得在 Phase 3 确定来源列表前从其他网络重新检查。

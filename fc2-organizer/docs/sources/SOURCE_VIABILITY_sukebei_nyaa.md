@@ -1,27 +1,27 @@
 # SOURCE_VIABILITY - sukebei_nyaa
 
-- **Provider:** Sukebei (sukebei.nyaa.si)
-- **Status:** `REJECTED`
-- **Decision:** REJECT - free-text torrent names are not metadata
-- **Adapter:** none
-- **Login/cookie needed:** not required
-- **Cloudflare/anti-bot:** no challenge observed
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** Sukebei (sukebei.nyaa.si)
+- **状态：** `REJECTED`
+- **决定：** REJECT - 自由文本的种子名称不是元数据
+- **适配器：** 无
+- **是否需要登录/cookie：** 不需要
+- **Cloudflare/反爬：** 未观察到 challenge
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-A torrent index. `?q=<n>` returns many rows for a known work, each with a different uploader-typed title (`[H265 1080p] FC2-PPV-...`, `FC2PPV-...`, `FC2 PPV ...`, `+++ FC2-PPV-...`, mixed JP/CN). There is no canonical title to extract.
+一个种子索引。`?q=<n>` 对已知作品返回许多行，每行的上传者输入标题都不同（`[H265 1080p] FC2-PPV-...`、`FC2PPV-...`、`FC2 PPV ...`、`+++ FC2-PPV-...`，日文/中文混杂）。不存在可提取的 canonical 标题。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:58:46 | `https://sukebei.nyaa.si/?f=0&c=0_0&q=4825061` | 200 | `4825061 :: Sukebei` | - | same |  |
 
-## Findings
+## 发现
 
-- Useful only as corroboration that a number exists, never as a metadata source.
+- 仅可用于佐证某个编号存在，绝不作为元数据来源。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
 n/a

@@ -1,27 +1,27 @@
 # SOURCE_VIABILITY - onejav
 
-- **Provider:** OneJAV (onejav.com)
-- **Status:** `BLOCKED`
-- **Decision:** REJECT for Phase 2 - cannot be evaluated from this network
-- **Adapter:** none
-- **Login/cookie needed:** unknown
-- **Cloudflare/anti-bot:** unknown
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** OneJAV (onejav.com)
+- **状态：** `BLOCKED`
+- **决定：** Phase 2 REJECT - 无法从本网络评估
+- **适配器：** 无
+- **是否需要登录/cookie：** 未知
+- **Cloudflare/反爬：** 未知
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-Same ISP-level IP block as `fc2ppvdb.com` (identical addresses). Not evaluable here.
+与 `fc2ppvdb.com` 相同的 ISP 级 IP 封锁（地址完全相同）。无法在此评估。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:58:42 | `https://onejav.com/search/fc2-ppv-4825061` | n/a | `` | - | `-` | `HttpConnectionError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate veri` |
 
-## Findings
+## 发现
 
-- `https://onejav.com/search/fc2-ppv-...` gives `CERTIFICATE_VERIFY_FAILED: self-signed certificate` (resolves to `188.114.96.5`/`188.114.97.5`). Named in the public mdcx issue #243 as a candidate; never reached.
+- `https://onejav.com/search/fc2-ppv-...` 给出 `CERTIFICATE_VERIFY_FAILED: self-signed certificate`（解析到 `188.114.96.5`/`188.114.97.5`）。在公开的 mdcx issue #243 中被列为候选；从未到达。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
-Re-probe from an unblocked network.
+应从未被封锁的网络重新探测。

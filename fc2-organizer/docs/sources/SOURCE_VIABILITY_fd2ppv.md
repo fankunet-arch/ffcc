@@ -1,31 +1,31 @@
 # SOURCE_VIABILITY - fd2ppv
 
-- **Provider:** FD2 (fd2ppv.cc)
-- **Status:** `BLOCKED`
-- **Decision:** REJECT - Cloudflare challenge on work pages
-- **Adapter:** none
-- **Login/cookie needed:** unknown (never reached a work page)
-- **Cloudflare/anti-bot:** **yes** - `cf-mitigated: challenge` / `Just a moment...` on every `/articles/<id>` and `/search`
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** FD2 (fd2ppv.cc)
+- **状态：** `BLOCKED`
+- **决定：** REJECT - 作品页有 Cloudflare challenge
+- **适配器：** 无
+- **是否需要登录/cookie：** 未知（从未到达作品页）
+- **Cloudflare/反爬：** **是** - 每个 `/articles/<id>` 与 `/search` 上都有 `cf-mitigated: challenge` / `Just a moment...`
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-The site is alive and its list page (`/`) is public, but every per-work page returns a Cloudflare managed challenge (HTTP 403). Solving it would be a bypass, which Phase 2 forbids.
+站点存活，其列表页（`/`）公开，但每个单作品页都返回 Cloudflare managed challenge（HTTP 403）。去解它就构成绕过，而 Phase 2 禁止绕过。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:58:07 | `https://fd2ppv.cc/` | 200 | `All Works - FD2` | - | same |  |
 | 12:58:09 | `https://fd2ppv.cc/articles/4825061` | 403 | `Just a moment...` | challenge | same |  |
 | 12:58:11 | `https://fd2ppv.cc/articles/4824605` | 403 | `Just a moment...` | challenge | same |  |
 
-## Findings
+## 发现
 
-- `/` returns 200 `All Works - FD2`, linking `/articles/<id>` for recent works, so ids equal FC2 numbers.
-- `/articles/4825061`, `/articles/4824605` (and in manual checks `/articles/4979786`, `/articles/4979799`) return 403 challenge. `/search?q=...` redirects to `/actresses/?keyword=` which is also challenged.
-- The spec's initial candidate list names FD2PPV; today's evidence is BLOCKED.
+- `/` 返回 200 `All Works - FD2`，链接到近期作品的 `/articles/<id>`，因此 id 等于 FC2 编号。
+- `/articles/4825061`、`/articles/4824605`（以及人工检查中的 `/articles/4979786`、`/articles/4979799`）返回 403 challenge。`/search?q=...` 重定向到 `/actresses/?keyword=`，同样被 challenge。
+- 规格书的初始候选列表列出了 FD2PPV；今天的证据为 BLOCKED。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
-Re-check if the site drops the challenge or publishes an API.
+若站点撤掉 challenge 或发布 API，则重新检查。

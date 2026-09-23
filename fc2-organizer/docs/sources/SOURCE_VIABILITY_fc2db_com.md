@@ -1,28 +1,28 @@
 # SOURCE_VIABILITY - fc2db_com
 
-- **Provider:** FC2DB (fc2db.com - `.com` sibling)
-- **Status:** `BLOCKED`
-- **Decision:** REJECT - Cloudflare challenge (use `fc2db.net`)
-- **Adapter:** none (`fc2db_net` covers this operator)
-- **Login/cookie needed:** unknown
-- **Cloudflare/anti-bot:** **yes** - `cf-mitigated: challenge`
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** FC2DB (fc2db.com - `.com` 姊妹站)
+- **状态：** `BLOCKED`
+- **决定：** REJECT - Cloudflare challenge（使用 `fc2db.net`）
+- **适配器：** 无（`fc2db_net` 已覆盖该运营方）
+- **是否需要登录/cookie：** 未知
+- **Cloudflare/反爬：** **是** - `cf-mitigated: challenge`
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-`https://fc2db.com/...` returns the Cloudflare challenge (403) for `/work/<id>/`, while `fc2db.net` serves the same catalogue without one.
+`https://fc2db.com/...` 对 `/work/<id>/` 返回 Cloudflare challenge（403），而 `fc2db.net` 无 challenge 地提供同一目录。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:57:53 | `https://fc2db.com/work/4824605/` | 403 | `Just a moment...` | challenge | same |  |
 
-## Findings
+## 发现
 
-- `/work/4824605/` returns 403, `cf-mitigated: challenge`, `Just a moment...`. `/` and `www.fc2db.com/` also 403 (earlier probes).
-- Not a separate provider for independence purposes: same brand as `fc2db_net`.
+- `/work/4824605/` 返回 403，`cf-mitigated: challenge`，`Just a moment...`。`/` 与 `www.fc2db.com/` 也是 403（更早的探测）。
+- 从独立性角度看不算单独的提供方：与 `fc2db_net` 同一品牌。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
 n/a

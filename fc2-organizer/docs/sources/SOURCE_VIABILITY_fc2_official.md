@@ -1,33 +1,33 @@
 # SOURCE_VIABILITY - fc2_official
 
-- **Provider:** FC2 Content Market (adult.contents.fc2.com)
-- **Status:** `BLOCKED`
-- **Decision:** REJECT - no adapter (login wall)
-- **Adapter:** none
-- **Login/cookie needed:** required (login)
-- **Cloudflare/anti-bot:** no challenge; served via nginx/Cloudflare
-- **Research date:** 2026-09-20 (UTC); machine evidence `docs/source-probes/PHASE2_PROBE_20260920.json`, human observations `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`.
+- **提供方：** FC2 Content Market (adult.contents.fc2.com)
+- **状态：** `BLOCKED`
+- **决定：** REJECT - 无适配器（登录墙）
+- **适配器：** 无
+- **是否需要登录/cookie：** 需要（登录）
+- **Cloudflare/反爬：** 无 challenge；经 nginx/Cloudflare 提供服务
+- **调研日期：** 2026-09-20 (UTC)；机器证据 `docs/source-probes/PHASE2_PROBE_20260920.json`，人工观察 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md`。
 
-## Summary
+## 摘要
 
-Article and search pages redirect to the FC2 login page (and from there to a generic 404 page). Lookup by number needs a private FC2 session, which spec section 11 disqualifies. Only list pages (`/`, `/ranking/`) are public and they cannot be queried by number.
+文章页与搜索页重定向到 FC2 登录页（再从那里跳到通用 404 页面）。按编号查询需要私有 FC2 会话，而规格书 section 11 不允许这样做。只有列表页（`/`、`/ranking/`）是公开的，且无法按编号查询。
 
-## Raw probe evidence (final pass, `tools/probe_sources.py raw`)
+## Raw 探测证据（最后一轮，`tools/probe_sources.py raw`）
 
-| UTC | Requested URL | HTTP | Page `<title>` | cf-mitigated | Final URL | Transport error |
+| UTC | 请求 URL | HTTP | 页面 `<title>` | cf-mitigated | 最终 URL | 传输错误 |
 |---|---|---|---|---|---|---|
 | 12:57:36 | `https://adult.contents.fc2.com/article/4825061/` | 404 | `FC2 - 404 Error` | - | `https://error.fc2.com/other/` |  |
 | 12:57:38 | `https://adult.contents.fc2.com/article/4824605/` | 404 | `FC2 - 404 Error` | - | `https://error.fc2.com/other/` |  |
 | 12:57:41 | `https://adult.contents.fc2.com/search/?keyword=4825061` | 404 | `FC2 - 404 Error` | - | `https://error.fc2.com/other/` |  |
 | 12:57:44 | `https://adult.contents.fc2.com/ranking/` | 200 | `ランキングトップ - アダルト / FC2コンテンツマーケット` | - | same |  |
 
-## Findings
+## 发现
 
-- Redirect chain for `/article/4824605/` (redirects not followed): 302 to `/lk/services/id/login?anlad=3`, 302 to `https://fc2.com/ja/login.php?ref=payarticle`, 302 to `https://error.fc2.com/other/`, 404 `FC2 - 404 Error`. Verbatim in `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md` section 2.
-- The raw probe's `404` is therefore the end of a **login redirect**, not proof the work is absent. It is the same for both mandated IDs and for a browser-like User-Agent.
-- `/search/?keyword=4825061` follows the identical chain (`anlad=5`).
-- `/ranking/` returns 200 (`ランキングトップ - アダルト | FC2コンテンツマーケット`); the front page lists recent article ids (about 4.98M, so the site is current). Usable for discovering recent ids, not for looking one up.
+- `/article/4824605/` 的重定向链（未跟随重定向）：302 到 `/lk/services/id/login?anlad=3`，302 到 `https://fc2.com/ja/login.php?ref=payarticle`，302 到 `https://error.fc2.com/other/`，404 `FC2 - 404 Error`。原文见 `docs/source-probes/PHASE2_MANUAL_OBSERVATIONS_20260920.md` section 2。
+- 因此 raw 探测的 `404` 是一次**登录重定向**的终点，不能证明作品不存在。两个指定 ID 以及类浏览器 User-Agent 下结果均相同。
+- `/search/?keyword=4825061` 走完全相同的链（`anlad=5`）。
+- `/ranking/` 返回 200（`ランキングトップ - アダルト | FC2コンテンツマーケット`）；首页列出近期的文章 id（约 4.98M，说明站点是最新的）。可用于发现近期 id，但不能用于查询某一个 id。
 
-## Risks / re-check trigger
+## 风险 / 重新检查触发条件
 
-If FC2 ever re-opens anonymous article pages this becomes the best source (it is the origin of every other source's data). Re-check trigger: `/article/<id>/` returning 200 without a session.
+如果 FC2 重新开放匿名文章页，它将成为最佳来源（它是其他所有来源数据的源头）。重新检查触发条件：`/article/<id>/` 在无会话时返回 200。
