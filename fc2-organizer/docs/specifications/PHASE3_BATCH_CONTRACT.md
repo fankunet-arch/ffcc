@@ -1,20 +1,19 @@
-# FC2 Metadata Core — Phase 3 / C4 Batch Scheduler Contract
+# FC2 Metadata Core — Phase 3 / C4 批处理调度器合同（Batch Scheduler Contract）
 
-Status: **frozen at Phase 3 C4, amended by C4-R1** (candidate; independent closure review pending).
-C4-R1 (this revision) closes findings C4-R1-01 … C4-R1-05 and changes **only** the points marked *(R1)* below;
-the scheduling architecture (§5 bounded admission, ordering, duplicate identity, cancellation, generation model)
-is unchanged.
-Builds on `PHASE3_AGGREGATION_CONTRACT.md` (C1) and `PHASE3_RESILIENCE_CONTRACT.md` (C2/C3).
-Package: `fc2_metadata_core.batch` (`config.py`, `models.py`, `scheduler.py`, `retry.py`).
+状态：**在 Phase 3 C4 冻结，由 C4-R1 修订**（候选；独立关闭复查待进行）。
+C4-R1（本次修订）关闭 finding C4-R1-01 … C4-R1-05，并且**只**修改了下文标注 *(R1)* 的各点；
+调度架构（§5 有界准入、排序、重复项身份、取消、generation 模型）没有改变。
+以 `PHASE3_AGGREGATION_CONTRACT.md`（C1）和 `PHASE3_RESILIENCE_CONTRACT.md`（C2/C3）为基础。
+Package：`fc2_metadata_core.batch`（`config.py`、`models.py`、`scheduler.py`、`retry.py`）。
 
-**Out of scope, not implemented (C4):** circuit breaker, per-host limiter / host rate limits, persistence
-of any kind (JSON / DB), NFO writer, image downloader, filesystem rename/move, Amane adapter, GUI,
-the final 500-item acceptance run. `BatchResult` lives in memory only; the library has no side effects.
+**不在范围内，未实现（C4）：** 熔断器、按 host 的限流器 / host 速率限制、任何形式的持久化
+（JSON / DB）、NFO writer、图片下载器、文件系统重命名 / 移动、Amane adapter、GUI、
+最终的 500-item 验收运行。`BatchResult` 只存在于内存中；该库没有副作用。
 
-Each rule names the test file that enforces it (all offline and deterministic, `tests/unit/batch/`
-unless stated; no wall-clock assertion anywhere).
+每条规则都注明了强制执行它的测试文件（全部离线且确定；除非另有说明，均位于 `tests/unit/batch/`；
+任何地方都没有墙钟断言）。
 
-## 1. Architecture and dependency direction
+## 1. 架构与依赖方向
 
 ```text
 caller (future CLI / scan layer: dirty filename -> canonical number)
@@ -26,257 +25,245 @@ BatchScheduler(engine, BatchConfig)        <- this package
 MultiSourceEngine.aggregate  -> execute_sources_traced -> adapters      (C1/C2, unchanged)
 ```
 
-* `batch` depends on the aggregation **public** contract (`AggregationResult`, `AggregateStatus`), the
-  canonical-number boundary (`sources.base.require_canonical_number`) and `errors`. It **never** imports
-  `sources.adapters`, `aggregation.execution` or `aggregation.engine`, never reimplements fan-out or
-  merging, and never constructs a transport or registry.
-* `aggregation` (and every other package) **never** imports `batch`. No cyclic import.
-* Nothing imports `amane`.
-* The scheduler **reuses the injected engine**. It creates no HTTP client / registry / adapter; lifecycle of
-  those belongs to the caller (future CLI / upper layer).
+* `batch` 依赖聚合层的**公开**合同（`AggregationResult`、`AggregateStatus`）、规范番号边界
+  （`sources.base.require_canonical_number`）以及 `errors`。它**从不** import
+  `sources.adapters`、`aggregation.execution` 或 `aggregation.engine`，从不重新实现 fan-out 或
+  merge，也从不构造 transport 或 registry。
+* `aggregation`（以及其他所有 package）**从不** import `batch`。没有循环 import。
+* 没有任何模块 import `amane`。
+* 调度器**复用注入的 engine**。它不创建 HTTP client / registry / adapter；这些对象的生命周期
+  属于调用方（未来的 CLI / 上层）。
 
-Enforced by: `test_batch_architecture.py`, and `tests/contract/test_core_independent_of_amane.py` (F4:
-the module discovery is `rglob`-derived, so every `batch/*.py` is in both the static AST scan and the
-blocked-import dynamic scan; C4 adds explicit assertions that they are).
+由以下测试强制执行：`test_batch_architecture.py`，以及 `tests/contract/test_core_independent_of_amane.py`（F4：
+模块发现基于 `rglob`，因此每个 `batch/*.py` 都同时处于静态 AST 扫描和阻断 import 的动态扫描中；
+C4 增加了明确断言来确认这一点）。
 
-## 2. Two concurrency budgets (frozen semantics)
+## 2. 两个并发预算（冻结语义）
 
-| Knob | Where | Bounds |
+| 旋钮 | 所在位置 | 限制的对象 |
 |---|---|---|
-| `AggregationConfig.max_concurrency = S` | C1/C2, per `aggregate(number)` call | concurrent **source** executions **inside one item** |
-| `BatchConfig.max_in_flight_items = M` | C4, per `BatchScheduler` | concurrent `aggregate(number)` calls **across items** (the *global* item budget) |
+| `AggregationConfig.max_concurrency = S` | C1/C2，每次 `aggregate(number)` 调用 | **单个条目内部**并发的**来源**执行数 |
+| `BatchConfig.max_in_flight_items = M` | C4，每个 `BatchScheduler` | **跨条目**并发的 `aggregate(number)` 调用数（*全局*条目预算） |
 
-Theoretical maximum simultaneous source operations = **M × S**, further limited by the number of enabled
-sources, per-source deadlines and cancellation. C4 does **not** implement a per-host limiter: two sources
-served from one host, or many items hitting one source, are not throttled per host **by the scheduler**. *(C5:
-that is the shared `SourceResourceGovernor` — `PHASE3_RESOURCE_CONTROL_CONTRACT.md` — which engines opt into with
-`governor=` and which the scheduler never sees; batch code is unchanged by C5.)*
+同时进行的来源操作理论最大值 = **M × S**，并进一步受启用来源数量、单来源 deadline 和取消的限制。
+C4 **没有**实现按 host 的限流器：由同一 host 提供的两个来源，或大量条目访问同一个来源，都**不会被
+调度器**按 host 节流。*（C5：这由共享的 `SourceResourceGovernor` 负责 —
+`PHASE3_RESOURCE_CONTROL_CONTRACT.md` — engine 通过 `governor=` 选择启用它，调度器完全看不到它；
+C5 没有改动批处理代码。）*
 
-`max_in_flight_items` is enforced **at the scheduler boundary by bounded admission**, not by a semaphore
-that inner code contends on: at any instant at most `M` `aggregate()` calls exist for the scheduler.
+`max_in_flight_items` **在调度器边界上以有界准入的方式强制执行**，而不是依靠一个供内部代码争用的
+semaphore：任何时刻，该调度器下最多只存在 `M` 个 `aggregate()` 调用。
 
-**One active run per scheduler instance.** `run()` / `retry_failed()` on a scheduler that already has an
-active run raises `BatchBusyError` (fail closed) — otherwise two concurrent runs would silently double the
-budget. The flag is released on success, on ordinary completion, on fatal exceptions and on cancellation.
-Independent budgets require independent scheduler instances (their budgets add up).
+**每个调度器实例同时只有一个活动运行。** 在已经有活动运行的调度器上调用 `run()` / `retry_failed()`
+会抛出 `BatchBusyError`（fail closed）— 否则两个并发运行会悄悄地把预算翻倍。该标志会在成功、
+正常结束、致命异常以及取消时释放。需要独立的预算就需要独立的调度器实例（它们的预算会相加）。
 
-**Busy-first *(R1, C4-R1-04)*.** The busy check is the **very first** step of `run()` and `retry_failed()`, before
-*any* look at the argument: while a run is active, a valid run, an invalid run (dirty element, bare `str`, set,
-`None`, `str` subclass …), an empty run, a valid retry and an invalid retry (`None`, wrong type) **all** raise
-`BatchBusyError`, with **zero** engine calls, and a rejected call never releases the active run's claim. The
-claim is held for the whole call (validation included) and released in a `finally`, so an invalid argument on an
-*idle* scheduler still raises `BatchInputError` / `BatchRetryError` and leaves the scheduler idle.
+**忙碌检查优先 *(R1, C4-R1-04)*。** 忙碌检查是 `run()` 和 `retry_failed()` 的**第一个**步骤，发生在查看
+参数的*任何*操作之前：只要有运行处于活动状态，无论是合法的运行、非法的运行（脏元素、裸 `str`、set、
+`None`、`str` 子类 …）、空运行、合法的重试还是非法的重试（`None`、类型错误），**全部**抛出
+`BatchBusyError`，engine 调用次数为**零**，并且被拒绝的调用绝不会释放活动运行的占用。
+占用在整个调用期间（包括校验）都被持有，并在 `finally` 中释放，因此在*空闲*调度器上传入非法参数
+仍然会抛出 `BatchInputError` / `BatchRetryError`，并让调度器保持空闲。
 
-The busy regression tests can **not hang** if the guard is broken: only the held-open run's numbers are gated (so
-a missing guard shows up as "did not raise"), every second call runs under an `asyncio.timeout` watchdog, and the
-held-open run is always released and awaited in `finally`. A self-test (`UnguardedScheduler`) proves both failure
-modes (second call returns / second call would block) are reported quickly with no orphan task.
+即使守卫失效，忙碌回归测试也**不会挂起**：只有被保持打开的那次运行的番号会被阻塞（因此守卫缺失
+会表现为“没有抛出异常”），每一次第二次调用都在 `asyncio.timeout` 看门狗下运行，并且被保持打开的
+运行总是在 `finally` 中被释放并 await。一个自测（`UnguardedScheduler`）证明两种失败模式（第二次调用
+直接返回 / 第二次调用会阻塞）都会被快速报告，并且不会留下孤儿任务。
 
-`test_batch_concurrency.py`, `test_batch_bounded_admission.py`, `test_batch_config.py`,
-`test_batch_r1_closure.py` (C4-R1-04).
+`test_batch_concurrency.py`、`test_batch_bounded_admission.py`、`test_batch_config.py`、
+`test_batch_r1_closure.py`（C4-R1-04）。
 
-## 3. `BatchConfig` (`config.py`)
+## 3. `BatchConfig`（`config.py`）
 
-Frozen dataclass, validated in `__post_init__`, immutable.
+frozen dataclass，在 `__post_init__` 中校验，不可变。
 
-* `max_in_flight_items: int`, default **4**, valid range **1..64** (`MAX_IN_FLIGHT_ITEMS_LIMIT`); a `bool`
-  is not an `int`; anything else raises `BatchConfigError` (before any engine call).
-* There is **no** `continue_on_item_failure` switch. **Frozen semantics: an ordinary failure of one item is
-  always isolated and the batch always continues.** A knob that could turn isolation off would contradict the
-  project rule "one failed film must not block the others". A fatal `BaseException` (§7) is not an item
-  failure and is unaffected.
+* `max_in_flight_items: int`，默认值 **4**，合法范围 **1..64**（`MAX_IN_FLIGHT_ITEMS_LIMIT`）；`bool`
+  不算 `int`；其他任何值都会抛出 `BatchConfigError`（在任何 engine 调用之前）。
+* **没有** `continue_on_item_failure` 开关。**冻结语义：单个条目的普通失败总是被隔离，批处理总是
+  继续执行。** 一个能关闭隔离的旋钮将违背项目规则“单一影片失败不得阻断其它影片”。致命的
+  `BaseException`（§7）不属于条目失败，不受此影响。
 
-## 4. Input contract (`BatchScheduler.run`)
+## 4. 输入合同（`BatchScheduler.run`）
 
-* The batch is a `collections.abc.Sequence` of `str`: order is meaningful, so output is deterministic.
-  **Rejected** with `BatchInputError` (zero engine calls): a bare `str` / `bytes` / `bytearray` /
-  `memoryview`, any `Set` / `frozenset`, any `Mapping`, any generator / iterator / other non-`Sequence`.
-* The scheduler takes a **snapshot** (`tuple(numbers)`) once; later mutation of the caller's list has no effect.
-* Every element must be **an exact built-in `str`** *(R1, C4-R1-05)* that passes the existing canonical
-  boundary (`require_canonical_number`, exactly `FC2-` + 5..8 digits, e.g. `FC2-1234567`). **The scheduler
-  contains no second FC2 parser and does no normalisation.** Dirty input (`abc FC2PPV-1234567.mp4`,
-  `fc2ppv 1234567`) must be normalised by the upper scan/normalize layer first; it is **rejected here**, not
-  repaired.
-* **`str` subclasses are rejected — fail closed — even when their value is canonical.** The check is
-  `type(element) is str`; none of a subclass's methods (`__repr__`, `__str__`, `__eq__`, `__len__`,
-  `__getitem__`, `isidentifier`, …) is ever called, the rejected element is reported by **class name only**
-  (`<HostileStr>`), and nothing caller-controlled can therefore enter the engine, `BatchItemResult.number` or an
-  error message. (A caller that holds subclass instances converts them upstream, e.g. `str.__str__(x)`, which
-  yields an exact `str` without calling any override.) `BatchItemResult.number` / `error_type` also require an
-  exact `str`.
-* **All-or-nothing validation:** if any element is invalid, the whole batch is rejected with
-  `BatchInputError` *before* any `aggregate()` call; the message lists the offending indices (capped at 10, the
-  total is always counted) with a truncated `repr` **of exact-`str` elements only** (anything else is shown as its
-  class name), never a partial run.
-* **Empty input is legal**: returns `BatchResult(items=(), generation=0)`, `total == 0`, all counts `0`;
-  the engine is never called; no division anywhere.
-* **Duplicates are preserved as separate work items** (a batch is an execution list; the same number may
-  later come from two files). Each item is identified by its **original `index`**, never by its number;
-  no dedupe, no `dict[number]` anywhere. Two equal numbers ⇒ two independent `aggregate()` calls and two
-  `BatchItemResult`s with `index` 0 and 1.
+* 批次是一个由 `str` 组成的 `collections.abc.Sequence`：顺序有意义，因此输出是确定的。
+  以下情况以 `BatchInputError` **拒绝**（engine 调用次数为零）：裸 `str` / `bytes` / `bytearray` /
+  `memoryview`、任何 `Set` / `frozenset`、任何 `Mapping`、任何生成器 / 迭代器 / 其他非 `Sequence`。
+* 调度器只做一次**快照**（`tuple(numbers)`）；之后调用方再修改自己的 list 不会产生任何影响。
+* 每个元素都必须是**严格的内置 `str`** *(R1, C4-R1-05)*，并且能通过现有的规范番号边界
+  （`require_canonical_number`，严格为 `FC2-` + 5..8 位数字，例如 `FC2-1234567`）。**调度器中
+  没有第二个 FC2 解析器，也不做任何规范化。** 脏输入（`abc FC2PPV-1234567.mp4`、
+  `fc2ppv 1234567`）必须先由上层的扫描 / 规范化层处理；它在这里会被**拒绝**，而不是被修复。
+* **`str` 子类会被拒绝 — fail closed — 即使其值是规范的。** 检查方式是
+  `type(element) is str`；子类的任何方法（`__repr__`、`__str__`、`__eq__`、`__len__`、
+  `__getitem__`、`isidentifier`、…）都绝不会被调用，被拒绝的元素**只以类名**报告
+  （`<HostileStr>`），因此调用方控制的任何内容都无法进入 engine、`BatchItemResult.number` 或
+  错误消息。（持有子类实例的调用方应在上游转换，例如 `str.__str__(x)`，它会在不调用任何覆盖方法的
+  情况下得到一个严格的 `str`。）`BatchItemResult.number` / `error_type` 同样要求严格的 `str`。
+* **全有或全无的校验：** 只要有任何一个元素非法，整个批次都会在任何 `aggregate()` 调用*之前*以
+  `BatchInputError` 被拒绝；消息会列出出问题的下标（最多 10 个，总数始终会统计），并附上**仅针对严格
+  `str` 元素**截断后的 `repr`（其他元素只显示其类名），绝不会进行部分运行。
+* **空输入是合法的**：返回 `BatchResult(items=(), generation=0)`，`total == 0`，所有计数均为 `0`；
+  engine 永远不会被调用；任何地方都没有除法。
+* **重复项作为独立的工作条目保留**（批次是一个执行列表；同一个番号之后可能来自两个文件）。
+  每个条目由其**原始 `index`** 标识，绝不按番号标识；任何地方都没有去重，也没有 `dict[number]`。
+  两个相同的番号 ⇒ 两次独立的 `aggregate()` 调用，以及 `index` 为 0 和 1 的两个 `BatchItemResult`。
 
-`test_batch_input.py`, `test_batch_r1_closure.py` (C4-R1-05).
+`test_batch_input.py`、`test_batch_r1_closure.py`（C4-R1-05）。
 
-## 5. Scheduling model: bounded worker admission (`scheduler.py`)
+## 5. 调度模型：有界 worker 准入（`scheduler.py`）
 
-* `min(M, len(work))` **worker tasks** are created (never one task per item). Workers pull the next
-  position from a shared cursor and `await engine.aggregate(number)` **directly in the worker** — no
-  per-item task is ever created by the batch layer. Live batch tasks are therefore `O(M)`, independent of
-  the batch size (`N = 10,000` with `M = 4` ⇒ 4 batch tasks + the caller's task at the first barrier).
-  The scheduler also never materialises `N` coroutine objects.
-* `M = 1` ⇒ strictly serial; `M > N` ⇒ peak = `N`; peak never exceeds `M`.
-* Memory is `O(N)` only for the result slots (one pointer each); `BatchItemResult` objects are created as
-  items finish.
-* Admission stops the instant a fatal exception or a cancellation is seen (§7). Before **every** admission a
-  worker checks (a) a run-local `stopping` flag, set synchronously by whichever worker sees a fatal signal,
-  and (b) whether the driving task (the one awaiting `run()` / `retry_failed()`) has a **new** pending
-  cancellation request (`Task.cancelling()` above its value when the run began). (a) closes the race where a
-  sibling that was already scheduled in the same loop iteration finishes its item and loops before the
-  TaskGroup can cancel it; (b) closes the one-iteration gap between `task.cancel()` and the cancellation
-  reaching the workers through the TaskGroup. Both are pinned by tests that fail if the check is removed.
-* **No per-item batch-level timeout in C4.** Termination of one item is guaranteed by the C2 per-source
-  total deadlines inside the engine. A user-supplied engine that never returns would hold its slot forever
-  (documented limit; the adopted `MultiSourceEngine` cannot).
+* 创建 `min(M, len(work))` 个 **worker 任务**（绝不会为每个条目创建一个任务）。worker 从共享游标中
+  取下一个位置，并**直接在 worker 中** `await engine.aggregate(number)` — 批处理层永远不会创建
+  按条目的任务。因此存活的批处理任务数是 `O(M)`，与批次规模无关
+  （`N = 10,000` 且 `M = 4` ⇒ 在第一个 barrier 处有 4 个批处理任务 + 调用方的任务）。
+  调度器也从不一次性生成 `N` 个 coroutine 对象。
+* `M = 1` ⇒ 严格串行；`M > N` ⇒ 峰值 = `N`；峰值永远不超过 `M`。
+* 内存只在结果槽位上是 `O(N)`（每个槽位一个指针）；`BatchItemResult` 对象在条目完成时才创建。
+* 一旦发现致命异常或取消，准入立即停止（§7）。在**每一次**准入之前，worker 都会检查：
+  (a) 运行本地的 `stopping` 标志，它由发现致命信号的那个 worker 同步设置；以及 (b) 驱动任务
+  （正在 await `run()` / `retry_failed()` 的那个任务）是否有**新的**待处理取消请求
+  （`Task.cancelling()` 大于运行开始时的值）。(a) 消除了这样一种竞争：在同一轮事件循环中已被调度的
+  同级 worker 完成了自己的条目，并在 TaskGroup 来得及取消它之前继续循环；(b) 消除了 `task.cancel()`
+  与取消通过 TaskGroup 传到各个 worker 之间相差一轮的空窗。两者都由测试固定下来，删除检查会导致测试失败。
+* **C4 中没有按条目的批处理级超时。** 单个条目的终止由 engine 内部 C2 的单来源总 deadline 保证。
+  永远不返回的用户自定义 engine 会永久占用它的槽位（已记录的局限；现已采用的 `MultiSourceEngine`
+  不会如此）。
 
-`test_batch_bounded_admission.py` (includes a *control* test proving the measurement distinguishes a naive
-`create_task × N + semaphore` scheduler: it would show `N` live tasks).
+`test_batch_bounded_admission.py`（包括一个*对照*测试，证明该测量方法能识别出朴素的
+`create_task × N + semaphore` 调度器：那种调度器会显示 `N` 个存活任务）。
 
-## 6. Result model (`models.py`) and status mapping
+## 6. 结果模型（`models.py`）与状态映射
 
-All immutable (`frozen=True, slots=True`), tuples only, invariants enforced in `__post_init__`
-(`BatchContractError`).
+全部不可变（`frozen=True, slots=True`），只使用 tuple，不变量在 `__post_init__` 中强制执行
+（`BatchContractError`）。
 
-`BatchItemResult`: `index`, `number`, `status: BatchItemStatus`, `aggregation_result | None`,
-`error_kind: BatchItemErrorKind | None`, `error_type: str | None`, `generation`, `elapsed_ms`.
+`BatchItemResult`：`index`、`number`、`status: BatchItemStatus`、`aggregation_result | None`、
+`error_kind: BatchItemErrorKind | None`、`error_type: str | None`、`generation`、`elapsed_ms`。
 
-| Engine outcome | `status` | `aggregation_result` | `error_kind` / `error_type` |
+| Engine 结果 | `status` | `aggregation_result` | `error_kind` / `error_type` |
 |---|---|---|---|
-| returns `AggregationResult` `SUCCESS` | `SUCCESS` | the result | `None` / `None` |
-| returns `AggregationResult` `PARTIAL` | `PARTIAL` | the result | `None` / `None` |
-| returns `AggregationResult` `FAILED` | `FAILED` | the result (all `SourceResult`s kept) | `None` / `None` |
-| raises an ordinary `Exception` | `FAILED` | `None` | `ENGINE_EXCEPTION` / exception **class name** |
-| returns a non-`AggregationResult`, or one for another number | `FAILED` | `None` | `RESULT_CONTRACT_MISMATCH` / returned object's **class name** |
+| 返回 `AggregationResult` `SUCCESS` | `SUCCESS` | 该结果 | `None` / `None` |
+| 返回 `AggregationResult` `PARTIAL` | `PARTIAL` | 该结果 | `None` / `None` |
+| 返回 `AggregationResult` `FAILED` | `FAILED` | 该结果（保留全部 `SourceResult`） | `None` / `None` |
+| 抛出普通 `Exception` | `FAILED` | `None` | `ENGINE_EXCEPTION` / 异常的**类名** |
+| 返回非 `AggregationResult`，或针对另一个番号的结果 | `FAILED` | `None` | `RESULT_CONTRACT_MISMATCH` / 返回对象的**类名** |
 
-Batch statuses are a 1:1 mapping of `AggregateStatus`; no new source status is invented. Invariant: exactly
-one of `aggregation_result` / `error_kind` is set; `aggregation_result.number == number`; `status` is the
-mapping of `aggregation_result.status`.
+批处理状态与 `AggregateStatus` 是 1:1 映射；没有发明新的来源状态。不变量：`aggregation_result` /
+`error_kind` 两者恰好设置其一；`aggregation_result.number == number`；`status` 是
+`aggregation_result.status` 的映射结果。
 
-**No secret leak:** for an ordinary exception only the **class name** is recorded — never `str(exc)`,
-`repr(exc)`, `args`, the traceback or the exception object. The scheduler keeps no reference to the exception.
+**不泄漏 secret：** 对于普通异常，只记录其**类名** — 绝不记录 `str(exc)`、`repr(exc)`、`args`、
+traceback 或异常对象本身。调度器不保留对该异常的任何引用。
 
-**Metadata extraction is total *(R1, C4-R1-01)*.** `_type_name(obj)` runs **no caller-controlled code** and cannot
-raise: `type(obj)` (which never consults `obj.__class__`), the class name read through `type.__name__`'s own
-descriptor (which bypasses any `__name__` property a hostile *metaclass* defines), and only then a check that the
-name is an **exact** `str`, an identifier and ≤ 128 chars. A class whose metaclass is not plain `type` (hostile, but
-also e.g. `ABCMeta`) is **not trusted** and yields `UnknownType`; so does any odd name. Consequently no class
-metadata can turn an ordinary item failure into a batch fatal. The same rule covers `RESULT_CONTRACT_MISMATCH`:
-the engine's return value is checked with `type(candidate) is AggregationResult` (exact type; `isinstance` would
-consult the candidate's `__class__`, i.e. code the engine controls), and its type is named with `_type_name`.
+**元数据提取是全函数 *(R1, C4-R1-01)*。** `_type_name(obj)` **不运行任何由调用方控制的代码**，也不会
+抛出异常：先取 `type(obj)`（它从不查询 `obj.__class__`），再通过 `type.__name__` 自身的 descriptor
+读取类名（这会绕过恶意 *metaclass* 定义的任何 `__name__` property），最后才检查该名称是否是**严格的**
+`str`、是否为合法标识符且 ≤ 128 个字符。metaclass 不是普通 `type` 的类（恶意的，但也包括例如
+`ABCMeta`）**不被信任**，得到 `UnknownType`；任何异常的名称也是如此。因此，任何类元数据都无法把一次
+普通的条目失败变成批处理级致命错误。同一规则也适用于 `RESULT_CONTRACT_MISMATCH`：
+engine 的返回值用 `type(candidate) is AggregationResult` 检查（严格类型；`isinstance` 会查询
+候选对象的 `__class__`，也就是 engine 所控制的代码），其类型名用 `_type_name` 获取。
 
-**Lineage *(R1, C4-R1-03)*.** `BatchLineage(token)` is an opaque, immutable, **value-compared** identity of one batch
-execution chain: 128 random bits (32 hex chars), created **once per `run()`**. Every `BatchResult` and
-`RetryBatchResult` derived from that run carries the same lineage (primary → retry → merged → next retry → …);
-`retry_failed` copies `previous.lineage` into its result and `apply_retry` copies it into the merged result. A
-`BatchResult` built by hand gets a fresh lineage; `RetryBatchResult.lineage` is required (no default), so
-provenance is always explicit. `lineage` takes no part in equality or `repr` (equality is by content). It is an
-**in-memory provenance token, not a persistence format**; if results are ever persisted or resumed, a real batch
-id and its storage contract must be designed then (C4-N1).
+**血统（Lineage）*(R1, C4-R1-03)*。** `BatchLineage(token)` 是一次批处理执行链的不透明、不可变、
+**按值比较**的身份标识：128 个随机位（32 个十六进制字符），**每次 `run()` 创建一次**。由该次运行派生出的
+每一个 `BatchResult` 和 `RetryBatchResult` 都携带相同的 lineage（主运行 → 重试 → 合并 → 下一次重试 → …）；
+`retry_failed` 把 `previous.lineage` 复制到自己的结果中，`apply_retry` 把它复制到合并后的结果中。
+手工构建的 `BatchResult` 会得到一个新的 lineage；`RetryBatchResult.lineage` 是必填项（没有默认值），因此
+出处总是显式的。`lineage` 不参与相等比较，也不出现在 `repr` 中（相等性按内容判断）。它是一个
+**内存中的出处令牌，而不是持久化格式**；如果将来要持久化或恢复结果，届时必须设计真正的批次 id
+及其存储合同（C4-N1）。
 
-`BatchResult(items, generation, lineage)`: `items` in **input order**, `index == position` (`0..n-1`, contiguous);
-derived `total`, `success_count`, `partial_count`, `failed_count`, `failed_items`, `failed_indices`,
-`failed_numbers` (tuples aligned with `failed_indices`; may contain repeated numbers). No stored redundant
-counts (nothing can contradict). **No batch-level overall status enum** is introduced: `AggregateStatus.PARTIAL`
-already has a meaning, and counts are unambiguous.
+`BatchResult(items, generation, lineage)`：`items` 按**输入顺序**排列，`index == position`（`0..n-1`，连续）；
+派生属性有 `total`、`success_count`、`partial_count`、`failed_count`、`failed_items`、`failed_indices`、
+`failed_numbers`（与 `failed_indices` 对齐的 tuple；可以包含重复番号）。不存储冗余的计数
+（因此不会出现自相矛盾）。**没有引入批次级的整体状态枚举**：`AggregateStatus.PARTIAL`
+已经有其含义，而计数本身没有歧义。
 
-`RetryBatchResult(items, generation, lineage)`: only the retried items, strictly increasing `index`, every
-`item.generation == generation >= 1`; same derived counts.
+`RetryBatchResult(items, generation, lineage)`：只包含被重试的条目，`index` 严格递增，每个
+`item.generation == generation >= 1`；派生计数相同。
 
-`test_batch_models.py`, `test_batch_status_mapping.py`, `test_batch_r1_closure.py` (C4-R1-01/03).
+`test_batch_models.py`、`test_batch_status_mapping.py`、`test_batch_r1_closure.py`（C4-R1-01/03）。
 
-## 7. Fatal exceptions and cancellation (consistent with C1/C2 §4)
+## 7. 致命异常与取消（与 C1/C2 §4 一致）
 
-* **Caller cancels the batch** (`run()` task cancelled): `CancelledError` propagates unchanged; every
-  running worker (and through it the engine's own task group) is cancelled **and awaited**; items not yet
-  admitted are **never started**; no task outlives the call.
-* **`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`, any other non-`Exception` `BaseException`**
-  raised by `engine.aggregate`, and a `CancelledError` the engine raises **on its own** (nobody cancelled):
-  fatal control flow. Admission stops immediately, siblings are cancelled and awaited, and the **original
-  exception object** is re-raised to the caller — never a `BaseExceptionGroup`/`ExceptionGroup`, never a
-  `BatchItemResult`, never `FAILED`. (Unlike a *source* adapter, whose self-raised `CancelledError` C2 turns
-  into a source failure, a batch-level `CancelledError` is always propagated: swallowing it here would lose
-  cancellation semantics for the whole batch.)
-* **The fatal carrier is metadata-free *(R1, C4-R1-02)*.** A worker hands the fatal to the task group inside an
-  internal `_FatalSignal` that merely *holds* the original object: it reads **nothing** from it (no class name,
-  text, `args`, `repr`). A fatal exception with a hostile metaclass / `__name__` / `__repr__` therefore cannot
-  replace itself with an error raised from the carrier: the caller still receives **the original object**
-  (identity), siblings are cancelled and awaited, nothing is admitted afterwards, no partial result is returned
-  and the scheduler stays reusable — for a hostile-metadata `BaseException` whose hostile code would raise
-  `RuntimeError`, `KeyboardInterrupt`, `SystemExit`, `GeneratorExit` or a custom `BaseException`.
-* If several fatals race, one is propagated as the original object (C2-L5); the others are not preserved.
-* No partial `BatchResult` is returned after a fatal exception.
-* Known limit (same as C2): an engine that swallows `CancelledError` and keeps running cannot be interrupted.
+* **调用方取消批处理**（`run()` 任务被取消）：`CancelledError` 原样传播；每个正在运行的 worker
+  （并经由它取消 engine 自己的任务组）都会被取消**并被 await**；尚未准入的条目**永远不会开始**；
+  没有任何任务的生命周期超过这次调用。
+* **由 `engine.aggregate` 抛出的 `KeyboardInterrupt`、`SystemExit`、`GeneratorExit`、任何其他非
+  `Exception` 的 `BaseException`**，以及 engine **自行**抛出的 `CancelledError`（没有人取消它）：
+  均为致命控制流。准入立即停止，同级任务被取消并被 await，**原始异常对象**被重新抛给调用方 —
+  绝不是 `BaseExceptionGroup`/`ExceptionGroup`，绝不是 `BatchItemResult`，也绝不是 `FAILED`。
+  （与*来源* adapter 不同：C2 会把 adapter 自行抛出的 `CancelledError` 变成来源失败；而批处理级的
+  `CancelledError` 总是被传播：在这里吞掉它会让整个批处理丢失取消语义。）
+* **致命异常的载体不含元数据 *(R1, C4-R1-02)*。** worker 把致命异常装在内部的 `_FatalSignal` 中交给
+  任务组，该载体只是*持有*原始对象：它**不从中读取任何内容**（不读类名、文本、`args`、`repr`）。
+  因此，带有恶意 metaclass / `__name__` / `__repr__` 的致命异常，无法用载体抛出的错误替换掉自身：
+  调用方收到的仍然是**原始对象**（身份一致），同级任务被取消并被 await，此后不再准入任何条目，
+  不返回任何部分结果，调度器仍可复用 — 对于恶意代码会抛出 `RuntimeError`、`KeyboardInterrupt`、
+  `SystemExit`、`GeneratorExit` 或自定义 `BaseException` 的恶意元数据 `BaseException` 均是如此。
+* 如果多个致命异常发生竞争，其中一个以原始对象传播（C2-L5）；其余的不予保留。
+* 发生致命异常后，不返回任何部分 `BatchResult`。
+* 已知局限（与 C2 相同）：吞掉 `CancelledError` 并继续运行的 engine 无法被中断。
 
-`test_batch_fatal_and_cancellation.py`, `test_batch_isolation.py`, `test_batch_r1_closure.py` (C4-R1-01/02).
+`test_batch_fatal_and_cancellation.py`、`test_batch_isolation.py`、`test_batch_r1_closure.py`（C4-R1-01/02）。
 
-## 8. Failed-subset retry (`retry.py`, `BatchScheduler.retry_failed`)
+## 8. 失败子集重试（`retry.py`、`BatchScheduler.retry_failed`）
 
-* `retry_failed(previous: BatchResult) -> RetryBatchResult` re-executes **only `FAILED` items**, selected by
-  **original index** (never by number: with `index0 SUCCESS FC2-X` and `index1 FAILED FC2-X` only index 1 is
-  retried). `SUCCESS` and `PARTIAL` items are never retried (a `retry_partial` option is deliberately not
-  provided in C4). It uses the same bounded worker model and the same fatal/cancel rules.
-* **Generation:** primary run = generation `0`; the retry of a generation-`g` result is generation `g + 1`.
-  Each `BatchItemResult.generation` says which round produced it. A retry round with nothing to retry is
-  still a round (`RetryBatchResult(items=(), generation=g+1)`). `previous` is never mutated.
-* `apply_retry(previous, retry) -> BatchResult` is a **pure** function producing a **new** result in the
-  original order in which only the retried items are replaced (unretried items are the same objects). It
-  **fails closed** (`BatchRetryError`, nothing returned) unless: both types are right;
-  **`retry.lineage == previous.lineage`** *(R1, C4-R1-03: a retry made from batch A is rejected by any other batch,
-  including one with identical numbers, failed indices and generation — shape comparison alone could never tell them
-  apart)*; `retry.generation == previous.generation + 1` (rejects stale / replayed retries); the retry's indices
-  are **exactly** `previous.failed_indices`; and each retried item's `number` equals the previous item's number at
-  that index. The merged result keeps `previous.lineage`, so the lineage survives generation 0 → 1 → 2 → …; duplicate
-  numbers are unaffected (identity is still the original index).
-* Retry results are never merged implicitly: the caller applies them.
+* `retry_failed(previous: BatchResult) -> RetryBatchResult` **只重新执行 `FAILED` 条目**，按
+  **原始 index** 选择（绝不按番号选择：若为 `index0 SUCCESS FC2-X` 和 `index1 FAILED FC2-X`，则只重试 index 1）。
+  `SUCCESS` 和 `PARTIAL` 条目永远不会被重试（C4 刻意没有提供 `retry_partial` 选项）。
+  它使用同样的有界 worker 模型以及同样的致命异常 / 取消规则。
+* **Generation：** 主运行 = generation `0`；对 generation 为 `g` 的结果做重试，得到 generation `g + 1`。
+  每个 `BatchItemResult.generation` 表明它是由哪一轮产生的。没有任何可重试条目的重试轮次
+  仍然算一轮（`RetryBatchResult(items=(), generation=g+1)`）。`previous` 永远不会被修改。
+* `apply_retry(previous, retry) -> BatchResult` 是一个**纯**函数，按原始顺序生成一个**新的**结果，
+  其中只有被重试的条目被替换（未重试的条目是同一批对象）。除非满足以下全部条件，否则它
+  **fail closed**（`BatchRetryError`，不返回任何内容）：两者类型正确；
+  **`retry.lineage == previous.lineage`** *(R1, C4-R1-03：由批次 A 产生的重试会被任何其他批次拒绝，
+  包括番号、失败下标和 generation 完全相同的批次 — 仅比较形状永远无法区分它们)*；
+  `retry.generation == previous.generation + 1`（拒绝过期 / 重放的重试）；重试的下标
+  **严格等于** `previous.failed_indices`；并且每个被重试条目的 `number` 与原结果在该下标处的番号相同。
+  合并后的结果保留 `previous.lineage`，因此 lineage 会沿 generation 0 → 1 → 2 → … 一直延续；
+  重复番号不受影响（身份仍然是原始 index）。
+* 重试结果永远不会被隐式合并：由调用方负责应用。
 
-`test_batch_retry.py`, `test_batch_r1_closure.py` (C4-R1-03).
+`test_batch_retry.py`、`test_batch_r1_closure.py`（C4-R1-03）。
 
-## 9. Test matrix
+## 9. 测试矩阵
 
-| Requirement | Test file |
+| 要求 | 测试文件 |
 |---|---|
-| config validation | `test_batch_config.py` |
-| Sequence contract, unordered rejected, empty, canonical boundary, dirty input, duplicates, snapshot | `test_batch_input.py` |
-| immutable models / invariants / counts | `test_batch_models.py` |
-| status mapping, `RESULT_CONTRACT_MISMATCH`, protocol | `test_batch_status_mapping.py` |
-| stable ordering, global concurrency 1 / M / >N, busy guard | `test_batch_concurrency.py` |
-| bounded admission (`O(M)` tasks), control test | `test_batch_bounded_admission.py` |
-| ordinary exception isolation, no secret leak | `test_batch_isolation.py` |
-| cancellation, KeyboardInterrupt / SystemExit / GeneratorExit / custom / self-raised CancelledError, sibling cleanup, no orphan, no admission after stop | `test_batch_fatal_and_cancellation.py` |
-| failed-subset retry, duplicate-number selective retry, generation, mismatch fail-closed, `apply_retry` | `test_batch_retry.py` |
-| 100-item offline stage gate | `test_batch_stage_gate_100.py` |
-| large-N stress (10,000 items, `M = 4`) | `test_batch_large_n_stress.py` |
-| C4-R1-01 hostile metadata on ordinary exceptions; C4-R1-02 hostile metadata on fatals; C4-R1-03 lineage; C4-R1-04 busy-first + non-hanging guard regression; C4-R1-05 exact-`str` elements | `test_batch_r1_closure.py` |
-| no `aggregation → batch`, no adapter import, Amane independence, F4 discovery | `test_batch_architecture.py`, `tests/contract/test_core_independent_of_amane.py` |
+| 配置校验 | `test_batch_config.py` |
+| Sequence 合同、拒绝无序集合、空输入、规范番号边界、脏输入、重复项、快照 | `test_batch_input.py` |
+| 不可变模型 / 不变量 / 计数 | `test_batch_models.py` |
+| 状态映射、`RESULT_CONTRACT_MISMATCH`、protocol | `test_batch_status_mapping.py` |
+| 稳定排序、全局并发 1 / M / >N、忙碌守卫 | `test_batch_concurrency.py` |
+| 有界准入（`O(M)` 个任务）、对照测试 | `test_batch_bounded_admission.py` |
+| 普通异常隔离、不泄漏 secret | `test_batch_isolation.py` |
+| 取消、KeyboardInterrupt / SystemExit / GeneratorExit / 自定义 / 自行抛出的 CancelledError、同级任务清理、无孤儿任务、停止后不再准入 | `test_batch_fatal_and_cancellation.py` |
+| 失败子集重试、重复番号的选择性重试、generation、不匹配时 fail-closed、`apply_retry` | `test_batch_retry.py` |
+| 100-item 离线阶段门槛 | `test_batch_stage_gate_100.py` |
+| 大 N 压力测试（10,000 个条目，`M = 4`） | `test_batch_large_n_stress.py` |
+| C4-R1-01 普通异常上的恶意元数据；C4-R1-02 致命异常上的恶意元数据；C4-R1-03 lineage；C4-R1-04 忙碌检查优先 + 不会挂起的守卫回归；C4-R1-05 严格 `str` 元素 | `test_batch_r1_closure.py` |
+| 没有 `aggregation → batch`、没有 adapter import、独立于 Amane、F4 模块发现 | `test_batch_architecture.py`、`tests/contract/test_core_independent_of_amane.py` |
 
-## 10. Backlog carried forward (nothing here is fixed by C4)
+## 10. 延续的待办（C4 没有修复这里的任何一项）
 
-* **C3-N1 — OPEN / LOW.** The 50-ID primary gate's anti-rerun / set-binding guard is procedural rather than
-  globally enforced. **Before any future reuse of `tools/run_50id_coverage_gate.py`:** pin the expected
-  set path/blob **and** detect an existing Primary through *committed* evidence, not only the supplied
-  `--out-dir`. C4 does not touch the frozen C3 runner or evidence.
-* C3-N2 LOW (evidence set hash depends on working-tree line endings) · C3-N3 LOW (attempt-1 pool
-  traceability incomplete) · **C3-N4 LOW: the 50-ID acceptance population is torrent-indexed / first-page
-  prefix sampled. Any "98%" in a document means "98% aggregate union coverage on the frozen C3 50-ID
-  acceptance population", never FC2-catalogue coverage.**
-* P2-R-05, P2-R-06, P2-R-10 LOW · P2-R-07 partially mitigated LOW · F3 DEFERRED · F5 DEFERRED · F4 CLOSED.
-* **C2-L2 — LOW / OPEN** (`SourceExecutionTrace` permits states the engine never produces). **Its trigger condition
-  has now occurred:** `BatchItemResult.aggregation_result` transparently exposes the `AggregationResult`
-  including its `source_execution_traces`. The batch layer itself neither reads nor relies on trace fields.
-  **C2-L2 must be closed** (tighten the `SourceExecutionTrace` validators, or freeze an explicit "trusted-producer
-  diagnostics" statement) **before any of:** (1) persistence / report / UI / NFO / CLI serialises or displays
-  traces; (2) C5's circuit breaker or per-host limiter reads trace fields; (3) production accepts a
-  non-`MultiSourceEngine` producer whose traces are not trusted. If C5 never reads traces it may keep carrying it.
-* **C4-N1 (provenance across persistence):** the lineage token is in-memory only; before results are persisted
-  or resumed, design a real batch id and storage contract.
-* Next (not started): C5 = circuit breaker + per-host limiter (each needs its own frozen contract);
-  final 500-item failure-injection acceptance; NFO / filesystem / Amane adapter.
+* **C3-N1 — OPEN / LOW。** 50-ID 主门槛的防重跑 / 集合绑定守卫依靠流程约束，而不是全局强制。
+  **在将来复用 `tools/run_50id_coverage_gate.py` 之前：** 固定预期集合的路径 / blob，**并且**通过*已提交*的
+  证据来检测是否已存在 Primary 运行，而不能只依赖传入的 `--out-dir`。C4 不触碰冻结的 C3 runner 或证据。
+* C3-N2 LOW（证据集合的 hash 依赖工作区的换行符）· C3-N3 LOW（attempt-1 候选池的可追溯性不完整）·
+  **C3-N4 LOW：50-ID 验收总体来自 torrent 索引 / 首页前缀抽样。文档中出现的任何 "98%" 都表示
+  “在冻结的 C3 50-ID 验收总体上 98% 的聚合并集覆盖率”，绝不表示 FC2 目录覆盖率。**
+* P2-R-05、P2-R-06、P2-R-10 LOW · P2-R-07 部分缓解 LOW · F3 DEFERRED · F5 DEFERRED · F4 CLOSED。
+* **C2-L2 — LOW / OPEN**（`SourceExecutionTrace` 允许 engine 永远不会产生的状态）。**它的触发条件
+  现在已经出现：** `BatchItemResult.aggregation_result` 透明地暴露了 `AggregationResult`，
+  包括其 `source_execution_traces`。批处理层本身既不读取也不依赖 trace 字段。
+  **C2-L2 必须在以下任何一项发生之前关闭**（收紧 `SourceExecutionTrace` 的校验器，或冻结一条明确的
+  “可信生产者诊断信息”声明）：(1) 持久化 / 报告 / UI / NFO / CLI 序列化或展示 trace；
+  (2) C5 的熔断器或按 host 限流器读取 trace 字段；(3) 生产环境接受一个 trace 不可信的
+  非 `MultiSourceEngine` 生产者。如果 C5 从不读取 trace，则可以继续携带这一项。
+* **C4-N1（跨持久化的出处）：** lineage 令牌只存在于内存中；在持久化或恢复结果之前，需要设计真正的
+  批次 id 和存储合同。
+* 下一步（尚未开始）：C5 = 熔断器 + 按 host 限流器（各自需要独立的冻结合同）；
+  最终的 500-item 失败注入验收；NFO / 文件系统 / Amane adapter。

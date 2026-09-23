@@ -1,16 +1,15 @@
-# FC2 Organizer — Phase 4 / P4-C1 Recursive Media Discovery Contract
+# FC2 Organizer — Phase 4 / P4-C1 递归媒体发现合同（Recursive Media Discovery Contract）
 
-Status: **frozen at P4-C1** (candidate; independent closure review pending).
-Package: `fc2_organizer.discovery` (`errors.py`, `policy.py`, `models.py`, `_platform.py`, `scanner.py`).
+状态：**在 P4-C1 冻结**（候选；独立关闭复查待进行）。
+Package：`fc2_organizer.discovery`（`errors.py`、`policy.py`、`models.py`、`_platform.py`、`scanner.py`）。
 
-**Scope (frozen for this package):** media *discovery* only --
+**范围（对本 package 冻结）：** 只做媒体*发现* --
 `dirty media root -> recursive read-only discovery -> deterministic
-discovered media items`. No FC2 number parsing, no metadata scraping, no
-NFO/image handling, no organize plan, no filesystem mutation of any kind,
-no Amane dependency, no persistence, no CLI/UI. See section 9 for the full
-out-of-scope list carried from the task brief.
+discovered media items`。不解析 FC2 番号，不抓取 metadata，不处理 NFO / 图片，不生成整理计划，
+不做任何形式的文件系统修改，不依赖 Amane，不做持久化，没有 CLI / UI。任务简报中延续下来的完整
+范围外清单见第 9 节。
 
-## 1. Architecture and dependency direction
+## 1. 架构与依赖方向
 
 ```text
 fc2_organizer
@@ -19,25 +18,22 @@ fc2_organizer
 fc2_metadata_core
 ```
 
-`fc2_metadata_core` never imports `fc2_organizer`. Nothing under
-`fc2_organizer` may import `amane`.
+`fc2_metadata_core` 从不 import `fc2_organizer`。`fc2_organizer` 下的任何内容都不得 import `amane`。
 
-`fc2_organizer.discovery` currently depends on **zero** `fc2_metadata_core`
-modules -- not even `normalize`. Media identity in this package is the
-filesystem path (`source_path` + `index`), never a parsed FC2 number
-(section 4), so there is nothing here for `normalize` to do. This is
-enforced (not just observed) by `tests/contract/test_discovery_architecture.py`,
-which additionally forbids, by both a static AST scan and a dynamic
-import-blocking meta path finder exercised against a real end-to-end
-`discover_media` call:
+`fc2_organizer.discovery` 目前对 `fc2_metadata_core` 模块的依赖为**零** -- 连 `normalize` 都不依赖。
+本 package 中的媒体身份是文件系统路径（`source_path` + `index`），绝不是解析出来的 FC2 番号
+（第 4 节），因此这里没有任何需要 `normalize` 做的事情。这一点由
+`tests/contract/test_discovery_architecture.py` 强制执行（而不仅仅是观察到），该测试还通过静态 AST
+扫描，以及在一次真实的端到端 `discover_media` 调用上运行的、阻断 import 的动态 meta path finder，
+额外禁止以下内容：
 
-* `amane` (any submodule),
-* `fc2_metadata_core.sources` (adapters, HTTP source framework),
-* `fc2_metadata_core.aggregation` (multi-source execution internals),
-* `fc2_metadata_core.resource_control` (governor / circuit breaker / host limiter internals),
-* `fc2_metadata_core.http` (the HTTP transport).
+* `amane`（任何子模块），
+* `fc2_metadata_core.sources`（adapter、HTTP 来源框架），
+* `fc2_metadata_core.aggregation`（多来源执行内部实现），
+* `fc2_metadata_core.resource_control`（governor / 熔断器 / host 限流器内部实现），
+* `fc2_metadata_core.http`（HTTP transport）。
 
-## 2. Public API
+## 2. 公开 API
 
 ```python
 from fc2_organizer.discovery import (
@@ -53,238 +49,185 @@ from fc2_organizer.discovery import (
 result: DiscoveryResult = discover_media(root, policy=DiscoveryPolicy())
 ```
 
-* `root: str | os.PathLike` -- a directory path. A bad type (not `str`/`os.PathLike`,
-  or an empty string) raises `DiscoveryInputError` (`TypeError` subclass) before
-  any filesystem access.
-* `policy: DiscoveryPolicy | None` -- defaults to `DiscoveryPolicy()` (the built-in
-  extension set, section 5) when omitted. A non-`DiscoveryPolicy` value raises
-  `DiscoveryInputError`.
-* Returns a `DiscoveryResult` on success. Raises a `DiscoveryRootError` subclass
-  (section 8) if the root itself cannot be scanned -- never an empty-looking
-  success for a root-level problem.
+* `root: str | os.PathLike` -- 一个目录路径。类型错误（不是 `str`/`os.PathLike`，或是空字符串）
+  会在任何文件系统访问之前抛出 `DiscoveryInputError`（`TypeError` 的子类）。
+* `policy: DiscoveryPolicy | None` -- 省略时默认为 `DiscoveryPolicy()`（内置扩展名集合，第 5 节）。
+  非 `DiscoveryPolicy` 的值会抛出 `DiscoveryInputError`。
+* 成功时返回 `DiscoveryResult`。如果根目录本身无法扫描，则抛出 `DiscoveryRootError` 的子类
+  （第 8 节）-- 对于根目录层面的问题，绝不会返回一个看起来为空的成功结果。
 
-All four result models (`DiscoveryPolicy`, `DiscoveredMediaItem`, `DiscoveryIssue`,
-`DiscoveryResult`) are frozen dataclasses with `slots=True`: immutable, no
-attribute can be added or reassigned post-construction, every field is a plain
-`str`/`int`/`Enum`/`tuple` (serialization-friendly; no exception object, no
-traceback, no open handle, no caller-owned mutable container ever stored).
+全部四个结果模型（`DiscoveryPolicy`、`DiscoveredMediaItem`、`DiscoveryIssue`、
+`DiscoveryResult`）都是带 `slots=True` 的 frozen dataclass：不可变，构造后既不能新增属性也不能重新赋值，
+每个字段都是普通的 `str`/`int`/`Enum`/`tuple`（便于序列化；从不保存异常对象、traceback、打开的句柄
+或调用方持有的可变容器）。
 
 ## 3. `DiscoveredMediaItem`
 
-Fields (frozen, all validated in `__post_init__`, `DiscoveryContractError` on
-violation): `index: int` (>= 0), `source_path: str` (absolute, OS-native
-separators, non-empty), `relative_path: str` (relative to the scanned root,
-**POSIX-style forward slashes via `Path.as_posix()`** regardless of host OS --
-chosen for a stable, serializable representation independent of platform),
-`extension: str` (lowercase, dot-prefixed, e.g. `.mp4`), `size: int` (bytes,
->= 0, from `os.stat(..., follow_symlinks=False)`).
+字段（frozen，全部在 `__post_init__` 中校验，违规时抛出 `DiscoveryContractError`）：
+`index: int`（>= 0）、`source_path: str`（绝对路径，使用操作系统原生分隔符，非空）、
+`relative_path: str`（相对于被扫描的根目录，无论宿主操作系统是什么，**都使用 `Path.as_posix()` 的
+POSIX 风格正斜杠** -- 这样选择是为了得到稳定、可序列化且与平台无关的表示）、
+`extension: str`（小写，以点开头，例如 `.mp4`）、`size: int`（字节数，>= 0，来自
+`os.stat(..., follow_symlinks=False)`）。
 
-No scraped title, actors, studio, NFO/image status, target path, move status,
-Amane state, or database state is present, by design (task brief section 6) --
-those belong to later phases.
+按照设计（任务简报第 6 节），这里不包含抓取到的标题、演员、厂牌、NFO / 图片状态、目标路径、移动状态、
+Amane 状态或数据库状态 -- 这些属于后续阶段。
 
-Identity within one `DiscoveryResult` is `(source_path, index)`, **never** a
-parsed FC2 number: `A/FC2-1234567.mp4` and `B/FC2-1234567.mp4` are two
-independent items (section 6 below).
+在一个 `DiscoveryResult` 内部，身份是 `(source_path, index)`，**绝不**是解析出来的 FC2 番号：
+`A/FC2-1234567.mp4` 和 `B/FC2-1234567.mp4` 是两个独立的条目（见下文第 6 节）。
 
-## 4. FC2 number boundary
+## 4. FC2 番号边界
 
-This package implements no second FC2 recognizer. It does not call
-`fc2_metadata_core.normalize.normalize_fc2_number` and does not need to: its
-only job is "is this a supported media file at this path", decided purely by
-extension (section 5). Whether a filename happens to look like an FC2 number
-is irrelevant to discovery and is entirely the concern of a later phase.
+本 package 没有实现第二个 FC2 识别器。它不调用
+`fc2_metadata_core.normalize.normalize_fc2_number`，也不需要调用：它唯一的工作是判断
+“这个路径上是否是一个受支持的媒体文件”，完全依据扩展名决定（第 5 节）。文件名是否恰好看起来像 FC2 番号，
+与发现过程无关，完全是后续阶段关心的事情。
 
-## 5. `DiscoveryPolicy` and supported extensions
+## 5. `DiscoveryPolicy` 与受支持的扩展名
 
-`supported_extensions: frozenset[str]`, default:
+`supported_extensions: frozenset[str]`，默认值：
 
 ```text
 .mp4  .mkv  .avi  .mov  .wmv  .m4v  .ts
 ```
 
-Chosen for breadth over precision -- common video containers a user's FC2
-library is realistically stored in; a rare container false-negative is worse
-than a stray non-video false-positive with this extension (there is no
-content sniffing in v1.0). Overridable via `DiscoveryPolicy(supported_extensions=...)`.
+选择时优先考虑覆盖面而不是精确度 -- 这些是用户的 FC2 媒体库实际可能使用的常见视频容器；
+漏掉一个少见容器（false-negative）比误收一个带有这类扩展名的非视频文件（false-positive）更糟糕
+（v1.0 中没有内容嗅探）。可以通过 `DiscoveryPolicy(supported_extensions=...)` 覆盖。
 
-* Normalized at construction: entries are lower-cased and required to be
-  `.`-prefixed, non-empty after the dot; a bare `str`/`bytes` argument (an
-  iterable of *characters*, not extensions) is explicitly rejected rather
-  than silently misinterpreted.
-* Matching is **case-insensitive** by construction-time normalization:
-  `VIDEO.MP4` and `video.mp4` match the same policy entry.
-* Extension is the **only** signal used to decide "is this media" -- no
-  filename convention (`~prefix`, `.part`, timestamps, ...) is special-cased.
-  A `.part`/`.tmp` sidecar is excluded because that is not a supported
-  extension, not because of any "looks like a partial download" heuristic.
-* This is the single, centralized place extensions are declared; nothing
-  else in the package hard-codes an extension list.
+* 在构造时规范化：条目转为小写，并且必须以 `.` 开头、点之后非空；裸 `str`/`bytes` 参数（它是*字符*的
+  可迭代对象，而不是扩展名的可迭代对象）会被明确拒绝，而不是被悄悄误解。
+* 通过构造时的规范化，匹配**不区分大小写**：`VIDEO.MP4` 和 `video.mp4` 匹配同一个策略条目。
+* 扩展名是判断“是不是媒体”的**唯一**信号 -- 不对任何文件名惯例（`~prefix`、`.part`、时间戳、...）
+  做特殊处理。`.part`/`.tmp` 这类伴随文件之所以被排除，是因为它们不是受支持的扩展名，而不是因为任何
+  “看起来像未下载完的文件”的启发式判断。
+* 这是声明扩展名的唯一集中位置；package 中的其他地方都不硬编码扩展名列表。
 
-## 6. Duplicate-safety (frozen)
+## 6. 重复项安全（冻结）
 
-The same FC2 number (or the same plain filename) appearing under two
-different directories always produces two independent `DiscoveredMediaItem`s.
-There is no dedupe by number and no `dict[number, ...]` anywhere in the
-scanner. `DiscoveryResult.__post_init__` enforces the complementary
-invariant: no two items may share the same `source_path` (an actual,
-physical duplicate discovery would be a scanner bug, not a legitimate
-result).
+同一个 FC2 番号（或同一个普通文件名）出现在两个不同的目录下时，总是产生两个独立的
+`DiscoveredMediaItem`。scanner 中任何地方都没有按番号去重，也没有 `dict[number, ...]`。
+`DiscoveryResult.__post_init__` 强制执行与之互补的不变量：任何两个条目都不能有相同的 `source_path`
+（真正在物理上重复发现同一个文件，是 scanner 的 bug，而不是合法结果）。
 
-## 7. Deterministic ordering (frozen)
+## 7. 确定性排序（冻结）
 
-Traversal never relies on raw OS directory-enumeration order
-(`os.scandir()`/`Path.iterdir()` order is unspecified across platforms and
-even across repeated calls on some filesystems). Instead:
+遍历从不依赖操作系统原始的目录枚举顺序
+（`os.scandir()`/`Path.iterdir()` 的顺序在不同平台上没有规定，在某些文件系统上甚至在多次调用之间
+也不一致）。取而代之的是：
 
-1. Within one directory, all immediate entries (files and subdirectories
-   together) are sorted by `entry.name` using plain Python string (Unicode
-   code-point / ordinal) comparison -- locale-independent, not "natural"
-   sort, just stable and reproducible. A directory's entries have unique
-   names by filesystem construction, so this ordering has no ties to break.
-2. The tree is walked **depth-first, pre-order**: at each directory, entries
-   are visited in that sorted order; when a subdirectory entry is reached, it
-   is recursed into immediately (its entire subtree is fully visited) before
-   the parent directory's next sorted sibling is visited.
-3. Each `DiscoveredMediaItem.index` is assigned in the exact order media
-   files are appended during that traversal (a single, per-call counter
-   starting at 0).
+1. 在同一个目录中，所有直接条目（文件和子目录一起）按 `entry.name` 用普通的 Python 字符串比较
+   （Unicode 码点 / ordinal）排序 -- 与 locale 无关，不是“自然”排序，只求稳定且可复现。
+   由于文件系统本身保证同一目录中的条目名称唯一，这种排序不存在需要打破的并列情况。
+2. 目录树按**深度优先、先序**遍历：在每个目录中，按上述排序顺序访问条目；遇到子目录条目时，
+   立即递归进入（完整访问其整个子树），然后才访问父目录中排在下一个的同级条目。
+3. 每个 `DiscoveredMediaItem.index` 严格按遍历过程中追加媒体文件的顺序分配（一个按调用计数、
+   从 0 开始的计数器）。
 
-Consequence: for the same, unchanged directory tree, repeated calls to
-`discover_media` produce byte-identical `relative_path` ordering and
-`index` assignment. Adding, removing, or renaming any file/directory can
-change subsequent indices (indices are positional, not stable identifiers
-across tree mutation -- this is expected: v1.0 discovery is a one-shot
-snapshot, not a diff engine).
+推论：对于同一棵未改变的目录树，重复调用 `discover_media` 会产生逐字节相同的 `relative_path` 排序和
+`index` 分配。新增、删除或重命名任何文件 / 目录都可能改变后续的下标（下标是位置性的，不是在树结构变化
+前后保持稳定的标识符 -- 这是预期行为：v1.0 的发现是一次性快照，不是 diff 引擎）。
 
-Known limitation: traversal recurses using the Python call stack (one frame
-per directory depth). An extremely deep tree (approaching
-`sys.getrecursionlimit()`, ~1000 by default) could raise `RecursionError`.
-No real FC2 media library is expected to nest anywhere near that deep;
-out of scope for v1.0 (see "Known Limitations" in the P4-C1 handoff).
+已知局限：遍历使用 Python 调用栈进行递归（每层目录深度占一个栈帧）。极深的目录树（接近
+`sys.getrecursionlimit()`，默认约 ~1000）可能抛出 `RecursionError`。预计没有任何真实的 FC2 媒体库会
+嵌套到接近这样的深度；这不在 v1.0 的范围内（见 P4-C1 handoff 中的“Known Limitations”）。
 
-## 8. Root failure semantics (frozen)
+## 8. 根目录失败语义（冻结）
 
-`discover_media` raises, and never silently downgrades to an empty
-`DiscoveryResult`:
+`discover_media` 会抛出异常，绝不会悄悄降级为一个空的 `DiscoveryResult`：
 
-| Condition | Exception |
+| 情况 | 异常 |
 |---|---|
-| root does not exist | `DiscoveryRootNotFoundError` |
-| root exists but is not a directory (including a path with a non-directory parent component) | `DiscoveryRootNotADirectoryError` |
-| root exists but cannot be accessed (`PermissionError` or other `OSError` while stat-ing it) | `DiscoveryRootAccessError` |
-| `root` argument has the wrong type, or is an empty string | `DiscoveryInputError` |
-| `policy` argument is not a `DiscoveryPolicy` | `DiscoveryInputError` |
+| 根目录不存在 | `DiscoveryRootNotFoundError` |
+| 根目录存在但不是目录（包括路径中某个父级组件不是目录的情况） | `DiscoveryRootNotADirectoryError` |
+| 根目录存在但无法访问（对其 stat 时出现 `PermissionError` 或其他 `OSError`） | `DiscoveryRootAccessError` |
+| `root` 参数类型错误，或为空字符串 | `DiscoveryInputError` |
+| `policy` 参数不是 `DiscoveryPolicy` | `DiscoveryInputError` |
 
-All of the above (except the two `DiscoveryInputError` cases, which are
-argument-contract violations) subclass `DiscoveryRootError`, itself a
-`DiscoveryError`. A successfully returned `DiscoveryResult` therefore always
-means "root existed, was a directory, was accessible" -- `items`/`issues`
-may still both be empty for a genuinely empty, fully-readable tree, and that
-case is indistinguishable from itself only, never from a root failure.
+以上所有情况（两个 `DiscoveryInputError` 情况除外，它们属于参数合同违规）都是 `DiscoveryRootError`
+的子类，而它本身又是 `DiscoveryError`。因此，一个成功返回的 `DiscoveryResult` 总是意味着
+“根目录存在、是目录、可以访问” -- 对于一棵真正为空且完全可读的目录树，`items`/`issues` 仍然可能都为空，
+而这种情况只会与它自己相同，绝不会与根目录失败混淆。
 
-## 9. Subtree / item failure isolation (frozen)
+## 9. 子树 / 条目失败隔离（冻结）
 
-A non-root problem encountered while walking (permission denied on a
-subdirectory, a directory or file that vanishes mid-scan, a stat failure)
-is never silently swallowed and never aborts the whole scan. It is recorded
-as one `DiscoveryIssue` and traversal continues with the next sibling /
-directory.
+遍历过程中遇到的非根目录问题（子目录权限被拒绝、扫描中途消失的目录或文件、stat 失败），既不会被悄悄吞掉，
+也不会中止整个扫描。它会被记录为一个 `DiscoveryIssue`，然后遍历继续处理下一个同级条目 / 目录。
 
-`DiscoveryIssue` fields: `path: str`, `kind: DiscoveryIssueKind`,
-`stage: DiscoveryStage`, `detail: str`.
+`DiscoveryIssue` 字段：`path: str`、`kind: DiscoveryIssueKind`、
+`stage: DiscoveryStage`、`detail: str`。
 
-`DiscoveryIssueKind`: `PERMISSION_DENIED`, `PATH_VANISHED`, `STAT_FAILED`,
-`SYMLINK_SKIPPED`, `REPARSE_POINT_SKIPPED`.
+`DiscoveryIssueKind`：`PERMISSION_DENIED`、`PATH_VANISHED`、`STAT_FAILED`、
+`SYMLINK_SKIPPED`、`REPARSE_POINT_SKIPPED`。
 
-`DiscoveryStage`: `LIST_DIRECTORY`, `CLASSIFY_ENTRY`, `STAT_ENTRY`.
+`DiscoveryStage`：`LIST_DIRECTORY`、`CLASSIFY_ENTRY`、`STAT_ENTRY`。
 
-`detail` is **never** `str(exc)`/`repr(exc)`, never a traceback, never the
-exception object -- `DiscoveryIssue.build(path, kind, stage)` is the only
-constructor the scanner uses, and it always attaches one of five fixed,
-short, canned messages keyed by `kind` (e.g. `"permission denied"`). This is
-bounded and sanitized by construction, not by post-hoc truncation (though
-`DiscoveryIssue.__post_init__` additionally hard-truncates any `detail`
-longer than `MAX_ISSUE_DETAIL_LENGTH` = 200 chars as a defense-in-depth
-backstop for direct construction).
+`detail` **从不**是 `str(exc)`/`repr(exc)`，从不是 traceback，也从不是异常对象 --
+`DiscoveryIssue.build(path, kind, stage)` 是 scanner 使用的唯一构造方式，它总是附上五条固定、简短、
+预设消息中按 `kind` 选出的一条（例如 `"permission denied"`）。这是在构造层面做到有界和脱敏的，
+而不是事后截断（不过 `DiscoveryIssue.__post_init__` 还会把长度超过 `MAX_ISSUE_DETAIL_LENGTH` = 200 个字符的
+`detail` 硬截断，作为直接构造时的纵深防御后备措施）。
 
-Filesystem seams (`scanner._list_directory_sorted`, `scanner._stat_entry`,
-`scanner._is_symlink`) are isolated as small module-level functions
-specifically so tests can inject `PermissionError` / `FileNotFoundError` /
-`OSError` at an exact point via `monkeypatch`, rather than depending on
-flaky, hard-to-construct real OS race conditions or real permission denial
-against the invoking user's own files (unreliable on Windows in particular).
+文件系统接缝（`scanner._list_directory_sorted`、`scanner._stat_entry`、
+`scanner._is_symlink`）被隔离为小的模块级函数，目的是让测试可以通过 `monkeypatch` 在精确的位置注入
+`PermissionError` / `FileNotFoundError` / `OSError`，而不必依赖不稳定、难以构造的真实操作系统竞争条件，
+也不必对调用用户自己的文件制造真实的权限拒绝（这在 Windows 上尤其不可靠）。
 
-## 10. Symlink / junction / reparse-point policy (frozen, mandatory, non-configurable)
+## 10. Symlink / junction / reparse point 策略（冻结、强制、不可配置）
 
-* A directory entry that is a symlink (`os.DirEntry.is_symlink()`) is
-  **never** recursed into if it is a directory, and **never** treated as a
-  normal media source if it is a file -- regardless of what it points to.
-  Recorded as `DiscoveryIssueKind.SYMLINK_SKIPPED` at `CLASSIFY_ENTRY`.
-* A directory entry that is a Windows **reparse point** (junctions and any
-  other NTFS reparse tag) is likewise never recursed into, even though
-  `os.DirEntry.is_symlink()` reports `False` for a junction (junctions carry
-  `IO_REPARSE_TAG_MOUNT_POINT`, not `IO_REPARSE_TAG_SYMLINK`). Detected via
-  `fc2_organizer.discovery._platform.is_reparse_point`, which reads
+* 作为 symlink 的目录条目（`os.DirEntry.is_symlink()`）：如果是目录，**永远不会**递归进入；
+  如果是文件，**永远不会**被当作普通媒体来源 -- 无论它指向什么。
+  在 `CLASSIFY_ENTRY` 阶段记录为 `DiscoveryIssueKind.SYMLINK_SKIPPED`。
+* 作为 Windows **reparse point** 的目录条目（junction 以及任何其他 NTFS reparse tag）同样永远不会被递归
+  进入，尽管对于 junction，`os.DirEntry.is_symlink()` 报告的是 `False`（junction 带的是
+  `IO_REPARSE_TAG_MOUNT_POINT`，而不是 `IO_REPARSE_TAG_SYMLINK`）。通过
+  `fc2_organizer.discovery._platform.is_reparse_point` 检测，它读取
   `os.lstat(path).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT` --
-  deliberately *not* `os.path.isjunction` (Python 3.12+ only; this project
-  targets 3.11+) and deliberately keyed on the attribute bit rather than the
-  specific reparse tag, so *any* reparse kind is treated conservatively as
-  unsafe. Always returns `False` on non-Windows (`os.name != "nt"`).
-  Recorded as `DiscoveryIssueKind.REPARSE_POINT_SKIPPED`.
-* This is a **fixed v1.0 safety invariant, not a policy knob** --
-  `DiscoveryPolicy` has no `follow_symlinks` field. Rationale: prevents
-  infinite recursion (a symlink/junction loop), prevents scanning outside
-  `root` (a link pointing elsewhere), and prevents double-counting the same
-  physical files through two different paths.
-* Conservative choice for a symlinked **file** specifically (task brief
-  section 11): rather than resolve and stat through it, it is excluded from
-  results entirely, exactly like a symlinked directory is excluded from
-  recursion. A future phase may revisit this with an explicit opt-in policy
-  if a real use case needs it; v1.0 does not guess.
+  刻意*不*使用 `os.path.isjunction`（仅 Python 3.12+ 提供；本项目的目标版本是 3.11+），并且刻意以属性位
+  而不是具体的 reparse tag 作为判断依据，因此*任何*类型的 reparse 都被保守地视为不安全。
+  在非 Windows 系统上（`os.name != "nt"`）总是返回 `False`。
+  记录为 `DiscoveryIssueKind.REPARSE_POINT_SKIPPED`。
+* 这是一个**固定的 v1.0 安全不变量，而不是策略旋钮** --
+  `DiscoveryPolicy` 没有 `follow_symlinks` 字段。理由：防止无限递归（symlink / junction 循环），
+  防止扫描到 `root` 之外（指向别处的链接），并防止通过两条不同路径重复计算同一批物理文件。
+* 专门针对 symlink **文件**的保守选择（任务简报第 11 节）：不解析它、也不通过它做 stat，而是把它完全
+  排除在结果之外，与 symlink 目录被排除在递归之外的做法完全一致。如果真实的使用场景需要，后续阶段可以
+  通过显式的 opt-in 策略重新审视；v1.0 不做猜测。
 
-## 11. Test matrix (`tests/unit/discovery/`, `tests/contract/test_discovery_architecture.py`)
+## 11. 测试矩阵（`tests/unit/discovery/`、`tests/contract/test_discovery_architecture.py`）
 
-| # | Requirement | Test file |
+| # | 要求 | 测试文件 |
 |---|---|---|
-| 1-7, 9-10, 12-15 | empty root, single/nested/deep/mixed files, unsupported ignored, case-insensitive, Unicode names, unusual valid chars | `test_discovery_basic.py` |
-| 8, 9, 23 | duplicate FC2 number across dirs, duplicate filename across dirs, exact-once discovery | `test_discovery_duplicates_and_ordering.py` |
-| 11 | deterministic ordering across repeated scans | `test_discovery_duplicates_and_ordering.py` |
-| 16-18 | permission-denied subtree, file vanishes before stat, directory vanishes during scan (injected via monkeypatch) | `test_discovery_failure_isolation.py` |
-| 19-21 | symlink dir/file not followed, symlink loop does not hang, junction not followed, junction loop does not hang, junction escaping root not followed | `test_discovery_symlinks_and_junctions.py` |
-| 21 (platform abstraction) | `is_reparse_point` unit-tested independent of a real junction | `test_discovery_platform_helper.py` |
-| 22, 24 | large synthetic tree stage gate, sidecar files never become items | `test_discovery_stage_gate.py` |
-| 25-27 | no filesystem mutation, no network dependency, no Amane dependency | `test_discovery_no_mutation.py`, `tests/contract/test_discovery_architecture.py` |
-| model contracts | `DiscoveredMediaItem`/`DiscoveryIssue`/`DiscoveryResult` invariants | `test_discovery_models.py` |
-| policy contract | extension normalization / validation | `test_discovery_policy.py` |
-| root failure semantics | `test_discovery_root_failures.py` |
-| architecture / dependency direction | `tests/contract/test_discovery_architecture.py` |
+| 1-7, 9-10, 12-15 | 空根目录、单个 / 嵌套 / 深层 / 混合文件、忽略不受支持的文件、不区分大小写、Unicode 名称、不常见但合法的字符 | `test_discovery_basic.py` |
+| 8, 9, 23 | 跨目录重复的 FC2 番号、跨目录重复的文件名、每个文件恰好发现一次 | `test_discovery_duplicates_and_ordering.py` |
+| 11 | 多次扫描之间的确定性排序 | `test_discovery_duplicates_and_ordering.py` |
+| 16-18 | 权限被拒绝的子树、在 stat 之前消失的文件、扫描过程中消失的目录（通过 monkeypatch 注入） | `test_discovery_failure_isolation.py` |
+| 19-21 | 不跟随 symlink 目录 / 文件、symlink 循环不会挂起、不跟随 junction、junction 循环不会挂起、不跟随逃出根目录的 junction | `test_discovery_symlinks_and_junctions.py` |
+| 21（平台抽象） | `is_reparse_point` 不依赖真实 junction 的单元测试 | `test_discovery_platform_helper.py` |
+| 22, 24 | 大型合成目录树阶段门槛、伴随文件永远不会成为条目 | `test_discovery_stage_gate.py` |
+| 25-27 | 不修改文件系统、不依赖网络、不依赖 Amane | `test_discovery_no_mutation.py`、`tests/contract/test_discovery_architecture.py` |
+| 模型合同 | `DiscoveredMediaItem`/`DiscoveryIssue`/`DiscoveryResult` 的不变量 | `test_discovery_models.py` |
+| 策略合同 | 扩展名规范化 / 校验 | `test_discovery_policy.py` |
+| 根目录失败语义 | `test_discovery_root_failures.py` |
+| 架构 / 依赖方向 | `tests/contract/test_discovery_architecture.py` |
 
-## 12. Performance boundary (frozen)
+## 12. 性能边界（冻结）
 
-Discovery reads filesystem metadata only (`os.scandir`, `entry.stat()`);
-it never reads file content, never hashes a file, and never re-lists an
-already-visited directory. Memory grows linearly with
-`len(items) + len(issues)`; live recursion depth grows with directory
-nesting depth, not with the total number of files (siblings in one
-directory are processed and discarded from the call stack one at a time,
-not held open simultaneously).
+发现过程只读取文件系统元数据（`os.scandir`、`entry.stat()`）；它从不读取文件内容，从不计算文件 hash，
+也从不重新列出已经访问过的目录。内存随 `len(items) + len(issues)` 线性增长；存活的递归深度随目录嵌套深度
+增长，而不随文件总数增长（同一目录中的同级条目一次处理一个，处理完即从调用栈中丢弃，而不是同时保持打开）。
 
-## 13. Out of scope (task brief section 16, carried here verbatim in spirit)
+## 13. 范围之外（任务简报第 16 节，此处按原意延续）
 
-No metadata scraping, no `SourceAdapter`/`MultiSourceEngine`/retry/resource
-governor/`BatchScheduler` changes, no `OrganizePlan`, no output naming or
-target directory generation, no NFO rendering/writing, no
-poster/fanart/thumb/extrafanart downloading or image validation, no
-artifact writer, no `mkdir`/rename/move/copy/delete of organizer source
-media, no filesystem executor, no preview UI, no CLI report system, no JSON
-diagnostics, no persistent job/database/resume, no Amane adapter, no HTTP
-service/REST API/GUI.
+不抓取 metadata，不修改 `SourceAdapter`/`MultiSourceEngine`/重试/资源 governor/`BatchScheduler`，
+没有 `OrganizePlan`，不生成输出命名或目标目录，不渲染 / 写入 NFO，不下载 poster/fanart/thumb/extrafanart，
+也不校验图片，没有 artifact writer，不对整理器的源媒体做 `mkdir`/重命名/移动/复制/删除，没有文件系统执行器，
+没有预览 UI，没有 CLI 报告系统，没有 JSON 诊断信息，没有持久化的任务 / 数据库 / 恢复，没有 Amane adapter，
+没有 HTTP 服务 / REST API / GUI。
 
-## 14. Backlog carried forward (not addressed by P4-C1)
+## 14. 延续的待办（P4-C1 未处理）
 
-Not triggered / not addressed: `C2-L2`, `P2-R-05`, `P2-R-06`, `P2-R-07`,
-`P2-R-10`, `C3-N1`, `C3-N2`, `C3-N3`, `C3-N4`, `C4-N1`, `C4-R1-N1`,
-`C4-R1-N2`, `C4-R1-N3`, `F3`, `F5`, `C5-R1-L1`. None of these debts is
-touched, read, or relevant to this package; `fc2_organizer.discovery` has
-zero dependency on the modules any of them concern.
+未触发 / 未处理：`C2-L2`、`P2-R-05`、`P2-R-06`、`P2-R-07`、
+`P2-R-10`、`C3-N1`、`C3-N2`、`C3-N3`、`C3-N4`、`C4-N1`、`C4-R1-N1`、
+`C4-R1-N2`、`C4-R1-N3`、`F3`、`F5`、`C5-R1-L1`。这些债务没有一项被触及、读取，或与本 package 相关；
+`fc2_organizer.discovery` 对它们所涉及的任何模块都零依赖。

@@ -443,9 +443,9 @@ extrafanart <- B + C
 ```
 
 需要明确 field policy：
-- scalar first-non-empty / priority；
-- list union + normalize + dedupe；
-- image URLs dedupe；
+- 标量字段：按优先级取第一个非空值（scalar first-non-empty / priority）；
+- 列表字段：合并 + 规范化 + 去重（list union + normalize + dedupe）；
+- 图片 URL 去重（image URLs dedupe）；
 - source_urls 全保留；
 - field_sources 记录最终字段来源。
 

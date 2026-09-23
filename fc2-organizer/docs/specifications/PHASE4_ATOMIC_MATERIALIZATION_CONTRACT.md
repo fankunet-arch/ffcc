@@ -1,30 +1,28 @@
-# FC2 Organizer -- Phase 4 / P4-C6 Atomic Artifact Materialization Contract
+# FC2 Organizer -- Phase 4 / P4-C6 原子 Artifact 落盘合同（Atomic Artifact Materialization Contract）
 
-Status: **P4-C6 implementation complete** (substeps 1, 2, 2A, 3). **Independent review
-REQUIRED. P4-C6 NOT CLOSED.** Nothing is pending inside P4-C6 (section 25).
-Package: `fc2_organizer.materialization` (`__init__.py`, `errors.py`, `models.py`, `atomic.py`,
-`artifacts.py`, `mapping.py`).
+状态：**P4-C6 实现已完成**（substeps 1、2、2A、3）。**独立复查
+REQUIRED。P4-C6 NOT CLOSED。** P4-C6 内部没有任何待定内容（第 25 节）。
+Package：`fc2_organizer.materialization`（`__init__.py`、`errors.py`、`models.py`、`atomic.py`、
+`artifacts.py`、`mapping.py`）。
 Frozen Base: `e44790f57004825957f2212921171667e7c576cf`
 Substep 1 Head: `b088db8acb2c4ae47037d58546000c41543b73b1`
 Substep 2 Head: `67fb857523c59b3cd19691caedf3316171f8e0ca`
-Substep 2A Head: `2016107bd33fc4de546698790acb84f3d28cc8a9` (extrafanart naming boundary correction, section 21)
-Final Code Review Candidate: the substep-3 commit that introduced this line (gate + contract
-finalization; no production change). Its SHA is recorded in `docs/review/P4_C6_HANDOFF.md`
-(a commit cannot contain its own hash).
+Substep 2A Head: `2016107bd33fc4de546698790acb84f3d28cc8a9`（extrafanart 命名边界修正，第 21 节）
+Final Code Review Candidate：引入这一行的那个 substep-3 提交（门槛 + 合同定稿；没有生产代码改动）。
+它的 SHA 记录在 `docs/review/P4_C6_HANDOFF.md` 中（一个提交无法包含它自己的 hash）。
 Branch: `claude/phase4-c6-atomic-materialization`
 
-Sections 1-15 were frozen in substep 1 and are **unchanged in substep 2** except
-for the additive notes marked *(substep 2)*. Sections 16-24 are **IMPLEMENTED IN
-SUBSTEP 2** (section 21 corrected in 2A). Sections 25-27 were added in substep 3,
-which changed **no production source**.
+第 1-15 节在 substep 1 中冻结，除了标注为 *(substep 2)* 的补充说明之外，**在 substep 2 中没有改变**。
+第 16-24 节 **IMPLEMENTED IN
+SUBSTEP 2**（第 21 节在 2A 中修正）。第 25-27 节在 substep 3 中新增，该 substep
+**没有改动任何生产源码**。
 
-## 1. Scope
+## 1. 范围
 
-P4-C6 as a whole: land artifact *contents* (NFO text, acquired images) on disk
-safely -- complete or not at all, never overwriting anything.
+P4-C6 整体：把 artifact 的*内容*（NFO 文本、已获取的图片）安全地写到磁盘上 -- 要么完整写入，要么完全不写，
+绝不覆盖任何东西。
 
-**Substep 1 delivers only** one primitive: atomic creation of **one** file with
-exact `bytes`, inside a directory that **already exists**:
+**Substep 1 只交付**一个原语：在一个**已经存在**的目录中，以严格的 `bytes` 原子地创建**一个**文件：
 
 ```text
 bytes payload
@@ -34,32 +32,26 @@ bytes payload
   -> failure cleanup of exactly the owned temporary path
 ```
 
-Substep 1 does **not**: execute or read an `OrganizePlan`, move media, create
-any directory (target directory or `extrafanart/`), map NFO / image roles to
-paths, materialize in batch, move across volumes, preflight writability, or
-orchestrate operations.
+Substep 1 **不做**：执行或读取 `OrganizePlan`、移动媒体、创建任何目录（目标目录或 `extrafanart/`）、
+把 NFO / 图片角色映射到路径、批量落盘、跨卷移动、预检可写性，或者编排操作。
 
-**Substep 2 delivers only** (sections 16-24): the artifact kinds and request
-model, the pure `build_artifact_requests` mapping (plan + rendered NFO `str` +
-acquired images -> ordered requests), the frozen NFO UTF-8 rule, image byte
-identity, deterministic extrafanart naming, and the single-artifact wrapper
-`materialize_artifact(request)`. It still does not create directories, move
-media, read or execute `OrganizePlan.operations`, orchestrate several
-artifacts, or roll anything back.
+**Substep 2 只交付**（第 16-24 节）：artifact 种类与请求模型、纯函数映射 `build_artifact_requests`
+（计划 + 已渲染的 NFO `str` + 已获取的图片 -> 有序的请求）、冻结的 NFO UTF-8 规则、图片字节身份一致性、
+确定性的 extrafanart 命名，以及单个 artifact 的包装器 `materialize_artifact(request)`。它仍然不创建目录、
+不移动媒体、不读取或执行 `OrganizePlan.operations`、不编排多个 artifact，也不回滚任何东西。
 
-## 2. Separation from P4-C7 (frozen)
+## 2. 与 P4-C7 的划分（冻结）
 
-| P4-C6 (this package) | P4-C7 (future, not here) |
+| P4-C6（本 package） | P4-C7（将来，不在这里） |
 |---|---|
-| safe on-disk landing of one artifact's bytes | whole-plan preflight |
-| | `mkdir` of target / `extrafanart` directories |
-| | `MOVE_MEDIA`, cross-volume handling |
-| | operation-graph execution, filesystem orchestration |
+| 把一个 artifact 的字节安全地写到磁盘上 | 整个计划的预检 |
+| | 对目标 / `extrafanart` 目录执行 `mkdir` |
+| | `MOVE_MEDIA`、跨卷处理 |
+| | 操作图执行、文件系统编排 |
 
-The writer's precondition is that the target's parent directory already
-exists. A missing parent fails closed; nothing is created.
+writer 的前提条件是目标的父目录已经存在。父目录缺失时 fail closed；不会创建任何东西。
 
-## 3. Public API
+## 3. 公开 API
 
 ```python
 from fc2_organizer.materialization import materialize_atomic_bytes, MaterializedArtifact
@@ -67,124 +59,102 @@ from fc2_organizer.materialization import materialize_atomic_bytes, Materialized
 materialize_atomic_bytes(target_path: str, content: bytes) -> MaterializedArtifact
 ```
 
-Synchronous. Exactly two positional parameters; there is **no** `overwrite`,
-`exist_ok`, suffix, mode, `mkdir`, fsync-toggle or filesystem-ops parameter.
-The failure-injection seam (`atomic._FS`) is private and not exported.
+同步调用。恰好两个位置参数；**没有** `overwrite`、`exist_ok`、后缀、mode、`mkdir`、fsync 开关或
+文件系统操作参数。失败注入接缝（`atomic._FS`）是私有的，不对外导出。
 
-The layer accepts only exact bytes. It does not accept `PublicationRecord`,
-`OrganizePlan`, `AcquiredImage` or NFO `str`. *(substep 2)* Mapping those to
-paths/bytes is the separate `mapping` module (section 17); the primitive itself
-is unchanged.
+这一层只接受严格的 bytes。它不接受 `PublicationRecord`、
+`OrganizePlan`、`AcquiredImage` 或 NFO `str`。*(substep 2)* 把这些映射为路径 / 字节，是独立的 `mapping` 模块
+的工作（第 17 节）；原语本身没有改变。
 
-## 4. Input boundary (frozen)
+## 4. 输入边界（冻结）
 
-Checked in this order, before any filesystem access and without invoking any
-method of the argument:
+按以下顺序检查，在任何文件系统访问之前进行，并且不调用参数的任何方法：
 
-1. `type(target_path) is str` -- else `MaterializationInputError`. `pathlib.Path`,
-   any `os.PathLike`, `bytes` paths and `str` subclasses are rejected;
-   `__fspath__` / `__str__` hooks never run.
-2. `type(content) is bytes` -- else `MaterializationInputError`. `bytearray`,
-   `memoryview`, `bytes` subclasses (hooks never run), `str` are rejected.
-3. Lexical path validation (`InvalidTargetPathError`, `.reason`), by the
-   runtime OS:
-   * `EMPTY`, `NUL_CHARACTER`;
-   * `NOT_ABSOLUTE`: Windows requires a drive letter with root (`C:\x`, `C:/x`)
-     or a UNC share (`\\server\share\x`); rooted-but-driveless (`\x`), drive-
-     relative (`C:x`) and relative forms are rejected. POSIX requires
-     `os.path.isabs`. `~`, `$VAR`, `%VAR%` are never expanded (so they are
-     simply non-absolute); no cwd is consulted.
-   * Windows only: `DEVICE_NAMESPACE` (`\\?\`, `\\.\`), `ILLEGAL_CHARACTER`
-     (`<>:"|?*`, control chars -- a `:` would address an NTFS alternate data
-     stream), `TRAILING_DOT_OR_SPACE`, `RESERVED_NAME` (`CON`, `NUL`, `COM1`...).
-   * `NO_BASENAME` (trailing separator), `DOT_SEGMENT` (`.` / `..` anywhere).
+1. `type(target_path) is str` -- 否则抛出 `MaterializationInputError`。`pathlib.Path`、任何 `os.PathLike`、
+   `bytes` 路径以及 `str` 子类都会被拒绝；
+   `__fspath__` / `__str__` 钩子永远不会运行。
+2. `type(content) is bytes` -- 否则抛出 `MaterializationInputError`。`bytearray`、
+   `memoryview`、`bytes` 子类（钩子永远不会运行）、`str` 都会被拒绝。
+3. 词法路径校验（`InvalidTargetPathError`，`.reason`），依据运行时操作系统：
+   * `EMPTY`、`NUL_CHARACTER`；
+   * `NOT_ABSOLUTE`：Windows 要求带根目录的盘符（`C:\x`、`C:/x`）或 UNC 共享（`\\server\share\x`）；
+     有根但无盘符（`\x`）、相对于盘符（`C:x`）以及相对形式都会被拒绝。POSIX 要求
+     `os.path.isabs`。`~`、`$VAR`、`%VAR%` 永远不会被展开（因此它们只是非绝对路径）；不参考任何 cwd。
+   * 仅限 Windows：`DEVICE_NAMESPACE`（`\\?\`、`\\.\`）、`ILLEGAL_CHARACTER`
+     （`<>:"|?*`、控制字符 -- `:` 会指向 NTFS 的备用数据流）、`TRAILING_DOT_OR_SPACE`、
+     `RESERVED_NAME`（`CON`、`NUL`、`COM1`...）。
+   * `NO_BASENAME`（以分隔符结尾）、`DOT_SEGMENT`（任何位置出现 `.` / `..`）。
 
-The path is never normalized, resolved or made absolute. This does not
-re-implement the P4-C2 planner; it only refuses ambiguous input.
+路径永远不会被规范化、解析或转为绝对路径。这并不是重新实现 P4-C2 的 planner；它只是拒绝有歧义的输入。
 
-## 5. Parent / target preconditions (frozen)
+## 5. 父目录 / 目标的前提条件（冻结）
 
-* Parent (`dirname(target_path)`) is `stat`-ed: absent (or a path through a
-  file) -> `ParentDirectoryMissingError`; exists but not a directory ->
-  `ParentNotDirectoryError`; any other OS error -> `ParentDirectoryError`
-  (`reason=INACCESSIBLE`). **Never created.**
-* Target is `lstat`-ed (never followed): if *anything* exists -- file,
-  directory, symlink, dangling symlink, junction -> `TargetExistsError`. An
-  `lstat` OS error other than "not found" -> `TargetInaccessibleError`.
+* 对父目录（`dirname(target_path)`）做 `stat`：不存在（或路径中经过了一个文件）-> `ParentDirectoryMissingError`；
+  存在但不是目录 -> `ParentNotDirectoryError`；任何其他操作系统错误 -> `ParentDirectoryError`
+  （`reason=INACCESSIBLE`）。**永远不会创建。**
+* 对目标做 `lstat`（从不跟随链接）：只要存在*任何东西* -- 文件、目录、symlink、悬空 symlink、junction ->
+  `TargetExistsError`。除“不存在”以外的 `lstat` 操作系统错误 -> `TargetInaccessibleError`。
 
-This pre-check is an early exit only; section 7 carries the guarantee.
+这项预检只是提前退出；保证由第 7 节承担。
 
-## 6. Overwrite = NEVER (frozen, inherited from P4-C2)
+## 6. Overwrite = NEVER（冻结，继承自 P4-C2）
 
-An existing final target is never overwritten, truncated, replaced, deleted,
-renamed or suffixed (`(1)`, `_copy`, ...). There is no knob to change this.
-`os.replace` is never used; there is no "check exists -> replace" path.
+已存在的最终目标永远不会被覆盖、截断、替换、删除、重命名或加后缀（`(1)`、`_copy`、...）。没有任何旋钮可以改变这一点。
+从不使用 `os.replace`；不存在“检查是否存在 -> 替换”的路径。
 
-## 7. Atomic no-overwrite publish (frozen platform strategy)
+## 7. 原子的不覆盖发布（冻结的平台策略）
 
-Python's stdlib has no single cross-platform "rename without replace". The
-frozen per-OS strategy (`atomic._publish_no_replace`):
+Python 标准库没有一个跨平台的“不替换的重命名”操作。冻结的按操作系统策略（`atomic._publish_no_replace`）：
 
-| OS | primitive | existing target | temp afterwards |
+| 操作系统 | 原语 | 目标已存在时 | 之后的临时文件 |
 |---|---|---|---|
-| Windows (`os.name == "nt"`) | `os.rename` = `MoveFileExW` **without** `MOVEFILE_REPLACE_EXISTING` | fails `FileExistsError` for any entry (file, dir, symlink, junction); atomic within one volume | consumed by the rename |
-| POSIX | `os.link(temp, target)` (`link(2)`) | fails `EEXIST`; never follows an existing target symlink | this call unlinks its own temp name |
+| Windows（`os.name == "nt"`） | `os.rename` = **不带** `MOVEFILE_REPLACE_EXISTING` 的 `MoveFileExW` | 对任何条目（文件、目录、symlink、junction）都以 `FileExistsError` 失败；在同一个卷内是原子的 | 被 rename 消耗掉 |
+| POSIX | `os.link(temp, target)`（`link(2)`） | 以 `EEXIST` 失败；从不跟随已存在的目标 symlink | 由本次调用 unlink 自己的临时文件名 |
 
-Consequences (frozen):
+推论（冻结）：
 
-* A target created by anyone between the pre-check and the publish is **never
-  replaced**: the publish itself fails and is reported as `TargetExistsError`.
-* The target appears either complete (all bytes, fsynced) or not at all.
-* If the publish fails with another OS error and the target now exists,
-  `TargetExistsError` is reported; otherwise `ArtifactPublishError(errno)`.
-  This probe classifies the error only; it never triggers an action.
-* POSIX filesystems without hard-link support fail closed with
-  `ArtifactPublishError`; there is no fallback to `rename` / `replace`.
-* Temp and target share a directory, so the publish never crosses a volume.
-* Durability: the file data is `fsync`ed before publish; `fsync` of the
-  parent directory entry is not performed in substep 1.
+* 在预检与发布之间由任何人创建的目标，**永远不会被替换**：发布本身会失败，并报告为 `TargetExistsError`。
+* 目标要么完整出现（全部字节，已 fsync），要么根本不出现。
+* 如果发布因其他操作系统错误失败，而此时目标已经存在，则报告 `TargetExistsError`；否则报告
+  `ArtifactPublishError(errno)`。这次探测只用于对错误分类；它从不触发任何动作。
+* 不支持 hard link 的 POSIX 文件系统会以 `ArtifactPublishError` fail closed；不存在回退到 `rename` / `replace` 的做法。
+* 临时文件与目标位于同一目录，因此发布永远不会跨卷。
+* 持久性：文件数据在发布之前已 `fsync`；substep 1 中不对父目录条目执行 `fsync`。
 
-## 8. Temporary file (frozen)
+## 8. 临时文件（冻结）
 
-* Name: `.fc2tmp-<32 lowercase hex from secrets.token_hex(16)>.part`, joined to
-  the target's own parent -- a sibling. It never contains the target name,
-  metadata, title, URL or any secret, and never influences the final content.
-* Created with `O_WRONLY | O_CREAT | O_EXCL` (+ `O_BINARY` / `O_NOINHERIT` /
-  `O_CLOEXEC` where available), never `O_TRUNC`, mode `0o666` (umask applies).
-  Exclusive create never opens an existing entry and never follows a planted
-  symlink.
-* A name equal to the target (case-insensitively on Windows) is skipped. On
-  `FileExistsError` a fresh token is tried, up to 8 attempts; the clashing
-  entry is **not ours** and is never touched. Exhaustion or any other OS error
-  -> `TemporaryCreateError(errno)`.
+* 名称：`.fc2tmp-<32 lowercase hex from secrets.token_hex(16)>.part`，拼接到目标自己的父目录下 -- 与目标同级。
+  它从不包含目标名称、metadata、标题、URL 或任何 secret，也从不影响最终内容。
+* 以 `O_WRONLY | O_CREAT | O_EXCL`（外加可用时的 `O_BINARY` / `O_NOINHERIT` /
+  `O_CLOEXEC`）创建，从不使用 `O_TRUNC`，mode 为 `0o666`（受 umask 影响）。
+  独占创建永远不会打开已存在的条目，也永远不会跟随植入的 symlink。
+* 与目标同名（在 Windows 上不区分大小写）的名称会被跳过。遇到 `FileExistsError` 时换一个新的 token 重试，
+  最多 8 次尝试；发生冲突的那个条目**不属于我们**，永远不会被触碰。尝试用尽或任何其他操作系统错误
+  -> `TemporaryCreateError(errno)`。
 
-## 9. Ownership and failure cleanup (frozen)
+## 9. 所有权与失败清理（冻结）
 
-* The call owns exactly one path: the temp it successfully exclusive-created.
-  Ownership ends when the Windows rename consumes it or after the one POSIX
-  post-publish unlink attempt.
-* On any failure (write, flush, close, publish, or a `BaseException`), the
-  call closes its descriptor if still open (errors ignored) and, if still
-  owned, unlinks **that exact path** once. "Already gone" counts as cleaned.
-* Never: glob / wildcard / listing-based cleanup, deleting other `.tmp` /
-  `.part` / `.fc2tmp-*` files, deleting or modifying the final target (even
-  when this call had just published it), deleting any directory.
-* Short writes are continued; a zero-length write is `ArtifactWriteError(WRITE, EIO)`.
+* 本次调用恰好拥有一个路径：它成功独占创建的那个临时文件。当 Windows 的 rename 消耗掉它，或在 POSIX 上发布后
+  唯一的那次 unlink 尝试之后，所有权即告结束。
+* 发生任何失败（写入、flush、close、发布，或一个 `BaseException`）时，本次调用会关闭仍然打开的描述符
+  （忽略错误），并且如果仍然拥有该路径，就对**那个确切路径** unlink 一次。“已经不在了”也算作已清理。
+* 从不：基于 glob / 通配符 / 目录列表的清理，删除其他 `.tmp` / `.part` / `.fc2tmp-*` 文件，删除或修改最终目标
+  （即使本次调用刚刚发布了它），删除任何目录。
+* 短写入会继续写完；零长度写入是 `ArtifactWriteError(WRITE, EIO)`。
 
-## 10. Cleanup failure and fatal control flow (frozen)
+## 10. 清理失败与致命控制流（冻结）
 
-| primary | cleanup | raised |
+| 主结果 | 清理 | 抛出 |
 |---|---|---|
-| none (success) | -- | returns `MaterializedArtifact` |
-| POSIX: publish succeeded, temp unlink fails | failed | `ArtifactCleanupError(target_published=True, primary=None)`; target is complete and kept |
-| a `MaterializationError` | ok | the primary |
-| a `MaterializationError` | failed | `ArtifactCleanupError(target_published=False, primary=<primary>)`, `__cause__` = primary |
-| `KeyboardInterrupt`, `SystemExit`, `GeneratorExit`, any other `BaseException`, or a foreign `Exception` | ok or failed | the **same object**, unchanged; a cleanup failure never masks it |
+| 无（成功） | -- | 返回 `MaterializedArtifact` |
+| POSIX：发布成功，临时文件 unlink 失败 | 失败 | `ArtifactCleanupError(target_published=True, primary=None)`；目标完整并被保留 |
+| 一个 `MaterializationError` | 成功 | 主错误 |
+| 一个 `MaterializationError` | 失败 | `ArtifactCleanupError(target_published=False, primary=<primary>)`，`__cause__` = 主错误 |
+| `KeyboardInterrupt`、`SystemExit`、`GeneratorExit`、任何其他 `BaseException`，或外来的 `Exception` | 成功或失败 | **同一个对象**，原样抛出；清理失败永远不会掩盖它 |
 
-Only `OSError` is intercepted around filesystem calls; a `BaseException`
-raised inside cleanup itself propagates.
+在文件系统调用周围只拦截 `OSError`；清理过程本身抛出的 `BaseException` 会继续传播。
 
-## 11. Typed errors (`errors.py`)
+## 11. 类型化错误（`errors.py`）
 
 ```text
 MaterializationError(Exception)
@@ -203,19 +173,18 @@ MaterializationError(Exception)
 +-- ArtifactMappingError(MaterializationError, ValueError)        .reason: MappingRejectionReason   (substep 2)
 ```
 
-*(substep 2)* `MappingRejectionReason`: `NFO_EMPTY`, `NFO_NOT_UTF8_ENCODABLE`,
-`PLAN_PATH_INVALID`, `IMAGE_INVALID`, `INVALID_EXTRAFANART_ORDINAL`, `DUPLICATE_TARGET`
-(substep 2A replaced the former `EXTRAFANART_LIMIT`; see section 21).
-`MaterializationModelError` also covers an invalid `ArtifactWriteRequest`;
-`MaterializationInputError` also covers a wrong-type mapping / wrapper input.
+*(substep 2)* `MappingRejectionReason`：`NFO_EMPTY`、`NFO_NOT_UTF8_ENCODABLE`、
+`PLAN_PATH_INVALID`、`IMAGE_INVALID`、`INVALID_EXTRAFANART_ORDINAL`、`DUPLICATE_TARGET`
+（substep 2A 替换了原先的 `EXTRAFANART_LIMIT`；见第 21 节）。
+`MaterializationModelError` 也用于非法的 `ArtifactWriteRequest`；
+`MaterializationInputError` 也用于类型错误的映射 / 包装器输入。
 
-No failure escapes as a bare `OSError` / `ValueError`. Messages are fixed
-wording: no target path, no temp path / token, no payload, no `OSError`
-text. Typed errors are raised outside any `except` block, so no `OSError`
-(whose `filename` is the temp path) is ever attached as `__cause__` or
-`__context__`; the only chaining is `ArtifactCleanupError` from its typed primary.
+任何失败都不会以裸 `OSError` / `ValueError` 的形式泄漏出来。消息是固定措辞：不含目标路径、不含临时路径 /
+token、不含载荷，也不含 `OSError` 的文本。类型化错误都在任何 `except` 块之外抛出，因此任何 `OSError`
+（其 `filename` 是临时路径）都永远不会被附加为 `__cause__` 或 `__context__`；唯一的异常链接是
+`ArtifactCleanupError` 链接到其类型化的主错误。
 
-## 12. Result model
+## 12. 结果模型
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -225,65 +194,60 @@ class MaterializedArtifact:
     sha256: str        # hashlib.sha256(content).hexdigest(), i.e. of the bytes written
 ```
 
-Exact-type validated (`MaterializationModelError`). No temp path, handle,
-exception or filesystem object is stored.
+按严格类型校验（`MaterializationModelError`）。不保存任何临时路径、句柄、异常或文件系统对象。
 
-## 13. Concurrency guarantee (frozen)
+## 13. 并发保证（冻结）
 
-N writers racing for one final target (threads or processes, same host
-filesystem): at most one returns a `MaterializedArtifact`; every other gets
-`TargetExistsError` (or an `ArtifactCleanupError` whose `primary` is one);
-the winner's bytes are complete and never overwritten; every loser removes
-only its own temp. This holds even when all racers pass the pre-check,
-because the guarantee is the publish primitive's (section 7).
+N 个 writer 争抢同一个最终目标（线程或进程，同一主机的文件系统）：最多只有一个返回 `MaterializedArtifact`；
+其他每一个都得到 `TargetExistsError`（或一个 `primary` 就是这种错误的 `ArtifactCleanupError`）；
+胜出者的字节是完整的，并且永远不会被覆盖；每个落败者只删除它自己的临时文件。即使所有竞争者都通过了预检，
+这一点也成立，因为保证来自发布原语本身（第 7 节）。
 
-## 14. Architecture (frozen for substep 1)
+## 14. 架构（对 substep 1 冻结）
 
-* stdlib only: `__future__`, `dataclasses`, `enum`, `errno`, `hashlib`,
-  `ntpath`, `os`, `posixpath`, `re`, `secrets`, `stat`, `typing`.
-* Never imports `fc2_metadata_core`, `amane`, `httpx` or any network module,
-  `shutil` / `tempfile` / `glob` / `fnmatch` / `pathlib`, or any other
-  `fc2_organizer` package (`planning`, `nfo`, `images`, `publication`,
-  `discovery`).
-* No call to `replace`, `mkdir` / `makedirs`, `rmdir` / `rmtree` / `remove`,
-  `listdir` / `scandir` / `walk` / `glob`, `expanduser` / `expandvars`,
-  `getcwd`, `abspath` / `realpath` / `resolve` / `normpath`, `truncate`.
-  `os.rename` / `os.link` appear only in `_publish_no_replace`; `unlink` is
-  reached only through `_remove_owned_temp`.
-* No reverse dependency: nothing else under `src` imports it;
-  `fc2_organizer/__init__.py` does not eagerly import it.
-* No `executor.py`, `planner.py`, `move.py`, `orchestrator.py`.
-* *(substep 2)* The stdlib-only rule above applies to every module **except
-  `mapping.py`** (section 23). `artifacts.py` is stdlib / own-package only.
-* Top-level `fc2_organizer` subpackages are now
-  `{"discovery", "planning", "publication", "nfo", "images", "materialization"}`;
-  the four existing package-set scope guards were updated by one line each.
+* 只使用标准库：`__future__`、`dataclasses`、`enum`、`errno`、`hashlib`、
+  `ntpath`、`os`、`posixpath`、`re`、`secrets`、`stat`、`typing`。
+* 从不 import `fc2_metadata_core`、`amane`、`httpx` 或任何网络模块、
+  `shutil` / `tempfile` / `glob` / `fnmatch` / `pathlib`，也不 import 任何其他
+  `fc2_organizer` package（`planning`、`nfo`、`images`、`publication`、
+  `discovery`）。
+* 不调用 `replace`、`mkdir` / `makedirs`、`rmdir` / `rmtree` / `remove`、
+  `listdir` / `scandir` / `walk` / `glob`、`expanduser` / `expandvars`、
+  `getcwd`、`abspath` / `realpath` / `resolve` / `normpath`、`truncate`。
+  `os.rename` / `os.link` 只出现在 `_publish_no_replace` 中；只能通过 `_remove_owned_temp` 到达 `unlink`。
+* 没有反向依赖：`src` 下没有其他任何内容 import 它；
+  `fc2_organizer/__init__.py` 不会急切地 import 它。
+* 没有 `executor.py`、`planner.py`、`move.py`、`orchestrator.py`。
+* *(substep 2)* 上面“只使用标准库”的规则适用于除 **`mapping.py` 以外**的每个模块（第 23 节）。
+  `artifacts.py` 只使用标准库 / 本 package 自身。
+* `fc2_organizer` 的顶层子 package 现在是
+  `{"discovery", "planning", "publication", "nfo", "images", "materialization"}`；
+  现有的四个 package 集合作用域守卫各更新了一行。
 
-Enforced by `tests/contract/test_materialization_architecture.py`.
+由 `tests/contract/test_materialization_architecture.py` 强制执行。
 
-## 15. Test matrix (substep 1)
+## 15. 测试矩阵（substep 1）
 
-| requirement | test file |
+| 要求 | 测试文件 |
 |---|---|
-| exact bytes, zero-byte, binary, multi-chunk; size / sha256; no temp left; sibling random temp | `tests/unit/materialization/test_materialization_atomic.py` |
-| existing file / directory / symlink / dangling symlink / junction -> `TargetExistsError`, untouched; pre-check uses `lstat` (host-independent); no overwrite knob / suffix | `test_materialization_atomic.py` |
-| parent missing / is a file / through a file / inaccessible; target un-probeable | `test_materialization_atomic.py` |
-| `bytearray` / `memoryview` / hostile `bytes` subclass / `PathLike` / hostile `str` subclass rejected, zero hooks, zero I/O | `test_materialization_atomic.py` |
-| write (mid-way), short write, zero write, flush, close, publish failures -> no target, owned temp removed | `test_materialization_failures.py` |
-| target / directory / symlink planted between pre-check and publish -> never replaced | `test_materialization_failures.py` |
-| cleanup failure typed (`target_published` False / True), planted unrelated temps survive, temp-name clash & exhaustion, secret-free unchained errors | `test_materialization_failures.py` |
-| `KeyboardInterrupt` / `SystemExit` / `GeneratorExit` / custom `BaseException` propagate as the same object; cleanup failure never masks them | `test_materialization_failures.py` |
-| same-target race: barrier-forced (both past pre-check) and unsynchronized 8-writer rounds | `test_materialization_race.py` |
-| Windows + POSIX path rules (pure), result model | `test_materialization_paths_and_models.py` |
-| architecture boundary | `tests/contract/test_materialization_architecture.py` |
+| 严格 bytes、零字节、二进制、多块写入；大小 / sha256；不残留临时文件；同级随机临时文件 | `tests/unit/materialization/test_materialization_atomic.py` |
+| 已存在的文件 / 目录 / symlink / 悬空 symlink / junction -> `TargetExistsError`，保持不动；预检使用 `lstat`（与主机无关）；没有覆盖旋钮 / 后缀 | `test_materialization_atomic.py` |
+| 父目录缺失 / 是文件 / 路径经过文件 / 无法访问；目标无法探测 | `test_materialization_atomic.py` |
+| 拒绝 `bytearray` / `memoryview` / 恶意 `bytes` 子类 / `PathLike` / 恶意 `str` 子类，钩子调用为零，I/O 为零 | `test_materialization_atomic.py` |
+| 写入（中途）、短写入、零写入、flush、close、发布失败 -> 没有目标文件，所拥有的临时文件被删除 | `test_materialization_failures.py` |
+| 在预检与发布之间植入的目标 / 目录 / symlink -> 永远不会被替换 | `test_materialization_failures.py` |
+| 类型化的清理失败（`target_published` False / True）、植入的无关临时文件保留、临时文件名冲突与尝试用尽、不含 secret 且不做异常链接的错误 | `test_materialization_failures.py` |
+| `KeyboardInterrupt` / `SystemExit` / `GeneratorExit` / 自定义 `BaseException` 以同一个对象传播；清理失败永远不会掩盖它们 | `test_materialization_failures.py` |
+| 同一目标的竞争：barrier 强制（两者都已通过预检）以及不同步的 8-writer 多轮竞争 | `test_materialization_race.py` |
+| Windows + POSIX 路径规则（纯函数）、结果模型 | `test_materialization_paths_and_models.py` |
+| 架构边界 | `tests/contract/test_materialization_architecture.py` |
 
-Publish-dependent tests run under both strategies on the development host:
-`native` and `hardlink` (the POSIX `link` + unlink strategy, exercised via the
-private seam on NTFS, which supports hard links). Tests that create real
-symlinks skip on hosts without symlink privilege (Windows without Developer
-Mode); junctions and the `lstat` simulation cover that host.
+依赖发布的测试在开发主机上以两种策略运行：
+`native` 和 `hardlink`（POSIX 的 `link` + unlink 策略，通过私有接缝在支持 hard link 的 NTFS 上执行）。
+创建真实 symlink 的测试在没有 symlink 权限的主机上（未开启 Developer Mode 的 Windows）会跳过；
+junction 以及 `lstat` 模拟覆盖了这类主机。
 
-## 16. Artifact kinds and request model (IMPLEMENTED IN SUBSTEP 2)
+## 16. Artifact 种类与请求模型（IMPLEMENTED IN SUBSTEP 2）
 
 ```python
 class ArtifactKind(Enum):
@@ -297,12 +261,12 @@ class ArtifactWriteRequest:
     ordinal: int | None = None  # exact int >= 1 iff kind is EXTRAFANART, else None
 ```
 
-Exact-type validated (`MaterializationModelError`; `bool` is not an `int`,
-subclasses never pass). It stores **no** `PublicationRecord`, `AcquiredImage`,
-`OrganizePlan`, URL, HTTP data or exception -- only a path and bytes. Both are
-exported from `fc2_organizer.materialization`.
+按严格类型校验（`MaterializationModelError`；`bool` 不算 `int`，子类永远不能通过）。它**不**保存
+`PublicationRecord`、`AcquiredImage`、
+`OrganizePlan`、URL、HTTP 数据或异常 -- 只保存一个路径和一段字节。两者都从
+`fc2_organizer.materialization` 导出。
 
-## 17. Pure mapping API (IMPLEMENTED IN SUBSTEP 2)
+## 17. 纯函数映射 API（IMPLEMENTED IN SUBSTEP 2）
 
 ```python
 from fc2_organizer.materialization.mapping import build_artifact_requests
@@ -314,22 +278,19 @@ build_artifact_requests(
 ) -> tuple[ArtifactWriteRequest, ...]
 ```
 
-* Input identity first, in this order: `type(plan) is OrganizePlan`,
-  `type(nfo_text) is str`, `type(images) is ImageAcquisitionResult`, else
-  `MaterializationInputError` -- **before any attribute or method** of a
-  rejected object is touched (a subclass's hooks never run).
-* Pure and deterministic: **zero filesystem access** (only the lexical
-  `os.path.join`), no clock, randomness, network, NFO rendering or image
-  acquisition. Identical inputs give an equal tuple.
-* Never reads `OrganizePlan.operations` (behaviourally and AST-enforced),
-  never re-parses / re-validates `plan.canonical_number`.
-* Each plan path read must be an exact `PlannedPath` whose `absolute_path` is a
-  non-empty exact `str` (`PLAN_PATH_INVALID` otherwise, e.g. a forged plan).
-* All request target paths must be distinct (case-insensitively on Windows);
-  otherwise `DUPLICATE_TARGET` (defends against a forged plan; a real P4-C2
-  plan never collides).
+* 先检查输入身份，顺序为：`type(plan) is OrganizePlan`、
+  `type(nfo_text) is str`、`type(images) is ImageAcquisitionResult`，否则抛出
+  `MaterializationInputError` -- 在被拒绝对象的**任何属性或方法**被触碰之前完成（子类的钩子永远不会运行）。
+* 纯函数且确定：**零文件系统访问**（只有词法层面的 `os.path.join`），没有时钟、随机数、网络、NFO 渲染或
+  图片获取。相同的输入产生相等的 tuple。
+* 从不读取 `OrganizePlan.operations`（行为测试与 AST 双重强制），也从不重新解析 / 重新校验
+  `plan.canonical_number`。
+* 读取的每个计划路径都必须是严格的 `PlannedPath`，其 `absolute_path` 为非空的严格 `str`
+  （否则为 `PLAN_PATH_INVALID`，例如伪造的计划）。
+* 所有请求的目标路径必须互不相同（在 Windows 上不区分大小写）；否则为 `DUPLICATE_TARGET`
+  （防御伪造的计划；真实的 P4-C2 计划永远不会冲突）。
 
-## 18. Mapping order (frozen)
+## 18. 映射顺序（冻结）
 
 ```text
 NFO                                   always, exactly one
@@ -339,41 +300,36 @@ THUMB                                 iff images.thumb  is not None
 EXTRAFANART x N                       images.extrafanart, in tuple order
 ```
 
-The extrafanart order is the `ImageAcquisitionResult.extrafanart` tuple order
-(itself the P4-C5 candidate order), never re-sorted by `candidate_index`, size or hash.
+extrafanart 的顺序就是 `ImageAcquisitionResult.extrafanart` 的 tuple 顺序（它本身即 P4-C5 的候选顺序），
+永远不会按 `candidate_index`、大小或 hash 重新排序。
 
-## 19. NFO -> bytes (frozen)
+## 19. NFO -> 字节（冻结）
 
-`nfo_text.encode("utf-8", errors="strict")` -- exactly that, nothing else:
-no BOM is added, newlines are not changed (`\r\n` stays `\r\n`), nothing is
-stripped, Unicode is not normalized, the XML is not re-parsed or rewritten, and
-a caller-supplied leading U+FEFF is encoded as-is (not removed). Target:
-`plan.nfo_path`. An empty `str` -> `ArtifactMappingError(NFO_EMPTY)` (an empty
-`.nfo` is never a valid P4-C4 render); a lone surrogate ->
-`NFO_NOT_UTF8_ENCODABLE`, raised with no chained `UnicodeEncodeError`.
+`nfo_text.encode("utf-8", errors="strict")` -- 仅此而已，不做其他任何事：
+不添加 BOM，不改变换行（`\r\n` 保持为 `\r\n`），不做 strip，不做 Unicode 规范化，不重新解析或改写 XML，
+调用方提供的前导 U+FEFF 按原样编码（不会被移除）。目标：
+`plan.nfo_path`。空 `str` -> `ArtifactMappingError(NFO_EMPTY)`（空的 `.nfo` 永远不是合法的 P4-C4 渲染结果）；
+孤立的代理项 -> `NFO_NOT_UTF8_ENCODABLE`，抛出时不链接任何 `UnicodeEncodeError`。
 
-## 20. Image mapping (frozen)
+## 20. 图片映射（冻结）
 
-| `ImageAcquisitionResult` field | required role | kind | target |
+| `ImageAcquisitionResult` 字段 | 要求的角色 | kind | 目标 |
 |---|---|---|---|
 | `poster` | `ImageRole.POSTER` | `POSTER` | `plan.poster_path` |
 | `fanart` | `ImageRole.FANART` | `FANART` | `plan.fanart_path` |
 | `thumb` | `ImageRole.THUMB` | `THUMB` | `plan.thumb_path` |
-| each of `extrafanart` | `ImageRole.EXTRAFANART` | `EXTRAFANART` | section 21 |
+| `extrafanart` 中的每一项 | `ImageRole.EXTRAFANART` | `EXTRAFANART` | 第 21 节 |
 
-* A missing (`None`) image produces **no request and no failure**. There is
-  **no cross-role fallback** (e.g. fanart never fills an absent poster).
-* `request.content` **is** `AcquiredImage.content` (same object): no
-  re-encode, resize, crop, transcode, copy or re-validation.
-* Identical bytes in several roles or repeated in extrafanart are **not**
-  de-duplicated; each yields its own request and file.
-* An image that is not an exact `AcquiredImage` of the expected role with exact
-  `bytes` content (only possible with a forged result) -> `IMAGE_INVALID`.
+* 缺失（`None`）的图片**不产生请求，也不算失败**。**没有跨角色回退**（例如 fanart 永远不会填补缺失的 poster）。
+* `request.content` **就是** `AcquiredImage.content`（同一个对象）：不重新编码、缩放、裁剪、转码、复制，
+  也不重新校验。
+* 多个角色中相同的字节，或 extrafanart 中重复的字节，**不会**被去重；每一项都产生自己的请求和文件。
+* 不是预期角色的严格 `AcquiredImage`、或内容不是严格 `bytes` 的图片（只可能来自伪造的结果）-> `IMAGE_INVALID`。
 
-## 21. Extrafanart naming (frozen)
+## 21. Extrafanart 命名（冻结）
 
-No earlier frozen document names extrafanart files (the v1.0 spec, P4-C2 and
-P4-C5 fix only the `extrafanart/` directory), so substep 2 freezes:
+此前没有任何冻结文档规定 extrafanart 文件的名称（v1.0 规格书、P4-C2 和 P4-C5 只固定了 `extrafanart/` 目录），
+因此由 substep 2 冻结：
 
 ```text
 <plan.extrafanart_directory>/extrafanart-001.jpg
@@ -381,25 +337,23 @@ P4-C5 fix only the `extrafanart/` directory), so substep 2 freezes:
 ...
 ```
 
-* `ordinal` = 1-based position in `images.extrafanart`; name =
-  `f"extrafanart-{ordinal:03d}.jpg"` (`extrafanart_filename(ordinal)`).
-* Never derived from a URL basename, title, hash, `candidate_index` or randomness.
-* *(substep 2A)* `ordinal` is **any exact positive `int`** -- there is **no
-  maximum**. `03d` is a *minimum* width only: `1 -> extrafanart-001.jpg`,
-  `12 -> extrafanart-012.jpg`, `999 -> extrafanart-999.jpg`,
-  `1000 -> extrafanart-1000.jpg`, `10000 -> extrafanart-10000.jpg`. Every
-  entry of `images.extrafanart` yields a request; nothing is truncated, wrapped
-  (modulo) or dropped, and names stay unique. The P4-C5
-  `ImageAcquisitionPolicy.max_extrafanart` default of 12 is only a default of
-  that policy (which is itself unbounded above), **not** a P4-C6 limit.
-* `extrafanart_filename` rejects `0`, negatives, `bool`, `float`, `str` and
-  `int` subclasses with `ArtifactMappingError(INVALID_EXTRAFANART_ORDINAL)`.
-  (Substep 2's `MAX_EXTRAFANART_ORDINAL = 999` cap and its `EXTRAFANART_LIMIT`
-  reason were removed in substep 2A: P4-C6 must not add a limit P4-C5 does not have.)
-* The directory is **not created** here; if it does not exist, the write of
-  each extrafanart request fails with the primitive's `ParentDirectoryMissingError`.
+* `ordinal` = 在 `images.extrafanart` 中从 1 开始计的位置；名称 =
+  `f"extrafanart-{ordinal:03d}.jpg"`（`extrafanart_filename(ordinal)`）。
+* 永远不从 URL basename、标题、hash、`candidate_index` 或随机数推导。
+* *(substep 2A)* `ordinal` 是**任何严格的正 `int`** -- **没有最大值**。`03d` 只是*最小*宽度：
+  `1 -> extrafanart-001.jpg`、
+  `12 -> extrafanart-012.jpg`、`999 -> extrafanart-999.jpg`、
+  `1000 -> extrafanart-1000.jpg`、`10000 -> extrafanart-10000.jpg`。`images.extrafanart` 中的每一项都产生
+  一个请求；不截断、不回绕（取模）、不丢弃，名称始终唯一。P4-C5
+  `ImageAcquisitionPolicy.max_extrafanart` 的默认值 12 只是该策略的默认值（该策略本身没有上限），**不是**
+  P4-C6 的限制。
+* `extrafanart_filename` 以 `ArtifactMappingError(INVALID_EXTRAFANART_ORDINAL)` 拒绝 `0`、负数、`bool`、`float`、
+  `str` 以及 `int` 子类。
+  （Substep 2 的 `MAX_EXTRAFANART_ORDINAL = 999` 上限及其 `EXTRAFANART_LIMIT` reason 已在 substep 2A 中移除：
+  P4-C6 不得增加 P4-C5 本身没有的限制。）
+* 这里**不创建**该目录；如果它不存在，每个 extrafanart 请求的写入都会因原语的 `ParentDirectoryMissingError` 而失败。
 
-## 22. Single-artifact materializer (frozen)
+## 22. 单个 artifact 的落盘器（冻结）
 
 ```python
 from fc2_organizer.materialization import materialize_artifact
@@ -407,116 +361,93 @@ from fc2_organizer.materialization import materialize_artifact
 materialize_artifact(request: ArtifactWriteRequest) -> MaterializedArtifact
 ```
 
-* `type(request) is ArtifactWriteRequest`, else `MaterializationInputError`
-  (no hook of a subclass runs, the primitive is not reached).
-* Its only action: `materialize_atomic_bytes(request.target_path, request.content)`.
-  It returns that result and lets every typed error through unchanged.
-* **One call = one artifact.** It therefore inherits sections 4-13 verbatim:
-  overwrite = NEVER for the NFO, poster, fanart, thumb and every extrafanart
-  file (`TargetExistsError`, no suffix); missing parent -> `ParentDirectoryError`
-  family, never `mkdir`.
+* `type(request) is ArtifactWriteRequest`，否则抛出 `MaterializationInputError`
+  （子类的任何钩子都不会运行，也不会到达原语）。
+* 它唯一的动作：`materialize_atomic_bytes(request.target_path, request.content)`。
+  它返回该结果，并让每一个类型化错误原样通过。
+* **一次调用 = 一个 artifact。** 因此它原封不动地继承第 4-13 节：
+  对 NFO、poster、fanart、thumb 以及每一个 extrafanart 文件，overwrite = NEVER（`TargetExistsError`，不加后缀）；
+  父目录缺失 -> `ParentDirectoryError` 系列错误，绝不 `mkdir`。
 
-## 23. No multi-artifact orchestration, no mkdir, no MOVE_MEDIA (frozen)
+## 23. 没有多 artifact 编排、没有 mkdir、没有 MOVE_MEDIA（冻结）
 
-* There is no `materialize_all`, `execute_plan`, `apply_operations`,
-  `transaction` or `rollback_all`. Writing several artifacts, their order,
-  partial-failure policy and any directory creation belong to the P4-C7
-  executor.
-* Because every call handles exactly one request, there is **no concept of
-  rollback** here: if the NFO was written and a later poster write fails, the
-  NFO stays (tested).
-* No `mkdir` / `makedirs` anywhere in the package (AST-enforced); the target
-  directory and `extrafanart/` must already exist.
-* `MOVE_MEDIA`, `CREATE_DIRECTORY`, `ENSURE_EXTRAFANART_DIRECTORY` and all
-  other `PlannedOperation`s are never read or executed.
+* 没有 `materialize_all`、`execute_plan`、`apply_operations`、
+  `transaction` 或 `rollback_all`。写入多个 artifact、它们的顺序、部分失败策略以及任何目录创建，都属于
+  P4-C7 的执行器。
+* 由于每次调用恰好处理一个请求，这里**不存在回滚的概念**：如果 NFO 已经写入，而之后的 poster 写入失败，
+  NFO 会保留（有测试）。
+* package 中任何地方都没有 `mkdir` / `makedirs`（AST 强制）；目标目录和 `extrafanart/` 必须已经存在。
+* `MOVE_MEDIA`、`CREATE_DIRECTORY`、`ENSURE_EXTRAFANART_DIRECTORY` 以及所有其他 `PlannedOperation`
+  都永远不会被读取或执行。
 
-**Architecture of `mapping.py` (frozen).** The only module that imports
-another `fc2_organizer` package: exactly the `fc2_organizer.planning` and
-`fc2_organizer.images` **public packages** (models only: `OrganizePlan`,
-`PlannedPath`, `AcquiredImage`, `ImageAcquisitionResult`, `ImageRole`) plus
-`os`. Never `fc2_metadata_core`, `amane`, `httpx`, `images.transport`,
-`images.acquisition`, `nfo` (the renderer is not called; only its output `str`
-is consumed), `publication`, `discovery`, or `atomic` / `artifacts`. Its only
-`os` call is `os.path.join`. Because `fc2_organizer.planning` loads
-`fc2_metadata_core` transitively, `mapping` is **not** imported by
-`materialization/__init__.py` (a bare `import fc2_organizer.materialization`
-still loads no planning / images / core module); import it explicitly. A
-runtime test proves `mapping` imports and works with `amane`, `httpx`,
-`images.transport`, `images.acquisition`, `nfo` and `publication` blocked.
+**`mapping.py` 的架构（冻结）。** 它是唯一 import 另一个 `fc2_organizer` package 的模块：恰好是
+`fc2_organizer.planning` 和 `fc2_organizer.images` 这两个**公开 package**（只用模型：`OrganizePlan`、
+`PlannedPath`、`AcquiredImage`、`ImageAcquisitionResult`、`ImageRole`），外加
+`os`。从不 import `fc2_metadata_core`、`amane`、`httpx`、`images.transport`、
+`images.acquisition`、`nfo`（不调用渲染器；只消费它输出的 `str`）、`publication`、`discovery`，也不 import
+`atomic` / `artifacts`。它唯一的 `os` 调用是 `os.path.join`。由于 `fc2_organizer.planning` 会传递加载
+`fc2_metadata_core`，`mapping` **不会**被 `materialization/__init__.py` import（裸 `import fc2_organizer.materialization`
+仍然不加载任何 planning / images / core 模块）；请显式 import 它。一个运行时测试证明，在 `amane`、`httpx`、
+`images.transport`、`images.acquisition`、`nfo` 和 `publication` 都被阻断的情况下，`mapping` 仍能被 import 并正常工作。
 
-## 24. Test matrix (substep 2)
+## 24. 测试矩阵（substep 2）
 
-| requirement | test file |
+| 要求 | 测试文件 |
 |---|---|
-| NFO-only / full manifest, missing optional images (7 combinations), no cross-role fallback, fixed order, exact targets, determinism | `tests/unit/materialization/test_materialization_mapping.py` |
-| extrafanart order (tuple, not `candidate_index`), `extrafanart-001..012.jpg`, no URL/title/hash; *(2A)* `03d` minimum width (1/12/999/1000/10000), no maximum, 1000 extrafanart mapped in memory (last `extrafanart-1000.jpg`, replay identical), 0 / negative / bool / float / int-subclass rejected | `test_materialization_mapping.py` |
-| exact UTF-8, Unicode / emoji, CRLF / whitespace / U+FEFF / decomposed form preserved, no BOM, empty NFO, unencodable NFO (unchained) | `test_materialization_mapping.py` |
-| image bytes identity (`is`), duplicate bytes not de-duplicated, request holds no foreign object | `test_materialization_mapping.py` |
-| hostile `str` NFO subclass, plan / images subclass (zero attribute access), wrong types, forged path / colliding paths / wrong-role image | `test_materialization_mapping.py` |
-| canonical number not re-parsed, `operations` not consulted, zero filesystem calls (os / os.path / open / primitive trapped) | `test_materialization_mapping.py` |
-| request model rules, exactly five kinds | `test_materialization_mapping.py` |
-| NFO / poster / extrafanart / full manifest written, exact bytes, sha256 / size | `tests/unit/materialization/test_materialization_artifacts.py` |
-| existing target of every kind -> `TargetExistsError`, untouched, no leftover temp | `test_materialization_artifacts.py` |
-| missing target directory / `extrafanart/` -> `ParentDirectoryMissingError`, never created (`mkdir` trapped) | `test_materialization_artifacts.py` |
-| no rollback of an earlier success; wrapper only delegates; non-request / subclass rejected | `test_materialization_artifacts.py` |
-| mapping / wrapper architecture, `__init__` never loads mapping | `tests/contract/test_materialization_architecture.py` |
+| 仅 NFO / 完整清单、缺失可选图片（7 种组合）、没有跨角色回退、固定顺序、精确目标、确定性 | `tests/unit/materialization/test_materialization_mapping.py` |
+| extrafanart 顺序（按 tuple，而不是 `candidate_index`）、`extrafanart-001..012.jpg`、不使用 URL/标题/hash；*(2A)* `03d` 是最小宽度（1/12/999/1000/10000），没有最大值，1000 个 extrafanart 在内存中完成映射（最后一个为 `extrafanart-1000.jpg`，重放结果相同），拒绝 0 / 负数 / bool / float / int 子类 | `test_materialization_mapping.py` |
+| 严格 UTF-8、Unicode / emoji、保留 CRLF / 空白 / U+FEFF / 分解形式、不加 BOM、空 NFO、无法编码的 NFO（不做异常链接） | `test_materialization_mapping.py` |
+| 图片字节身份一致（`is`）、重复字节不去重、请求不持有外来对象 | `test_materialization_mapping.py` |
+| 恶意 `str` NFO 子类、计划 / 图片子类（属性访问为零）、类型错误、伪造路径 / 冲突路径 / 角色错误的图片 | `test_materialization_mapping.py` |
+| 规范番号不被重新解析、不参考 `operations`、文件系统调用为零（os / os.path / open / 原语都被拦截） | `test_materialization_mapping.py` |
+| 请求模型规则、恰好五种 kind | `test_materialization_mapping.py` |
+| 写入 NFO / poster / extrafanart / 完整清单，字节精确，sha256 / 大小正确 | `tests/unit/materialization/test_materialization_artifacts.py` |
+| 每种 kind 的目标已存在 -> `TargetExistsError`，保持不动，不残留临时文件 | `test_materialization_artifacts.py` |
+| 目标目录 / `extrafanart/` 缺失 -> `ParentDirectoryMissingError`，永远不会被创建（`mkdir` 被拦截） | `test_materialization_artifacts.py` |
+| 不回滚之前的成功；包装器只做委托；拒绝非请求对象 / 子类 | `test_materialization_artifacts.py` |
+| 映射 / 包装器的架构，`__init__` 从不加载 mapping | `tests/contract/test_materialization_architecture.py` |
 
-## 25. Implementation status
+## 25. 实现状态
 
-**P4-C6 implementation complete.** Nothing is pending inside P4-C6; the former
-"PENDING IN LATER P4-C6 SUBSTEP" items (artifact mapping, NFO / image /
-extrafanart materialization, final handoff) are delivered by substeps 2, 2A and 3;
-the handoff is `docs/review/P4_C6_HANDOFF.md`. Independent review is
-**REQUIRED**; P4-C6 is **NOT CLOSED**.
+**P4-C6 实现已完成。** P4-C6 内部没有任何待定内容；原先标注为
+"PENDING IN LATER P4-C6 SUBSTEP" 的各项（artifact 映射、NFO / 图片 /
+extrafanart 落盘、最终 handoff）已由 substeps 2、2A 和 3 交付；
+handoff 为 `docs/review/P4_C6_HANDOFF.md`。独立复查
+**REQUIRED**；P4-C6 **NOT CLOSED**。
 
-## 26. Integrated synthetic gate (substep 3)
+## 26. 集成合成门槛（substep 3）
 
-`tests/unit/materialization/test_materialization_synthetic_gate.py` -- test-layer
-orchestration only (it creates its own temporary directories, standing in for
-P4-C7, and calls `materialize_artifact` once per request). The production
-package gains no multi-artifact function.
+`tests/unit/materialization/test_materialization_synthetic_gate.py` -- 只是测试层的编排（它创建自己的临时目录，
+代替 P4-C7 的角色，并对每个请求调用一次 `materialize_artifact`）。生产 package 没有新增任何多 artifact 函数。
 
-* **300 deterministic synthetic films** under pytest `tmp_path`, no network,
-  no user files: 100 NFO-only; 100 NFO + each of the 7 non-empty
-  poster/fanart/thumb combinations; 100 NFO + all 8 main-art combinations +
-  1..13 extrafanart. Titles cover CJK, half-width kana, emoji, XML-special
-  characters, decomposed Unicode, tabs; every 11th NFO uses CRLF; duplicate
-  bytes across poster/fanart and repeated extrafanart bytes are included.
-* Per film, expectations come from the case definition (not the production
-  result): request order / kind / target path / ordinal / exact bytes; image
-  content identity; replay equality; then after one `materialize_artifact`
-  per request: file bytes, `size_bytes`, `sha256`, NFO = exact UTF-8 without
-  BOM, exact directory listing (no extra file, no temp residue).
-* Extrafanart boundary: 1 / 12 / 999 / 1000 names; a 1000-item mapping in
-  memory (last `extrafanart-1000.jpg`, nothing written); no maximum.
-* Overwrite NEVER for each of the five kinds: original bytes, inode and mtime
-  unchanged, directory listing unchanged (no suffix, no temp).
-* Partial success: NFO written, later poster `TargetExistsError`, NFO intact.
-* Failure injection through `materialize_artifact` (write / flush / close /
-  publish, both publish strategies) and cleanup failure: no final file, exact
-  owned temp removed (or, for cleanup failure, only the own temp remains),
-  planted unrelated temps intact.
-* Same-target race through `materialize_artifact`: barrier-forced (2 writers)
-  and unsynchronised (8 writers x 5 rounds), both strategies: exactly one
-  winner, complete winner bytes, losers `TargetExistsError`, no residue.
-* Architecture regression scan and direct reproductions A-H (see the handoff).
-* Non-vacuity: temporarily mutating `mapping.py` (prefixing a BOM; `03d` ->
-  `02d`) made the gate fail (5 and 4 failures respectively); the mutation was
-  reverted and is not committed.
+* **300 部确定性的合成影片**，位于 pytest 的 `tmp_path` 下，不访问网络，不读取用户文件：100 部仅 NFO；
+  100 部 NFO + 7 种非空 poster/fanart/thumb 组合中的每一种；100 部 NFO + 全部 8 种主图组合 +
+  1..13 张 extrafanart。标题覆盖 CJK、半角假名、emoji、XML 特殊字符、Unicode 分解形式、制表符；
+  每第 11 个 NFO 使用 CRLF；包含 poster/fanart 之间重复的字节以及 extrafanart 中重复的字节。
+* 对每部影片，预期值来自用例定义（而不是生产结果）：请求顺序 / kind / 目标路径 / ordinal / 精确字节；
+  图片内容的身份一致性；重放相等；然后对每个请求调用一次 `materialize_artifact` 之后：文件字节、
+  `size_bytes`、`sha256`、NFO = 不带 BOM 的精确 UTF-8、精确的目录列表（没有多余文件，没有临时文件残留）。
+* Extrafanart 边界：1 / 12 / 999 / 1000 的名称；在内存中完成 1000-item 映射
+  （最后一个为 `extrafanart-1000.jpg`，不写入任何内容）；没有最大值。
+* 五种 kind 各自的 Overwrite NEVER：原始字节、inode 和 mtime 不变，目录列表不变（没有后缀，没有临时文件）。
+* 部分成功：NFO 已写入，之后 poster 得到 `TargetExistsError`，NFO 完好无损。
+* 通过 `materialize_artifact` 做失败注入（写入 / flush / close / 发布，两种发布策略）以及清理失败：
+  没有最终文件，所拥有的确切临时文件被删除（对于清理失败，则只残留自己的临时文件），植入的无关临时文件完好无损。
+* 通过 `materialize_artifact` 的同一目标竞争：barrier 强制（2 个 writer）和不同步（8 个 writer x 5 轮），
+  两种策略下：恰好一个胜出者，胜出者字节完整，落败者得到 `TargetExistsError`，没有残留。
+* 架构回归扫描以及直接复现 A-H（见 handoff）。
+* 非空洞性：临时修改 `mapping.py`（前置 BOM；`03d` ->
+  `02d`）会让门槛失败（分别为 5 个和 4 个失败）；该修改已撤销，没有提交。
 
-## 27. Not P4-C6 responsibilities (frozen) and evidence notes
+## 27. 不属于 P4-C6 的职责（冻结）与证据说明
 
-P4-C6 does **not**: create the target directory; create `extrafanart/`;
-`MOVE_MEDIA`; verify source media; move media across volumes; run a whole-plan
-preflight; execute the operation graph; provide a rollback / transaction; CLI /
-UI; persistence; Amane integration. These belong to later packages, in
-particular P4-C7.
+P4-C6 **不**：创建目标目录；创建 `extrafanart/`；
+`MOVE_MEDIA`；校验源媒体；跨卷移动媒体；执行整个计划的预检；执行操作图；提供回滚 / 事务；CLI /
+UI；持久化；Amane 集成。这些属于之后的 package，尤其是 P4-C7。
 
-Evidence notes for independent review (not defects, not PASS claims):
+给独立复查的证据说明（既不是缺陷，也不是 PASS 声明）：
 
-* Real POSIX-host publish (`os.link` + unlink on a native POSIX filesystem):
-  **NOT YET OBSERVED.** The hard-link strategy was exercised only through the
-  private strategy seam on NTFS.
-* Windows real symlink cases: **SKIPPED** on the development host (no symlink
-  privilege). Junction cases and the host-independent `lstat` simulation were
-  executed.
+* 真实 POSIX 主机上的发布（在原生 POSIX 文件系统上执行 `os.link` + unlink）：
+  **NOT YET OBSERVED。** hard-link 策略只通过 NTFS 上的私有策略接缝执行过。
+* Windows 真实 symlink 用例：在开发主机上 **SKIPPED**（没有 symlink 权限）。junction 用例以及与主机无关的
+  `lstat` 模拟已执行。
