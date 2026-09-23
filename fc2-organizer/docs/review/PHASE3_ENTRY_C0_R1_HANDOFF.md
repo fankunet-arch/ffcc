@@ -30,38 +30,32 @@ Branch:
 claude/phase-0-amane-integration-fnvhpq
 ```
 
-**Not a PASS declaration. Phase 3 functional implementation has NOT started;
-the Phase 3 Aggregator Lock is not lifted.**
+**这不是 PASS 声明。Phase 3 的功能实现尚未开始；Phase 3 Aggregator Lock 没有解除。**
 
-## C0-R1-01 — original reproduction (independent reviewer)
+## C0-R1-01 — 原始复现（独立复查者）
 
-The C0 fix removed the catastrophic regexes, but the JavDB parser's *total* cost
-was still unbounded in practice. Reviewer measurements against `8b16bdb`, on a
-page built from many JavDB items whose opening tags repeatedly spell the
-class-token markers `video-title` / `meta` among filler:
+C0 的修复消除了灾难性正则，但 JavDB 解析器的*总*开销在实践中仍然是无界的。复查者针对 `8b16bdb` 的测量，
+所用页面由许多 JavDB 条目构成，这些条目的开标签在填充物之间反复拼出 class token marker `video-title` / `meta`：
 
-| Page size | Reviewer-measured time |
+| 页面大小 | 复查者测得的耗时 |
 |---|---|
 | ~732 KiB | ~1.2 s |
 | ~1.5 MiB | 3.8–4.5 s |
 | ~1.8 MiB | ~5.5 s |
-| real JavDB fixture | ~2.8 ms |
+| 真实的 JavDB fixture | ~2.8 ms |
 
-Conclusion drawn by the reviewer, and accepted here: **a per-primitive cap is not
-an acceptable total parser bound.**
+复查者得出、并在这里被接受的结论：**针对单个原语的上限，不能作为可接受的解析器总体上界。**
 
-My own reconstruction of that shape (the reviewer's exact page was not available to me;
-it is rebuilt from the description, see *Reviewer-shaped regression*) reproduced the
-slowdown on the **previous C0 parser** on this machine — measured numbers, next to the
-fixed parser's, are in *Before / after timing* below.
+我自己对这种形态的重建（我无法拿到复查者的原始页面；它是根据描述重建的，见*按复查者形态构造的回归测试*）
+在这台机器上对**之前的 C0 解析器**复现了这种变慢 — 测得的数字与修复后解析器的数字一起列在下面的
+*修复前 / 修复后的耗时*中。
 
-## Root cause
+## 根因
 
-`parse_javdb_search_page` (C0) found each of `item`, `video-title`, `meta` by
-*marker occurrence*: `iter_class_tags(html, token)` did `str.find(token)`, then for
-**every** occurrence re-located the enclosing opening tag (`rfind` +
-`open_tag_at`, up to 1500 chars) and re-ran `parse_attrs` on it (a Python-level
-loop, ~one iteration per attribute token). Per page that is:
+`parse_javdb_search_page`（C0）通过*marker 出现位置*查找 `item`、`video-title`、`meta` 中的每一个：
+`iter_class_tags(html, token)` 执行 `str.find(token)`，然后对**每一次**出现都重新定位外层的开标签（`rfind` +
+`open_tag_at`，最多 1500 个字符），并对其重新运行 `parse_attrs`（一个 Python 层面的循环，大约每个属性 token
+迭代一次）。每个页面的开销是：
 
 ```text
 ~200 items
@@ -70,154 +64,125 @@ loop, ~one iteration per attribute token). Per page that is:
   x  up to ~700 attribute tokens per 1500-char tag (dense one-character "attributes")
 ```
 
-Each factor was individually capped (`MAX_ATTEMPTS`, `limit=20`, `MAX_TAG_CHARS`),
-but the caps multiplied. The C0 adversarial suite only had *flat* inputs and never
-combined these factors, which is why it reported 10.4 ms.
+每个因子各自都有上限（`MAX_ATTEMPTS`、`limit=20`、`MAX_TAG_CHARS`），但这些上限相乘了。C0 的对抗性测试集
+只有*扁平的*输入，从未把这些因子组合起来，这就是它报告 10.4 ms 的原因。
 
-## Implementation approach
+## 实现方式
 
-Principle recorded in `_scan.py` (rule 5): **work must be shared, not repeated.**
+记录在 `_scan.py` 中的原则（rule 5）：**工作必须共享，而不是重复。**
 
-`sources/adapters/_scan.py` (additive: existing helpers unchanged except for one
-optional argument):
-- `collect_class_hits(html, wanted, max_chars, max_probes)` — **one pass** over
-  the page's quoted `class="..."` attributes. Each occurrence of the word `class`
-  costs one anchored, bounded regex match; nothing is re-scanned. Returns the hits
-  for the wanted tokens **and a `truncated` flag** (probe budget exhausted, or the
-  page continues past the scan window with more `class` attributes).
-- `first_open_tag(html, name, start, end, attempts=3)` — first opening tag in a
-  region, a constant number of candidates.
-- `parse_attrs(..., max_attrs=None)` — optional cap on attribute tokens parsed;
-  JavDB passes 16 (real tags carry 3–6).
+`sources/adapters/_scan.py`（纯增量：除了一个可选参数之外，现有 helper 都没有改变）：
+- `collect_class_hits(html, wanted, max_chars, max_probes)` — 对页面中带引号的 `class="..."` 属性做**一次遍历**。
+  单词 `class` 的每一次出现只消耗一次有锚点、有界的正则匹配；不做任何重新扫描。返回所需 token 的命中结果
+  **以及一个 `truncated` 标志**（探测预算用尽，或者页面在扫描窗口之外仍有更多 `class` 属性）。
+- `first_open_tag(html, name, start, end, attempts=3)` — 一个区域中的第一个开标签，候选数量为常数。
+- `parse_attrs(..., max_attrs=None)` — 对解析的属性 token 数量设置可选上限；JavDB 传入 16（真实标签带有 3–6 个）。
 
-`sources/adapters/javdb.py`: `parse_javdb_search_page` rewritten:
-1. one `collect_class_hits` pass for `movie-list`, `empty-message`, `item`,
-   `video-title`, `meta`;
-2. per item a **fixed** number of bounded lookups, positions from the
-   already-collected hits via `bisect`: the `video-title` tag parsed **once**
-   (`open_tag_containing`), its `<strong>` code read from a bounded window,
-   at most 3 anchors and 3 images tried, `meta` parsed once. No opening tag is
-   parsed twice and nothing is located per marker occurrence.
+`sources/adapters/javdb.py`：重写了 `parse_javdb_search_page`：
+1. 对 `movie-list`、`empty-message`、`item`、`video-title`、`meta` 只做一次 `collect_class_hits` 遍历；
+2. 每个条目做**固定**数量的有界查找，位置通过 `bisect` 从已收集的命中结果中取得：`video-title` 标签只解析
+   **一次**（`open_tag_containing`），它的 `<strong>` 编号从一个有界窗口中读取，最多尝试 3 个锚点和 3 张图片，
+   `meta` 只解析一次。没有任何开标签被解析两次，也没有任何内容按 marker 出现位置去定位。
 
-Total work is therefore a formula of named constants, not of page content:
+因此总工作量是一个由具名常量构成的公式，而不取决于页面内容：
 
 ```text
 <= _MAX_CLASS_PROBES (8000) small anchored matches           [one pass]
  + _MAX_ITEMS (200) x (constant number of windows, each <= 8000 / 3000 / 1500 chars)
 ```
 
-**Explicit budgets, sized from real data.** A real result page fetched live during
-this round (`q=FC2-PPV-48250`, 8 items): **31,459 chars total, list starts at char
-23,159, largest item region 779 chars, 290 `class` attributes on the whole page
-(~25 per item), 444 tags**. Extrapolating to a full 40-item page: ~1200 `class`
-words, ~36 KB. Budgets (`javdb.py`): scan window **512 KiB** (~15x), class probes
-**8000** (~6x a 40-item page; ~1.5x even 200 items x 25), **200** items. I did **not**
-lower the 200-item cap to hide the problem. *(Wider queries such as `q=FC2` and
-`q=FC2-PPV-49` returned HTTP 403 with an 8-byte body, so no larger real page was
-obtained; the headroom above is extrapolation from the 8-item page.)*
+**显式预算，根据真实数据确定大小。** 本轮在线上抓取的一个真实结果页面（`q=FC2-PPV-48250`，8 个条目）：
+**总共 31,459 个字符，列表从第 23,159 个字符开始，最大的条目区域为 779 个字符，整个页面有 290 个 `class` 属性
+（每个条目约 ~25 个），444 个标签**。外推到一个完整的 40-item 页面：约 ~1200 个 `class` 单词，约 ~36 KB。
+预算（`javdb.py`）：扫描窗口 **512 KiB**（~15x），class 探测次数 **8000**（~6x 一个 40-item 页面；即使是
+200 个条目 x 25 也有 ~1.5x），条目数 **200**。我**没有**为了掩盖问题而降低 200-item 的上限。
+*（更宽泛的查询，例如 `q=FC2` 和 `q=FC2-PPV-49`，返回的是带 8-byte 响应体的 HTTP 403，因此没有获得更大的真实
+页面；上面的余量是从 8-item 页面外推出来的。）*
 
-**Budget exhaustion is never `NOT_FOUND`.** If the scan stopped at a cap (more than
-8000 `class` words, a page longer than 512 KiB that still holds `class`
-attributes, or more than 200 items) and no exact hit was found, the parser has not
-seen the whole page, so the result is `INVALID_RESPONSE` ("scan budget reached …
-cannot conclude not found"). An exact hit found before the budget ran out is still
-`SUCCESS`; an explicit `empty-message` is still `NOT_FOUND`; a large page with
-*no more `class` attributes past the window* is not treated as truncated. (Tests:
-`test_javdb_total_cost.py`.)
+**预算用尽永远不是 `NOT_FOUND`。** 如果扫描在某个上限处停止（超过 8000 个 `class` 单词、页面长于 512 KiB 且
+仍然有 `class` 属性，或者超过 200 个条目）并且没有找到精确命中，解析器就没有看到整个页面，因此结果为
+`INVALID_RESPONSE`（"scan budget reached … cannot conclude not found"）。在预算用尽之前找到的精确命中仍然是
+`SUCCESS`；明确的 `empty-message` 仍然是 `NOT_FOUND`；一个*窗口之外不再有 `class` 属性*的大页面不会被视为
+被截断。（测试：`test_javdb_total_cost.py`。）
 
-No thread / signal / asyncio timeout wraps the synchronous parser; the complexity
-itself is bounded.
+同步解析器外面没有包任何线程 / 信号 / asyncio 超时；有界的是复杂度本身。
 
-## Reviewer-shaped regression
+## 按复查者形态构造的回归测试
 
-`tests/support/adversarial_javdb.py` (built programmatically; no large fixture files)
-and `tests/unit/sources/adapters/test_javdb_total_cost.py` (14 tests).
+`tests/support/adversarial_javdb.py`（以程序方式构建；没有大型 fixture 文件）
+和 `tests/unit/sources/adapters/test_javdb_total_cost.py`（14 个测试）。
 
-Shapes, each at **~750 KiB, ~1.5 MiB, ~3 MiB and ~5 MiB** (the transport cap), through the
-**real `parse_javdb_search_page`**; the headline shape also through the **real
-`JavdbAdapter.fetch()` with a fake HTTP client**:
+各种形态，每种都在 **~750 KiB、~1.5 MiB、~3 MiB 和 ~5 MiB**（transport 上限）下，经由**真实的
+`parse_javdb_search_page`** 运行；主要形态还经由**带假 HTTP client 的真实 `JavdbAdapter.fetch()`** 运行：
 
-| Shape | What multiplies |
+| 形态 | 相乘的是什么 |
 |---|---|
-| **reviewer-shaped**: 200 items, real `video-title` first, `meta` element absent, each item's `<a>` opening tag stuffed with ~1.4 KB of one-character attribute tokens spelling `meta` / `video-title` / `item` | `meta` lookup x marker occurrences x attribute tokens x items |
-| dense tags per item: as many dense non-detail `<a>` / `<img>` tags as fit the per-item window | anchor / image lookups |
-| `item` marker spelled in every opening tag | the item-list scan |
-| markers inside one long quoted attribute value per item | (control: cheap even on old code) |
-| **valid exact hit followed by the hostile shape** | real data must survive |
-| window-filling max work: 200 items packed into the 512 KiB scan window, each using every fixed lookup to the full | the worst case the new bound allows |
-| class-attribute spam | probe-budget exhaustion |
+| **按复查者形态构造**：200 个条目，真实的 `video-title` 在前，没有 `meta` 元素，每个条目的 `<a>` 开标签塞入约 ~1.4 KB 的单字符属性 token，拼出 `meta` / `video-title` / `item` | `meta` 查找 x marker 出现次数 x 属性 token x 条目 |
+| 每个条目的密集标签：在单个条目窗口内尽可能多地放入密集的非详情页 `<a>` / `<img>` 标签 | 锚点 / 图片查找 |
+| 每个开标签中都拼出 `item` marker | 条目列表扫描 |
+| 每个条目的一个长引号属性值中含有 marker | （对照：即使在旧代码上也很便宜） |
+| **合法的精确命中后面跟着恶意形态** | 真实数据必须保留下来 |
+| 填满窗口的最大工作量：200 个条目塞进 512 KiB 的扫描窗口，每个条目都把每一次固定查找用满 | 新上界允许的最坏情况 |
+| class 属性刷屏 | 探测预算用尽 |
 
-The run happens in a **child process with a 120 s hard timeout** (`re` holds the
-GIL; a regression must be killed from outside, never waited on). Budgets: **0.5 s**
-per hostile case (~10x the fixed parser's worst), and always below the C0 suite's
-existing **1.0 s**. Guard tests also assert the generator stays hostile (items >= 200,
->= 9000 marker occurrences, sizes within 2 % of the label) so it cannot pass vacuously.
-The 5 MiB C0 suite (`adversarial_html.py`, now 51 cases) gained five
-"dense-attribute" guard cases for `av123` / `fc2db_net` (their measured worst is
-~13 ms; they have no items x lookups multiplication).
+运行发生在一个**带 120 s 硬超时的子进程**中（`re` 会持有 GIL；回归必须从外部杀掉，绝不能等待它完成）。
+预算：每个恶意用例 **0.5 s**（约为修复后解析器最坏情况的 ~10x），并且始终低于 C0 测试集现有的 **1.0 s**。
+守卫测试还会断言生成器保持恶意性（条目 >= 200、>= 9000 次 marker 出现、大小与标称值相差不超过 2 %），
+因此它不可能空洞地通过。5 MiB 的 C0 测试集（`adversarial_html.py`，现在有 51 个用例）为 `av123` /
+`fc2db_net` 新增了五个 “dense-attribute” 守卫用例（它们测得的最坏情况约为 ~13 ms；它们不存在“条目 x 查找”的相乘）。
 
-## Before / after timing (same machine, same cases)
+## 修复前 / 修复后的耗时（同一台机器，同一批用例）
 
-Windows 11, Python 3.12.10, single run each; absolute numbers vary by machine, the
-ratio and the order of magnitude are the point. Reproduce with
-`PYTHONPATH="src;tests" python -m support.adversarial_javdb` (prints one JSON row
-per case).
+Windows 11，Python 3.12.10，每项只运行一次；绝对数字因机器而异，重点在于比率和数量级。可用
+`PYTHONPATH="src;tests" python -m support.adversarial_javdb` 复现（每个用例打印一行 JSON）。
 
-Headline shape (reviewer-shaped), `parse` path / `fetch` path:
+主要形态（按复查者形态构造），`parse` 路径 / `fetch` 路径：
 
-| Size | **Before** (C0 `8b16bdb`) | **After** (`c8e185e`) | Budget |
+| 大小 | **修复前**（C0 `8b16bdb`） | **修复后**（`c8e185e`） | 预算 |
 |---|---|---|---|
 | ~750 KiB | 864 ms / 862 ms | 16.4 ms / 15.8 ms | 500 ms |
 | ~1.5 MiB | 815 ms / 1738 ms | 5.5 ms / 5.5 ms | 500 ms |
 | ~3 MiB | 2154 ms / 2038 ms | 2.3 ms / 5.0 ms | 500 ms |
 | ~5 MiB | 2158 ms / 2361 ms | 1.4 ms / 3.8 ms | 500 ms |
 
-All 26 cases: **before — 21 of 26 over budget, worst 2.36 s; after — 0 over budget,
-worst 40.4 ms** (window-filling max work, 200 items fully parsed). The other shapes
-after: dense tags per item 6–24 ms, `item` in every tag 2–10 ms, valid hit + hostile
-tail 2–12 ms (all `SUCCESS`), class spam 6 ms. The real fixture parses in ~0.5 ms.
-(Note: at >= 750 KiB the fixed parser returns after the 512 KiB scan window, so the
-large-size rows are *cheaper* than the window-filling row, which is the true worst.)
+全部 26 个用例：**修复前 — 26 个中有 21 个超出预算，最坏 2.36 s；修复后 — 0 个超出预算，最坏 40.4 ms**
+（填满窗口的最大工作量，200 个条目全部解析）。其他形态修复后：每条目密集标签 6–24 ms，每个标签中都有 `item`
+2–10 ms，合法命中 + 恶意尾部 2–12 ms（全部 `SUCCESS`），class 刷屏 6 ms。真实 fixture 的解析耗时约 ~0.5 ms。
+（注意：在 >= 750 KiB 时，修复后的解析器在 512 KiB 扫描窗口之后就返回，因此大尺寸的几行反而比填满窗口那一行
+*更便宜*，后者才是真正的最坏情况。）
 
-On the reviewer's own numbers (1.2 s at 732 KiB, 3.8–4.5 s at 1.5 MiB), my
-reconstruction reproduced the *pattern* on the C0 code (0.9–2.4 s here, faster machine or
-slightly different token density) and does not exceed ~46 ms afterwards. **The
-reviewer should re-run their own reproduction against `c8e185e`**; I cannot claim to
-have used their exact page.
+对照复查者自己的数字（732 KiB 时 1.2 s，1.5 MiB 时 3.8–4.5 s），我的重建在 C0 代码上复现了同样的*模式*
+（这里为 0.9–2.4 s，可能是机器更快或 token 密度略有不同），修复之后不超过约 ~46 ms。**复查者应当针对 `c8e185e`
+重新运行他们自己的复现**；我不能声称使用了他们的原始页面。
 
-Verification that the new tests catch the old code: with the C0 `javdb.py` / `_scan.py`
-swapped back in, `test_javdb_total_cost.py` gives **5 failed / 9 passed** (the budget
-test plus the four budget-exhaustion semantics tests), completing in ~33 s.
+验证新测试能捕获旧代码：把 C0 的 `javdb.py` / `_scan.py` 换回来后，`test_javdb_total_cost.py` 得到
+**5 failed / 9 passed**（预算测试加上四个预算用尽语义测试），耗时约 ~33 s。
 
-## Correctness preserved (C0-03 frozen semantics)
+## 正确性保持不变（C0-03 冻结的语义）
 
-Unchanged and re-verified by the existing 29-test
-`test_adapter_javdb_semantics.py` plus the real fixtures:
+未改变，并由现有的 29-test `test_adapter_javdb_semantics.py` 加上真实 fixture 重新验证：
 
-| Page | Result |
+| 页面 | 结果 |
 |---|---|
-| list + parsed candidate(s), none exact | `NOT_FOUND` |
-| list, zero parseable candidate | `INVALID_RESPONSE` |
-| exact number, no title | `PARSE_ERROR` |
-| explicit `empty-message` | `NOT_FOUND` |
-| exact valid result | `SUCCESS` |
-| real fuzzy page `FC2-4824605` (near-misses `FC2-1824605`, `FC2-4724605`) | `NOT_FOUND`, "listed 2 other number(s)" |
+| 列表 + 解析出的候选，没有精确匹配 | `NOT_FOUND` |
+| 列表，没有可解析的候选 | `INVALID_RESPONSE` |
+| 精确番号，没有标题 | `PARSE_ERROR` |
+| 明确的 `empty-message` | `NOT_FOUND` |
+| 精确且合法的结果 | `SUCCESS` |
+| 真实的模糊页面 `FC2-4824605`（近似未命中项 `FC2-1824605`、`FC2-4724605`） | `NOT_FOUND`，"listed 2 other number(s)" |
 
-Class-token tolerance (`class="item "`, extra CSS classes, single quotes,
-`video-title is-x`) and the parsed-candidate count in the `NOT_FOUND` detail are
-unchanged (same tests, all green).
+class token 的容错（`class="item "`、额外的 CSS class、单引号、`video-title is-x`）以及 `NOT_FOUND` detail
+中的已解析候选数量都没有改变（同样的测试，全部通过）。
 
-Behaviour changes to be aware of (challenge them):
-1. `class` must be a lower-case, **quoted** attribute (`class="…"` / `class='…'`);
-   unquoted `class=item` and `CLASS=` are no longer recognised. JavDB emits
-   lower-case quoted `class`; this is documented in `collect_class_hits`.
-2. Per item only the **first 3** `<a>` / `<img>` tags are examined for the detail
-   link / cover (was 10 / 5). The real item has both as its first tags.
-3. Budget exhaustion with no exact hit is `INVALID_RESPONSE` (new, see above).
-4. The JavDB title attribute is still unescaped twice — **unchanged on purpose**
-   (P2-R-10 is deferred).
+需要注意的行为变化（欢迎质疑）：
+1. `class` 必须是小写、**带引号**的属性（`class="…"` / `class='…'`）；不带引号的 `class=item` 和 `CLASS=`
+   不再被识别。JavDB 输出的是小写带引号的 `class`；这一点写在 `collect_class_hits` 的文档中。
+2. 每个条目只检查**前 3 个** `<a>` / `<img>` 标签来寻找详情链接 / 封面（之前为 10 / 5）。真实条目中这两者都是
+   最前面的标签。
+3. 预算用尽且没有精确命中时为 `INVALID_RESPONSE`（新增，见上文）。
+4. JavDB 的 title 属性仍然被反转义两次 — **刻意保持不变**（P2-R-10 被延后）。
 
-## Offline tests
+## 离线测试
 
 ```text
 Python 3.12.10
@@ -226,49 +191,45 @@ python -m pytest -v                  -> 473 passed
 python -m pytest -q                  -> 473 passed, 1 warning
 ```
 
-| | count |
+| | 计数 |
 |---|---|
 | collected | **473** |
 | passed | **473** |
 | failed | 0 |
 | skipped | 0 |
 
-(+14 vs the 459 of the previous C0 candidate: all in `test_javdb_total_cost.py`. The
-one warning is the known `PytestCacheWarning` from the undeletable, git-ignored
-`.pytest_cache`.)
+（相比之前 C0 候选的 459 个 +14：全部位于 `test_javdb_total_cost.py`。那一条 warning 是已知的、来自无法删除且已被
+git 忽略的 `.pytest_cache` 的 `PytestCacheWarning`。）
 
-Preserved and green inside the 473: Phase 0 F-02/F-03 dirty-filename set
-(`test_normalize_fc2_number.py`, 41); Phase 1 R1/R2 (`test_metadata.py` 68,
-`test_source_result.py` 47); **F4** (`test_core_independent_of_amane.py`, 27, module
-parametrization covers `_scan`); Phase 2 adapters/framework (fc2db_net 17, javdb 17,
-av123 15, common 24, registration 3, base 24, registry 10, fake e2e 9, transport 8);
-**C0-01** (`test_fc2_number_canonical_boundary.py` 36, `test_adapter_canonical_boundary.py`
-34); **C0-03** (`test_adapter_javdb_semantics.py` 29); **C0-04**
-(`test_runtime_minutes.py` 45); **C0-02** flat suite (`test_parser_adversarial.py` 5).
-C0-05 (`PHASE2_HANDOFF.md` corrections) is untouched.
+在这 473 个测试中保持不变且通过的：Phase 0 F-02/F-03 脏文件名集合
+（`test_normalize_fc2_number.py`，41）；Phase 1 R1/R2（`test_metadata.py` 68、
+`test_source_result.py` 47）；**F4**（`test_core_independent_of_amane.py`，27，模块参数化覆盖 `_scan`）；
+Phase 2 的 adapter / 框架（fc2db_net 17、javdb 17、av123 15、common 24、registration 3、base 24、registry 10、
+fake e2e 9、transport 8）；**C0-01**（`test_fc2_number_canonical_boundary.py` 36、`test_adapter_canonical_boundary.py`
+34）；**C0-03**（`test_adapter_javdb_semantics.py` 29）；**C0-04**
+（`test_runtime_minutes.py` 45）；**C0-02** 扁平测试集（`test_parser_adversarial.py` 5）。
+C0-05（`PHASE2_HANDOFF.md` 的更正）没有被触碰。
 
-## Live smoke (after the JavDB parser / `_scan.py` change)
+## 线上冒烟测试（JavDB 解析器 / `_scan.py` 改动之后）
 
-At Code Head `c8e185e`, `tools/probe_sources.py adapter --no-record`
-(`--delay-seconds 2.5`, one request per lookup, no cookies, no Cloudflare/CAPTCHA
-bypass), 2026-09-20 15:56:47–15:57:01 UTC. **`docs/source-probes/PHASE2_PROBE_20260920.json`
-was not touched.** (An identical run at `7a9020d`, 15:55:27–15:55:41, gave the same
-outcomes.)
+在 Code Head `c8e185e` 上运行 `tools/probe_sources.py adapter --no-record`
+（`--delay-seconds 2.5`，每次查找一个请求，不带 cookie，不绕过 Cloudflare/CAPTCHA），
+时间 2026-09-20 15:56:47–15:57:01 UTC。**`docs/source-probes/PHASE2_PROBE_20260920.json`
+没有被触碰。**（在 `7a9020d` 上的一次相同运行，15:55:27–15:55:41，得到了同样的结果。）
 
-| Source | Number | HTTP | Result | Notes |
+| 来源 | 番号 | HTTP | 结果 | 备注 |
 |---|---|---|---|---|
-| `fc2db_net` | FC2-4824605 | 200 | **SUCCESS** | canonical number, non-empty JP title, 9 fields |
-| `fc2db_net` | FC2-4979299 | 200 | **SUCCESS** | 9 fields |
-| `javdb` | FC2-4825061 | 200 | **SUCCESS** | 6 fields |
-| `javdb` | FC2-4979299 | 200 | **SUCCESS** | 6 fields |
-| `av123` | FC2-4825061 | 200 | **SUCCESS** | 6 fields |
-| `av123` | FC2-4979299 | 200 | **SUCCESS** | 6 fields |
-| `javdb` (negative) | FC2-4824605 | 200 | **NOT_FOUND** | "search for FC2-4824605 listed 2 other number(s), none exact" |
+| `fc2db_net` | FC2-4824605 | 200 | **SUCCESS** | 规范番号、非空日文标题、9 个字段 |
+| `fc2db_net` | FC2-4979299 | 200 | **SUCCESS** | 9 个字段 |
+| `javdb` | FC2-4825061 | 200 | **SUCCESS** | 6 个字段 |
+| `javdb` | FC2-4979299 | 200 | **SUCCESS** | 6 个字段 |
+| `av123` | FC2-4825061 | 200 | **SUCCESS** | 6 个字段 |
+| `av123` | FC2-4979299 | 200 | **SUCCESS** | 6 个字段 |
+| `javdb`（反向） | FC2-4824605 | 200 | **NOT_FOUND** | "search for FC2-4824605 listed 2 other number(s), none exact" |
 
-No `av123` HTTP 500 occurred, so no retry was needed. Populated fields per source
-are identical to the previous rounds.
+`av123` 没有出现 HTTP 500，因此不需要重试。每个来源填充的字段与之前各轮完全相同。
 
-## Files changed (`c098906..c8e185e`)
+## 变更文件（`c098906..c8e185e`）
 
 ```text
 M src/fc2_metadata_core/sources/adapters/_scan.py        (+collect_class_hits, +first_open_tag, parse_attrs max_attrs; docs)
@@ -279,49 +240,43 @@ A tests/unit/sources/adapters/test_javdb_total_cost.py   (14 tests)
 M tests/unit/sources/adapters/test_parser_adversarial.py (docstring correction only)
 ```
 
-Plus, in the docs commit: this file, and the CORRECTION note added to
-`docs/review/PHASE3_ENTRY_C0_HANDOFF.md` (original text kept; the two incorrect
-performance statements are annotated in place; no Git history amended).
+此外，在 docs 提交中：本文件，以及添加到 `docs/review/PHASE3_ENTRY_C0_HANDOFF.md` 的 CORRECTION 说明
+（原文保留；两处错误的性能陈述在原位加了注解；没有 amend 任何 Git 历史）。
 
-Not changed: `normalize/`, `models/`, `_common.py`, `fc2db_net.py`, `av123.py`,
-`http/`, the contract document, `PHASE2_HANDOFF.md`, any evidence JSON.
+没有改动：`normalize/`、`models/`、`_common.py`、`fc2db_net.py`、`av123.py`、
+`http/`、合同文档、`PHASE2_HANDOFF.md`、任何证据 JSON。
 
-## Known limitations
+## 已知局限
 
-- The bound is *by construction* (named constants), not a formal proof; it is
-  demonstrated by the regression suite and the timing above. The parser is still
-  synchronous CPU work inside `async fetch`; it is now bounded to a few tens of
-  milliseconds in the worst constructed case, not moved off the event loop.
-- Budgets are sized from an 8-item real page plus extrapolation (wider live queries
-  were blocked with HTTP 403). If JavDB starts returning far larger pages, a
-  legitimate page could hit a budget and be reported as `INVALID_RESPONSE`
-  (never as a false `NOT_FOUND`); the caps are named constants at the top of `javdb.py`.
-- `av123` / `fc2db_net` keep the per-primitive caps of C0; their measured worst on
-  dense-attribute shapes is ~13 ms and they have no per-item multiplication, but they
-  were not restructured.
+- 这个上界是*构造性的*（具名常量），而不是形式化证明；它由回归测试集和上面的耗时数据加以证明。解析器仍然是
+  `async fetch` 内部的同步 CPU 工作；现在在构造出的最坏情况下被限制在几十毫秒以内，但没有被移出事件循环。
+- 预算的大小依据一个 8-item 的真实页面加上外推确定（更宽泛的线上查询被 HTTP 403 阻断）。如果 JavDB 开始返回
+  大得多的页面，合法页面可能触及某个预算并被报告为 `INVALID_RESPONSE`（绝不会是错误的 `NOT_FOUND`）；
+  这些上限是 `javdb.py` 顶部的具名常量。
+- `av123` / `fc2db_net` 保留了 C0 的按原语上限；它们在 dense-attribute 形态上测得的最坏情况约为 ~13 ms，
+  也不存在按条目的相乘，但它们没有被重构。
 
-## Deferred backlog (unchanged)
+## 延后的待办（未改变）
 
-P2-R-05, P2-R-06, P2-R-07, P2-R-08, P2-R-09, P2-R-10 (JavDB double-unescape kept as-is),
-P2-R-11, P2-R-12 — untouched, as instructed. P2-R-08, P2-R-09, P2-R-11, P2-R-12 are to be
-re-evaluated when a Phase 3 component starts to depend on the behaviour.
+P2-R-05、P2-R-06、P2-R-07、P2-R-08、P2-R-09、P2-R-10（JavDB 的重复反转义保持原样）、
+P2-R-11、P2-R-12 — 按照指示没有触碰。P2-R-08、P2-R-09、P2-R-11、P2-R-12 要在某个 Phase 3 组件开始依赖相应
+行为时重新评估。
 
-**F3 — DEFERRED. F5 — DEFERRED.** (definitions live in the earlier review reports;
-must be closed no later than before Phase 5 integration.) **F4 — CLOSED** (still enforced).
+**F3 — DEFERRED。F5 — DEFERRED。**（定义位于更早的复查报告中；必须最迟在 Phase 5 集成之前关闭。）
+**F4 — CLOSED**（仍然被强制执行）。
 
-## Closure status
+## 关闭状态
 
-| ID | Status |
+| ID | 状态 |
 |---|---|
-| C0-R1-01 | implemented — awaiting independent closure review |
-| C0-01 / C0-03 / C0-04 / C0-05 | CLOSED (not modified) |
+| C0-R1-01 | 已实现 — 等待独立关闭复查 |
+| C0-01 / C0-03 / C0-04 / C0-05 | CLOSED（未修改） |
 | F4 | CLOSED |
 
-## Phase 3 functional implementation: NOT STARTED
+## Phase 3 功能实现：NOT STARTED
 
-No fan-out, aggregator, priority, field merge, retry/backoff, circuit breaker, batch,
-or Amane adapter was implemented. **The Phase 3 Aggregator Lock is NOT lifted** until
-this round passes independent closure review.
+没有实现任何 fan-out、聚合器、优先级、字段合并、重试 / 退避、熔断器、批处理或 Amane adapter。
+**在本轮通过独立关闭复查之前，Phase 3 Aggregator Lock 不会解除（NOT lifted）。**
 
-**READY FOR C0 R1 INDEPENDENT CLOSURE REVIEW** — not "C0 PASS", not "Phase 3 PASS", not
-"Aggregator unlocked".
+**READY FOR C0 R1 INDEPENDENT CLOSURE REVIEW** — 不是 “C0 PASS”，不是 “Phase 3 PASS”，也不是
+“Aggregator unlocked”。

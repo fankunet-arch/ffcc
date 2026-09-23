@@ -19,105 +19,77 @@ Current Docs Head:
 reported externally after this docs commit
 ```
 
-## Closure claims
+## 关闭声明
 
-### R2-01 (R1 incremental review finding F1 — PARTIAL: `Iterable` accepted where `Sequence[str]` was the intended contract)
+### R2-01（R1 增量复查 finding F1 — PARTIAL：在本应是 `Sequence[str]` 合同的地方接受了 `Iterable`）
 
-**Root cause fixed, not patched around.** `_coerce_str_tuple` in
-`fc2_metadata_core/models/metadata.py` previously accepted any
-`collections.abc.Iterable` after excluding `str`/`bytes`. That let a
-`dict` through (Python iterates a `dict` over its keys, so
-`actors={"Alice": 1, "Bob": 2}` silently became `("Alice", "Bob")` with no
-error, discarding the values entirely) and let a `set`/`frozenset` through
-(iterable but unordered, so the resulting tuple's element order depended
-on hash seed / insertion history rather than caller intent).
+**修复的是根因，而不是绕过问题打补丁。** `fc2_metadata_core/models/metadata.py` 中的 `_coerce_str_tuple`
+以前在排除 `str`/`bytes` 之后接受任何 `collections.abc.Iterable`。这让 `dict` 得以通过（Python 迭代 `dict`
+时遍历的是它的 key，因此 `actors={"Alice": 1, "Bob": 2}` 会悄悄变成 `("Alice", "Bob")` 而不报任何错误，
+value 被完全丢弃），也让 `set`/`frozenset` 得以通过（可迭代但无序，因此生成的 tuple 的元素顺序取决于
+hash seed / 插入历史，而不是调用方的意图）。
 
-The accepted input contract for the seven sequence fields
-(`actors`/`tags`/`poster_urls`/`thumb_urls`/`fanart_urls`/`extrafanart`/
-`source_urls`) and for each `field_sources` value is now frozen as
-`collections.abc.Sequence[str]` specifically:
+七个序列字段（`actors`/`tags`/`poster_urls`/`thumb_urls`/`fanart_urls`/`extrafanart`/
+`source_urls`）以及每个 `field_sources` value 的输入合同，现在被明确冻结为
+`collections.abc.Sequence[str]`：
 
-- `list[str]` / `tuple[str, ...]` / any genuine `Sequence`: **accepted**,
-  snapshotted to `tuple[str, ...]`, order preserved exactly.
-- `str` / `bytes`: **rejected** (unchanged from R1).
-- `Mapping` (`dict` and friends): **rejected explicitly** with its own
-  check, even though a `dict` already fails the `Sequence` check on its
-  own — kept as an explicit, clearly-worded rejection reason and as
-  defense in depth against a hypothetical type registered as both.
-- `set` / `frozenset`: **rejected**. Deliberately *not* sorted-and-accepted
-  — this project's decision is that the Core must not invent an ordering
-  on the caller's behalf, since field order may carry source/display
-  meaning.
-- generator / iterator / any other merely-`Iterable`, non-`Sequence`
-  object: **rejected before being consumed at all** — a one-shot iterable
-  is never touched by this check, so there is no risk of partial
-  consumption or a mid-stream exception from something that was never a
-  legal input in the first place.
+- `list[str]` / `tuple[str, ...]` / 任何真正的 `Sequence`：**接受**，快照为 `tuple[str, ...]`，严格保持顺序。
+- `str` / `bytes`：**拒绝**（与 R1 相同）。
+- `Mapping`（`dict` 之类）：用单独的检查**明确拒绝**，尽管 `dict` 本身就无法通过 `Sequence` 检查 —
+  保留这条检查，是为了给出明确、措辞清晰的拒绝原因，也是为了对一个假想中同时注册为两者的类型做纵深防御。
+- `set` / `frozenset`：**拒绝**。刻意*不*排序后接受 — 本项目的决定是：Core 不得替调用方发明一个顺序，
+  因为字段顺序可能携带来源 / 展示上的含义。
+- 生成器 / 迭代器 / 任何其他只是 `Iterable`、而非 `Sequence` 的对象：**在消费它之前就拒绝** — 这项检查
+  从不触碰一次性可迭代对象，因此不存在部分消费的风险，也不会因一个本来就不是合法输入的东西而在中途抛出异常。
 
-`field_sources` values go through the exact same `_coerce_str_tuple`
-helper (no separate/divergent logic), so the same rules apply uniformly —
-this was a single shared root cause, fixed in one place.
+`field_sources` 的 value 走的是完全相同的 `_coerce_str_tuple` helper（没有单独 / 分叉的逻辑），因此同样的规则
+被统一应用 — 这是同一个共同的根因，在一处修复。
 
-### R2-01 regression tests
+### R2-01 回归测试
 
-`tests/unit/core/test_metadata.py::TestSequenceContractRejectsNonSequenceIterables`:
-- `test_original_r1_reviewer_reproduction_dict_as_actors_is_rejected` — the
-  exact `actors={"Alice": 1, "Bob": 2}` reproduction.
+`tests/unit/core/test_metadata.py::TestSequenceContractRejectsNonSequenceIterables`：
+- `test_original_r1_reviewer_reproduction_dict_as_actors_is_rejected` —
+  `actors={"Alice": 1, "Bob": 2}` 的原始复现。
 - `test_original_r1_reviewer_reproduction_set_as_actors_is_rejected` /
-  `..._frozenset_as_actors_is_rejected` — the exact set/frozenset
-  reproductions.
+  `..._frozenset_as_actors_is_rejected` — set/frozenset 的原始复现。
 - `test_original_r1_reviewer_reproduction_generator_as_actors_is_rejected`
-  — uses a generator that records whether its body ever ran; asserts the
-  body was never executed (rejected before consumption).
-- `test_list_and_tuple_are_still_accepted_with_stable_order` — positive
-  control, order preserved exactly.
+  — 使用一个会记录其函数体是否运行过的生成器；断言函数体从未执行（在消费之前就被拒绝）。
+- `test_list_and_tuple_are_still_accepted_with_stable_order` — 正向对照，严格保持顺序。
 - `test_dict_set_frozenset_generator_rejected_for_every_sequence_field` —
-  parametrized across all seven sequence fields.
+  对全部七个序列字段参数化。
 - `test_field_sources_value_rejects_mapping_as_sequence` /
   `..._rejects_set` / `..._rejects_frozenset` / `..._rejects_generator` —
-  the same four illegal shapes as a `field_sources` value.
-- `test_field_sources_value_accepts_list_with_stable_order` — positive
-  control for `field_sources`.
+  同样四种非法形态作为 `field_sources` 的 value。
+- `test_field_sources_value_accepts_list_with_stable_order` — `field_sources` 的正向对照。
 
-### R2-02 (a misbehaving *accepted* Sequence must not leak its exception)
+### R2-02（行为异常的*已接受* Sequence 不得泄漏其异常）
 
-**Root cause fixed, not patched around.** Restricting the input type to
-`Sequence` does not guarantee a well-behaved implementation — a custom
-`Sequence` subclass could still raise mid-iteration (e.g. a broken
-`__getitem__`). `_coerce_str_tuple` now wraps the element-reading loop in
-`try/except`: our own element-type `MetadataContractError` is re-raised
-unchanged (`except MetadataContractError: raise`, checked first so it is
-never caught by the broader handler below it), while any other exception
-raised while reading an accepted `Sequence` is caught and re-raised as
-`MetadataContractError` with the original chained via
-`raise MetadataContractError(...) from exc`.
+**修复的是根因，而不是绕过问题打补丁。** 把输入类型限制为 `Sequence`，并不能保证实现本身行为正常 —
+自定义的 `Sequence` 子类仍然可能在迭代中途抛出异常（例如 `__getitem__` 有缺陷）。`_coerce_str_tuple`
+现在把读取元素的循环包在 `try/except` 中：我们自己的元素类型 `MetadataContractError` 被原样重新抛出
+（`except MetadataContractError: raise`，排在前面检查，因此永远不会被其下方更宽泛的处理器捕获），
+而在读取已接受的 `Sequence` 时抛出的任何其他异常都会被捕获，并通过
+`raise MetadataContractError(...) from exc` 以 `MetadataContractError` 重新抛出，同时链接原始异常。
 
-### R2-02 regression tests
+### R2-02 回归测试
 
-`tests/unit/core/test_metadata.py::TestBrokenAcceptedSequenceIsWrapped`,
-using a `_BrokenSequence(collections.abc.Sequence)` test double whose
-`__getitem__(0)` returns `"Alice"` and `__getitem__(1)` raises
-`RuntimeError("boom")`:
+`tests/unit/core/test_metadata.py::TestBrokenAcceptedSequenceIsWrapped`，
+使用一个 `_BrokenSequence(collections.abc.Sequence)` 测试替身，其
+`__getitem__(0)` 返回 `"Alice"`，`__getitem__(1)` 抛出
+`RuntimeError("boom")`：
 - `test_broken_sequence_raises_metadata_contract_error_with_chained_cause`
-  — asserts `MetadataContractError` is raised and its `__cause__` is the
-  original `RuntimeError` with the original message.
-- `test_broken_sequence_is_not_a_bare_runtime_error` — asserts the raw
-  `RuntimeError` never propagates as-is.
-- `test_broken_sequence_in_field_sources_value_is_also_wrapped` — same
-  double used as a `field_sources` value.
-- `test_own_element_type_error_is_not_double_wrapped` — asserts that our
-  own `MetadataContractError` (from `actors=[123]`) has `__cause__ is
-  None`, i.e. it was re-raised unchanged, not wrapped a second time by the
-  broken-sequence handler.
+  — 断言抛出的是 `MetadataContractError`，且其 `__cause__` 是带有原始消息的原始 `RuntimeError`。
+- `test_broken_sequence_is_not_a_bare_runtime_error` — 断言原始的 `RuntimeError` 从不原样传播出来。
+- `test_broken_sequence_in_field_sources_value_is_also_wrapped` — 同一个替身用作 `field_sources` 的 value。
+- `test_own_element_type_error_is_not_double_wrapped` — 断言我们自己的 `MetadataContractError`
+  （来自 `actors=[123]`）的 `__cause__ is
+  None`，即它被原样重新抛出，而不是被处理缺陷 Sequence 的处理器再包装一次。
 
-## R1-02 preservation evidence
+## R1-02 保持不变的证据
 
-R1-02 (deep immutability, `SourceResult` lifetime invariant, caller-owned
-alias isolation) was **not modified** in this round:
-`fc2_metadata_core/models/source_result.py` is untouched (see Files
-changed below — it does not appear in this commit's diff at all). All
-pre-existing R1-02 regression tests were re-run and continue to pass
-unchanged:
+R1-02（深度不可变、`SourceResult` 生命周期不变量、调用方持有对象的别名隔离）在本轮**没有被修改**：
+`fc2_metadata_core/models/source_result.py` 没有被触碰（见下文的变更文件 — 它根本没有出现在本次提交的 diff 中）。
+全部原有的 R1-02 回归测试都被重新运行，并且原样继续通过：
 
 ```text
 tests/unit/core/test_metadata.py::TestImmutability             (7 tests, all PASSED)
@@ -127,13 +99,12 @@ tests/unit/core/test_source_result.py::TestPartialFailureLifetimeInvariant (2 te
 tests/unit/core/test_source_result.py::TestCallerOwnedAliasSafetyThroughSourceResult (2 tests, all PASSED)
 ```
 
-`NormalizedMetadata` was not reverted to mutable at any point; the fix is
-purely in what is *accepted* as valid input before the existing
-tuple/`MappingProxyType` snapshotting runs.
+`NormalizedMetadata` 在任何时候都没有被恢复为可变；修复只涉及在既有的 tuple/`MappingProxyType` 快照运行之前，
+什么样的输入会被*接受*为合法。
 
-## Files changed
+## 变更文件
 
-Diff range `83158027` → `090e9b7` (3 files modified, 0 added/removed):
+Diff 范围 `83158027` → `090e9b7`（3 个文件被修改，新增 / 删除 0 个）：
 
 ```text
 fc2-organizer/docs/specifications/FC2_METADATA_CORE_CONTRACT.md   (modified: +§2.1a, updated §2.1 table, revision note)
@@ -141,13 +112,13 @@ fc2-organizer/src/fc2_metadata_core/models/metadata.py            (modified: _co
 fc2-organizer/tests/unit/core/test_metadata.py                    (modified: +2 new test classes, +Sequence import)
 ```
 
-`models/source_result.py`, `normalize/fc2_number.py`, `errors/__init__.py`,
-`tests/unit/core/test_source_result.py`,
-`tests/unit/core/test_normalize_fc2_number.py`, and
-`tests/contract/test_core_independent_of_amane.py` are **untouched** — R2
-only closes R2-01/R2-02.
+`models/source_result.py`、`normalize/fc2_number.py`、`errors/__init__.py`、
+`tests/unit/core/test_source_result.py`、
+`tests/unit/core/test_normalize_fc2_number.py` 和
+`tests/contract/test_core_independent_of_amane.py` **没有被触碰** — R2
+只关闭 R2-01/R2-02。
 
-## Exact commands
+## 确切命令
 
 ```bash
 cd fc2-organizer
@@ -164,7 +135,7 @@ python3 -m pytest -q
 # 167 passed in 0.15s
 ```
 
-R2-specific new tests run in isolation:
+单独运行 R2 专属的新测试：
 
 ```bash
 python3 -m pytest tests/unit/core/test_metadata.py -v \
@@ -172,7 +143,7 @@ python3 -m pytest tests/unit/core/test_metadata.py -v \
 # 21 passed in 0.04s
 ```
 
-Full F-02/F-03/R1-02/contract regression re-check:
+完整的 F-02/F-03/R1-02/合同回归复查：
 
 ```bash
 python3 -m pytest tests/unit/core/test_normalize_fc2_number.py -q
@@ -191,7 +162,7 @@ python3 -m pytest tests/contract/ -q
 # 11 passed in 0.03s
 ```
 
-## Counts
+## 计数
 
 ```text
 Python version: 3.11.15
@@ -201,14 +172,13 @@ Failed:         0
 Skipped:        0
 ```
 
-(Test count went from 146 after R1 to 167 in R2: +21 new tests, 0 removed,
-0 pre-existing tests modified in `test_source_result.py`;
-`test_metadata.py` gained an import and two new test classes.)
+（测试数量从 R1 之后的 146 增加到 R2 的 167：+21 个新测试，删除 0 个，
+`test_source_result.py` 中修改的原有测试为 0 个；
+`test_metadata.py` 新增了一个 import 和两个新测试类。）
 
-## Original reviewer reproduction
+## 复查者的原始复现
 
-All four reproductions plus the broken-Sequence case were re-run directly
-via a standalone script (not only pytest), per requirement:
+按照要求，全部四个复现以及有缺陷 Sequence 的用例，都通过一个独立脚本直接重新运行（而不只是 pytest）：
 
 ```text
 NormalizedMetadata(actors={"Alice": 1, "Bob": 2})
@@ -238,38 +208,29 @@ NormalizedMetadata(actors=["Alice", "Bob"]).actors  == ("Alice", "Bob")
 NormalizedMetadata(actors=("Alice", "Bob")).actors  == ("Alice", "Bob")
 ```
 
-## Regression check
+## 回归检查
 
-- Phase 0 **F-02** / **F-03**: unaffected — `normalize/fc2_number.py` not
-  touched; all 41 `test_normalize_fc2_number.py` tests pass, including the
-  two dedicated F-03 regressions.
-- **R1-02**: unaffected — `source_result.py` not touched; all 20 relevant
-  R1-02 lifetime/immutability/alias tests re-run and pass (see above).
-- `tests/contract/test_core_independent_of_amane.py`: unaffected, all 11
-  tests pass — `fc2_metadata_core` still imports and runs fully with
-  `amane` import blocked at runtime.
-- 7-state `SourceStatus` vocabulary, minimum-success definition, and all
-  other Phase 1/R1 contract surfaces: unchanged.
-- No new blocking regression identified.
+- Phase 0 **F-02** / **F-03**：不受影响 — `normalize/fc2_number.py` 没有被触碰；全部 41 个
+  `test_normalize_fc2_number.py` 测试通过，包括两个专门的 F-03 回归测试。
+- **R1-02**：不受影响 — `source_result.py` 没有被触碰；全部 20 个相关的 R1-02 生命周期 / 不可变性 / 别名测试
+  重新运行并通过（见上文）。
+- `tests/contract/test_core_independent_of_amane.py`：不受影响，全部 11 个测试通过 —
+  `fc2_metadata_core` 在运行时阻断 `amane` import 的情况下仍然能完整地 import 和运行。
+- 7-state 的 `SourceStatus` 词汇、最低成功标准的定义，以及所有其他 Phase 1/R1 合同接口：没有改变。
+- 没有发现新的阻塞性回归。
 
-## Known limitations
+## 已知局限
 
-1. The rejection error message for `set`/`frozenset`/generator/other
-   non-`Sequence` values is a single shared message
-   ("must be an ordered Sequence[str] ...") rather than a distinct message
-   per rejected kind; the `Mapping` case does get its own distinct message.
-   This is a minor diagnostics-quality trade-off, not a contract gap — the
-   exception type and the fact of rejection are what matter for the domain
-   boundary.
-2. `_BrokenSequence`'s misbehavior is deliberately simple (raises on the
-   second element read); a `Sequence` that behaves inconsistently between
-   `__len__` and `__getitem__` in more exotic ways is not separately
-   exercised, since the wrapping behavior (any exception during the read
-   loop other than our own `MetadataContractError` gets wrapped) does not
-   depend on which particular inconsistency triggers it.
-3. F3/F4/F5 remain deliberately deferred (see below), unchanged from R1.
+1. 对 `set`/`frozenset`/生成器/其他非 `Sequence` 值的拒绝错误消息，是一条共享的消息
+   （“must be an ordered Sequence[str] ...”），而不是按被拒绝的类型区分的不同消息；`Mapping` 的情况则有自己
+   单独的消息。这是诊断信息质量上的一个小取舍，而不是合同缺口 — 对领域边界而言，重要的是异常类型以及确实被拒绝
+   这一事实。
+2. `_BrokenSequence` 的异常行为刻意设计得很简单（在读取第二个元素时抛出异常）；对于在 `__len__` 与
+   `__getitem__` 之间以更奇特方式表现不一致的 `Sequence`，没有单独测试，因为包装行为（读取循环中除我们自己的
+   `MetadataContractError` 之外的任何异常都会被包装）并不取决于具体是哪一种不一致触发了它。
+3. F3/F4/F5 仍然刻意延后（见下文），与 R1 相同。
 
-## Deferred non-blocking
+## 延后的非阻塞项
 
 ```text
 F3
@@ -277,10 +238,8 @@ F4
 F5
 ```
 
-Not part of the R2 Required Closure Set (`R2-01`, `R2-02` only). Per
-instruction, must still be closed no later than before Phase 5
-integration. `tests/contract/test_core_independent_of_amane.py`'s
-`CORE_MODULES` discovery mechanism and the Amane-installed-environment
-assertion were **not** touched in this round.
+不属于 R2 的必须关闭集合（只有 `R2-01`、`R2-02`）。按照指示，仍然必须最迟在 Phase 5 集成之前关闭。
+本轮**没有**触碰 `tests/contract/test_core_independent_of_amane.py` 的 `CORE_MODULES` 发现机制，
+以及“已安装 Amane 的环境”断言。
 
-## Phase 2 NOT started
+## Phase 2 尚未开始

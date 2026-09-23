@@ -19,125 +19,100 @@ Current Docs Head:
 reported externally after this docs commit
 ```
 
-## Closure claims
+## 关闭声明
 
-### R1-01 (reviewer F1 — NormalizedMetadata runtime contract / total predicate hole)
+### R1-01（复查者 F1 — NormalizedMetadata 运行时合同 / 全谓词漏洞）
 
-**Root cause fixed, not patched around.** `NormalizedMetadata.__post_init__`
-now validates the runtime type of every field before the instance is
-considered constructed:
+**修复的是根因，而不是绕过问题打补丁。** `NormalizedMetadata.__post_init__`
+现在会在实例被视为构造完成之前，校验每个字段的运行时类型：
 
-- `number`/`title`/`studio`/`publisher`/`release`/`plot`: must be `str` or
-  `None`.
-- `runtime`: must be `int` or `None`, with `bool` explicitly excluded (a
-  `bool` is an `int` subclass in Python but is not a legal runtime value
-  here), and non-negative.
+- `number`/`title`/`studio`/`publisher`/`release`/`plot`：必须是 `str` 或
+  `None`。
+- `runtime`：必须是 `int` 或 `None`，并且明确排除 `bool`（在 Python 中 `bool` 是 `int` 的子类，
+  但在这里不是合法的 runtime 值），而且不能为负数。
 - `actors`/`tags`/`poster_urls`/`thumb_urls`/`fanart_urls`/`extrafanart`/
-  `source_urls`: must be a sequence whose every element is `str`; a bare
-  `str`/`bytes` value is explicitly rejected (not silently iterated
-  character-by-character) and a non-iterable value is rejected.
-- `external_ids`: must be a mapping of `str` key to `str` value.
-- `field_sources`: must be a mapping of `str` key to a sequence of `str`.
+  `source_urls`：必须是每个元素都为 `str` 的序列；裸的 `str`/`bytes` 值会被明确拒绝（而不是被悄悄地
+  逐字符迭代），不可迭代的值也会被拒绝。
+- `external_ids`：必须是 `str` key 到 `str` value 的 mapping。
+- `field_sources`：必须是 `str` key 到 `str` 序列的 mapping。
 
-Any violation raises `MetadataContractError` **at construction**, in
-`fc2_metadata_core/models/metadata.py`. As a direct consequence,
-`has_valid_canonical_number()`, `has_non_empty_title()`, and
-`meets_minimum_success()` are now **total predicates**: for any instance
-that was successfully constructed, they are guaranteed to return `bool` and
-never raise `AttributeError`/`TypeError`/`KeyError`.
+任何违规都会**在构造时**抛出 `MetadataContractError`，实现位于
+`fc2_metadata_core/models/metadata.py`。直接的结果是，
+`has_valid_canonical_number()`、`has_non_empty_title()` 和
+`meets_minimum_success()` 现在都是**全谓词**：对于任何已成功构造的实例，它们保证返回 `bool`，
+永远不会抛出 `AttributeError`/`TypeError`/`KeyError`。
 
-`SourceResult.__post_init__` now also validates that `metadata` is `None`
-or an actual `NormalizedMetadata` instance, before touching
-`metadata.meets_minimum_success()`. A caller passing e.g. `metadata=123` or
-`metadata={"number": ..., "title": ...}` is rejected immediately with
-`SourceResultContractError`, for every status (not only `SUCCESS`).
+`SourceResult.__post_init__` 现在还会在接触 `metadata.meets_minimum_success()` 之前，校验 `metadata`
+是 `None` 或真正的 `NormalizedMetadata` 实例。例如传入 `metadata=123` 或
+`metadata={"number": ..., "title": ...}` 的调用方，会立即以 `SourceResultContractError` 被拒绝，
+对每一种状态都是如此（而不仅仅是 `SUCCESS`）。
 
-### R1-01 regression tests
+### R1-01 回归测试
 
-`tests/unit/core/test_metadata.py`:
-- `TestScalarTypeValidation` (incl. `test_original_f1_reproduction_title_int_is_rejected_at_construction`
-  — the exact reviewer reproduction — and a parametrized check across all
-  six scalar `str` fields).
-- `TestCollectionTypeValidation` (parametrized across all seven sequence
-  fields for non-`str` elements, plus bare-str-as-sequence, non-iterable,
-  `external_ids` bad key/value/non-mapping, `field_sources` bad
-  key/value-element/non-sequence-value).
+`tests/unit/core/test_metadata.py`：
+- `TestScalarTypeValidation`（包括 `test_original_f1_reproduction_title_int_is_rejected_at_construction`
+  — 复查者的原始复现 — 以及一个覆盖全部六个标量 `str` 字段的参数化检查）。
+- `TestCollectionTypeValidation`（对全部七个序列字段的非 `str` 元素做参数化检查，另加：裸 str 当作序列、
+  不可迭代的值、`external_ids` 的 key / value 错误 / 非 mapping、`field_sources` 的 key / value 元素错误 /
+  value 不是序列）。
 - `test_meets_minimum_success_never_raises_for_any_constructed_instance`
-  (totality check across a spread of constructed instances).
+  （在一批已构造的实例上检查全谓词性）。
 
-`tests/unit/core/test_source_result.py`:
-- `TestMetadataTypeGuard` (incl.
-  `test_original_f1_reproduction_int_metadata_is_rejected` — the exact
-  reviewer reproduction on the `SourceResult` side — plus dict-metadata,
-  wrong-type-metadata-on-a-failure-status, and none-metadata-still-ok
-  cases).
+`tests/unit/core/test_source_result.py`：
+- `TestMetadataTypeGuard`（包括
+  `test_original_f1_reproduction_int_metadata_is_rejected` — 复查者在 `SourceResult` 一侧的原始复现 —
+  以及 dict 类型的 metadata、失败状态上类型错误的 metadata、metadata 为 None 仍然合法等用例）。
 
-### R1-02 (reviewer F2 — SourceResult lifetime invariant breakable through mutable metadata)
+### R1-02（复查者 F2 — 可通过可变 metadata 破坏 SourceResult 的生命周期不变量）
 
-**Root cause fixed, not patched around; the rejected "document it as a
-caveat" approach was not used.** `NormalizedMetadata` is now a **deeply
-immutable value object**, not just a shallow `frozen=True` dataclass over
-mutable containers:
+**修复的是根因，而不是绕过问题打补丁；没有采用被否决的“把它作为注意事项写进文档”这种做法。**
+`NormalizedMetadata` 现在是一个**深度不可变的值对象**，而不仅仅是一个包着可变容器的浅层
+`frozen=True` dataclass：
 
-- The dataclass is `frozen=True` — scalar (re)assignment raises
-  `dataclasses.FrozenInstanceError` (a subclass of `AttributeError`).
-- Every sequence field is snapshotted to a `tuple` in `__post_init__` —
-  there is no `.append`/`.remove`/item-assignment available on the stored
-  value at all (`AttributeError`/`TypeError` on attempt, not a documented
-  "don't do this").
-- `external_ids` and `field_sources` are snapshotted to
-  `types.MappingProxyType` over a freshly built private `dict` copy — item
-  assignment/deletion raises `TypeError`.
-- `field_sources` values are themselves snapshotted to `tuple`, closing the
-  nested-mutation path the reviewer specifically flagged
-  (`field_sources["title"].append(...)`).
-- Caller-owned input containers (`list`s, `dict`s passed to the
-  constructor) are copied element-by-element at construction time, so
-  mutating the caller's original object after construction cannot reach
-  the already-built `NormalizedMetadata` (no aliasing).
+- dataclass 为 `frozen=True` — 对标量（重新）赋值会抛出
+  `dataclasses.FrozenInstanceError`（`AttributeError` 的子类）。
+- 每个序列字段都在 `__post_init__` 中快照为 `tuple` — 存储的值上根本没有
+  `.append`/`.remove`/条目赋值可用（尝试时抛出 `AttributeError`/`TypeError`，而不是一条写进文档的
+  “请不要这样做”）。
+- `external_ids` 和 `field_sources` 快照为包在新建私有 `dict` 副本外面的
+  `types.MappingProxyType` — 条目赋值 / 删除会抛出 `TypeError`。
+- `field_sources` 的 value 本身也快照为 `tuple`，关闭了复查者专门指出的嵌套修改路径
+  （`field_sources["title"].append(...)`）。
+- 调用方持有的输入容器（传给构造函数的 `list`、`dict`）在构造时被逐个元素复制，因此构造之后修改
+  调用方的原始对象，无法影响已经构建好的 `NormalizedMetadata`（没有别名共享）。
 
-Since `SourceResult` was already frozen and cannot have its `metadata`
-field reassigned, and `NormalizedMetadata` can now not be mutated at any
-depth through any public API, a constructed `SourceResult`'s invariants
-(established once in `__post_init__`) now hold for the object graph's
-**entire lifetime**, closing the gap the reviewer identified between
-"true at construction" and "true forever."
+由于 `SourceResult` 本来就是 frozen 的，其 `metadata` 字段不能被重新赋值，而 `NormalizedMetadata`
+现在也无法通过任何公开 API 在任何深度上被修改，一个已构造的 `SourceResult` 的不变量（在
+`__post_init__` 中一次性建立）现在在整个对象图的**整个生命周期**内都成立，关闭了复查者指出的
+“构造时为真”与“永远为真”之间的缺口。
 
-`FC2_METADATA_CORE_CONTRACT.md` §2.3 formally withdraws the earlier Phase 1
-HANDOFF's stated rationale for leaving `NormalizedMetadata` mutable
-("Phase 3 might need incremental in-place merge") and freezes the
-direction: Phase 3 aggregation must be functional/copy-on-write (read
-immutable inputs, produce a new instance), never in-place mutation of a
-published `NormalizedMetadata`.
+`FC2_METADATA_CORE_CONTRACT.md` §2.3 正式撤回了早先 Phase 1
+HANDOFF 中让 `NormalizedMetadata` 保持可变的理由（“Phase 3 可能需要增量的原地合并”），
+并冻结了方向：Phase 3 的聚合必须是函数式 / 写时复制（读取不可变的输入，产出新的实例），
+绝不原地修改已发布的 `NormalizedMetadata`。
 
-### R1-02 regression tests
+### R1-02 回归测试
 
-`tests/unit/core/test_metadata.py`:
-- `TestImmutability` (scalar reassignment rejected; sequence fields stored
-  as `tuple` and unmutable in place; `external_ids`/`field_sources` stored
-  as `MappingProxyType` and unmutable; nested `field_sources` tuple values
-  unmutable).
-- `TestCallerOwnedInputAliasSafety` (mutating the original `list`/`dict`
-  passed into the constructor, including a nested list inside
-  `field_sources`, after construction does not affect the built instance).
+`tests/unit/core/test_metadata.py`：
+- `TestImmutability`（拒绝对标量重新赋值；序列字段以 `tuple` 存储且无法原地修改；
+  `external_ids`/`field_sources` 以 `MappingProxyType` 存储且不可修改；嵌套的 `field_sources`
+  tuple 值不可修改）。
+- `TestCallerOwnedInputAliasSafety`（构造之后修改传入构造函数的原始 `list`/`dict`，包括
+  `field_sources` 中的嵌套 list，都不会影响已构建的实例）。
 
-`tests/unit/core/test_source_result.py`:
-- `TestSuccessLifetimeInvariant` — builds a `SUCCESS` `SourceResult`, then
-  attacks scalar, sequence, mapping, and nested `field_sources` mutation
-  paths plus `metadata` field reassignment; asserts
-  `result.metadata.meets_minimum_success()` is still `True` after every
-  attempt, and that every attempt itself raised.
-- `TestPartialFailureLifetimeInvariant` — parametrized over
-  `PARSE_ERROR`/`INVALID_RESPONSE`; builds a result with partial metadata,
-  attempts to mutate it into minimum-success, confirms the attempt fails
-  and `meets_minimum_success()` remains `False`.
-- `TestCallerOwnedAliasSafetyThroughSourceResult` — mutating the original
-  `NormalizedMetadata` reference or its original input `list` after it was
-  used to build a `SourceResult` cannot affect the result.
+`tests/unit/core/test_source_result.py`：
+- `TestSuccessLifetimeInvariant` — 构建一个 `SUCCESS` 的 `SourceResult`，然后攻击标量、序列、mapping、
+  嵌套 `field_sources` 的修改路径以及 `metadata` 字段的重新赋值；断言每次尝试之后
+  `result.metadata.meets_minimum_success()` 仍然为 `True`，并且每次尝试本身都抛出了异常。
+- `TestPartialFailureLifetimeInvariant` — 在
+  `PARSE_ERROR`/`INVALID_RESPONSE` 上参数化；构建一个带部分 metadata 的结果，尝试把它修改成满足最低成功标准，
+  确认该尝试失败且 `meets_minimum_success()` 仍为 `False`。
+- `TestCallerOwnedAliasSafetyThroughSourceResult` — 在用原始的 `NormalizedMetadata` 引用或其原始输入 `list`
+  构建 `SourceResult` 之后再修改它们，无法影响该结果。
 
-## Files changed
+## 变更文件
 
-Diff range `30396df` → `051d6c9` (5 files modified, 0 added/removed):
+Diff 范围 `30396df` → `051d6c9`（5 个文件被修改，新增 / 删除 0 个）：
 
 ```text
 fc2-organizer/docs/specifications/FC2_METADATA_CORE_CONTRACT.md   (modified: +§2.1/§2.2/§2.3, updated §3 table)
@@ -147,32 +122,29 @@ fc2-organizer/tests/unit/core/test_metadata.py                    (modified: +4 
 fc2-organizer/tests/unit/core/test_source_result.py               (modified: +4 new test classes)
 ```
 
-`normalize/fc2_number.py`, `errors/__init__.py`,
-`tests/unit/core/test_normalize_fc2_number.py`, and
-`tests/contract/test_core_independent_of_amane.py` are **untouched** — R1
-only closes R1-01/R1-02, not F3/F4/F5, and does not re-open FC2 number
-normalization.
+`normalize/fc2_number.py`、`errors/__init__.py`、
+`tests/unit/core/test_normalize_fc2_number.py` 和
+`tests/contract/test_core_independent_of_amane.py` **没有被触碰** — R1
+只关闭 R1-01/R1-02，不处理 F3/F4/F5，也不重新打开 FC2 番号规范化。
 
-## Tests added/changed
+## 新增 / 修改的测试
 
-Test count went from 100 (original Phase 1 submission) to 146 in this R1:
-- `test_metadata.py`: 8 pre-existing tests kept (with two collection
-  equality assertions updated from `list` literals to `tuple` literals to
-  match the now-immutable stored representation, e.g.
-  `md.tags == ("a", "b")` instead of `md.tags == ["a", "b"]`), 1 new
-  `bool`-runtime test, plus 4 new test classes (`TestScalarTypeValidation`,
-  `TestCollectionTypeValidation`, `TestImmutability`,
-  `TestCallerOwnedInputAliasSafety`) replacing the old
-  `TestMutableDefaultIsolation` (which asserted the old mutable-list
-  sharing behavior that no longer applies once fields are tuples).
-- `test_source_result.py`: all 32 pre-existing tests kept unchanged, plus 4
-  new test classes (`TestMetadataTypeGuard`, `TestSuccessLifetimeInvariant`,
-  `TestPartialFailureLifetimeInvariant`,
-  `TestCallerOwnedAliasSafetyThroughSourceResult`).
-- `test_normalize_fc2_number.py` (43 tests) and
-  `test_core_independent_of_amane.py` (9 tests): unchanged, all still pass.
+测试数量从 100（最初的 Phase 1 提交）增加到本轮 R1 的 146：
+- `test_metadata.py`：保留 8 个原有测试（其中两个集合相等断言从 `list` 字面量改为 `tuple` 字面量，
+  以匹配现在不可变的存储表示，例如
+  `md.tags == ("a", "b")` 取代 `md.tags == ["a", "b"]`），新增 1 个
+  `bool`-runtime 测试，另加 4 个新测试类（`TestScalarTypeValidation`、
+  `TestCollectionTypeValidation`、`TestImmutability`、
+  `TestCallerOwnedInputAliasSafety`），取代旧的
+  `TestMutableDefaultIsolation`（它断言的是旧的可变 list 共享行为，一旦字段变成 tuple 就不再适用）。
+- `test_source_result.py`：全部 32 个原有测试保持不变，另加 4 个
+  新测试类（`TestMetadataTypeGuard`、`TestSuccessLifetimeInvariant`、
+  `TestPartialFailureLifetimeInvariant`、
+  `TestCallerOwnedAliasSafetyThroughSourceResult`）。
+- `test_normalize_fc2_number.py`（43 个测试）和
+  `test_core_independent_of_amane.py`（9 个测试）：没有改变，全部仍然通过。
 
-## Exact commands
+## 确切命令
 
 ```bash
 cd fc2-organizer
@@ -189,7 +161,7 @@ python3 -m pytest --collect-only -q
 # 146 tests collected in 0.04s
 ```
 
-## Pass/fail counts
+## 通过 / 失败计数
 
 ```text
 Python version: 3.11.15
@@ -199,91 +171,75 @@ Failed:         0
 Skipped:        0
 ```
 
-## Original reproduction verification
+## 原始复现的验证
 
-Both reviewer reproductions were re-run directly (not only via pytest), per
-requirement:
+按照要求，两个复查者复现都被直接重新运行（而不只是通过 pytest）：
 
-**Original F1 reproduction:**
+**原始 F1 复现：**
 
 ```python
 NormalizedMetadata(number="FC2-4825061", title=123)
 ```
 
-Result: raises `MetadataContractError: title must be a str or None, got
-<class 'int'>` immediately at construction. Does **not** construct
-successfully; does **not** defer to a later `AttributeError`.
+结果：在构造时立即抛出 `MetadataContractError: title must be a str or None, got
+<class 'int'>`。**不会**构造成功；**不会**拖延到之后才出现 `AttributeError`。
 
-**Original F2 reproduction:**
+**原始 F2 复现：**
 
 ```python
 md = NormalizedMetadata(number="FC2-4825061", title="valid")
 r = SourceResult(source_id="x", status=SourceStatus.SUCCESS, metadata=md, elapsed_ms=1)
 ```
 
-Verified by direct script execution (not only pytest) that every available
-public mutation path fails and the invariant survives:
+通过直接执行脚本（而不只是 pytest）验证：每一条可用的公开修改路径都会失败，不变量得以保持：
 - `md.title = ""` → `FrozenInstanceError: cannot assign to field 'title'`
-- `r.metadata.title = ""` → same
+- `r.metadata.title = ""` → 同上
 - `r.metadata.actors.append("x")` → `AttributeError: 'tuple' object has no
   attribute 'append'`
 - `r.metadata = NormalizedMetadata(title="other")` →
   `FrozenInstanceError: cannot assign to field 'metadata'`
-- After all four attempts: `r.status == SourceStatus.SUCCESS` and
-  `r.metadata.meets_minimum_success() == True`, unchanged.
+- 四次尝试全部完成之后：`r.status == SourceStatus.SUCCESS` 且
+  `r.metadata.meets_minimum_success() == True`，保持不变。
 
-Additionally verified `SourceResult(source_id="x", status=SUCCESS,
-metadata=123, elapsed_ms=1)` raises `SourceResultContractError` at
-construction rather than deferring to `AttributeError`.
+另外验证了 `SourceResult(source_id="x", status=SUCCESS,
+metadata=123, elapsed_ms=1)` 会在构造时抛出 `SourceResultContractError`，而不是拖延到 `AttributeError`。
 
-## Regression check
+## 回归检查
 
-- Phase 0 reviewer note **F-02** (independent `NOT_FC2`/`UNRECOGNIZED`
-  semantics, no reliance on Amane fallback): unaffected by this R1 —
-  `normalize/fc2_number.py` was not touched. All 43
-  `test_normalize_fc2_number.py` tests still pass, including
-  `test_negative_misidentification_regression` and the
-  `TestIsValidFc2Number` class.
-- Phase 0 reviewer note **F-03** (`[广告]FC2PPV-1234567` /
-  `xxx@FC2PPV-1234567` automated regressions): unaffected. Verified
-  individually:
+- Phase 0 复查者说明 **F-02**（独立的 `NOT_FC2`/`UNRECOGNIZED` 语义，不依赖 Amane 的回退）：
+  不受本轮 R1 影响 —
+  `normalize/fc2_number.py` 没有被触碰。全部 43 个
+  `test_normalize_fc2_number.py` 测试仍然通过，包括
+  `test_negative_misidentification_regression` 和
+  `TestIsValidFc2Number` 类。
+- Phase 0 复查者说明 **F-03**（`[广告]FC2PPV-1234567` /
+  `xxx@FC2PPV-1234567` 的自动化回归）：不受影响。已单独验证：
   `python3 -m pytest tests/unit/core/test_normalize_fc2_number.py -v -k "f03"`
-  → `test_f03_regression_ad_prefix_noise_closed` and
-  `test_f03_regression_xxx_at_prefix_noise_closed` both `PASSED`.
-- `tests/contract/test_core_independent_of_amane.py` (9 tests, unchanged):
-  all still pass — `fc2_metadata_core` still does not import `amane`
-  anywhere, statically or dynamically, and the public API (including the
-  now-immutable `NormalizedMetadata`) is still fully usable with `amane`
-  import blocked at runtime.
-- 7-state `SourceStatus` vocabulary unchanged (`SUCCESS`, `NOT_FOUND`,
-  `BLOCKED`, `RATE_LIMITED`, `NETWORK_ERROR`, `PARSE_ERROR`,
-  `INVALID_RESPONSE`).
-- Minimum-success definition unchanged (`canonical FC2 number + non-empty
-  title`); only its *enforcement totality* and the *immutability of the
-  object it is checked against* changed.
+  → `test_f03_regression_ad_prefix_noise_closed` 和
+  `test_f03_regression_xxx_at_prefix_noise_closed` 都是 `PASSED`。
+- `tests/contract/test_core_independent_of_amane.py`（9 个测试，未改变）：
+  全部仍然通过 — `fc2_metadata_core` 仍然没有在任何地方静态或动态地 import `amane`，并且公开 API
+  （包括现在不可变的 `NormalizedMetadata`）在运行时阻断 `amane` import 的情况下仍然完全可用。
+- 7-state 的 `SourceStatus` 词汇没有改变（`SUCCESS`、`NOT_FOUND`、
+  `BLOCKED`、`RATE_LIMITED`、`NETWORK_ERROR`、`PARSE_ERROR`、
+  `INVALID_RESPONSE`）。
+- 最低成功标准的定义没有改变（`canonical FC2 number + non-empty
+  title`）；改变的只是它的*执行全面性*，以及*被检查对象的不可变性*。
 
-## Known limitations
+## 已知局限
 
-1. Mutation-attempt exceptions are the natural ones raised by the
-   underlying immutable Python types (`dataclasses.FrozenInstanceError` for
-   attribute reassignment, `AttributeError` for calling a mutating method
-   that doesn't exist on `tuple`, `TypeError` for item assignment on
-   `MappingProxyType`), not a single unified custom exception type. This is
-   intentional and idiomatic for "attempting an illegal mutation on an
-   already-valid immutable object" (as opposed to R1-01's concern, which is
-   about *construction-time* domain validation) but a reviewer may want a
-   single `NormalizedMetadataImmutableError` wrapper instead; not done here
-   to keep the R1 diff minimal and because the underlying exceptions are
-   already reliably raised (never silently swallowed) and are documented in
-   the contract doc and docstrings.
-2. `field_sources` value coercion accepts any non-`str`/`bytes` iterable of
-   `str` (e.g. a generator) and snapshots it to a `tuple`; this was already
-   true for the plain sequence fields before R1 and is unchanged.
-3. F3/F4/F5 (Phase 0/R1-independent-review non-blocking findings) are
-   deliberately not touched in this round; see "Deferred non-blocking"
-   below.
+1. 修改尝试所抛出的异常，是底层不可变 Python 类型自然抛出的那些异常（属性重新赋值抛出
+   `dataclasses.FrozenInstanceError`，调用 `tuple` 上不存在的修改方法抛出 `AttributeError`，对
+   `MappingProxyType` 做条目赋值抛出 `TypeError`），而不是一个统一的自定义异常类型。对于“在一个已经合法的
+   不可变对象上尝试非法修改”这种情况，这是有意为之且符合惯例的做法（这与 R1-01 关注的*构造时*领域校验不同），
+   但复查者可能希望改用一个统一的 `NormalizedMetadataImmutableError` 包装；这里没有这样做，是为了让 R1 的 diff
+   保持最小，而且底层异常本来就会被可靠地抛出（从不会被悄悄吞掉），并且已写在合同文档和 docstring 中。
+2. `field_sources` 的 value 转换接受任何由 `str` 组成的非 `str`/`bytes` 可迭代对象（例如生成器），并将其
+   快照为 `tuple`；在 R1 之前，普通序列字段本来就是如此，这一点没有改变。
+3. F3/F4/F5（Phase 0/R1 独立复查中的非阻塞 finding）在本轮刻意没有触碰；见下文
+   “Deferred non-blocking”。
 
-## Non-blocking findings deliberately deferred
+## 刻意延后的非阻塞 finding
 
 ```text
 F3
@@ -291,24 +247,21 @@ F4
 F5
 ```
 
-Not part of the R1 Required Closure Set (`R1-01`, `R1-02` only). Must be
-closed no later than before Phase 5 integration, per instruction.
+不属于 R1 的必须关闭集合（只有 `R1-01`、`R1-02`）。按照指示，必须最迟在 Phase 5 集成之前关闭。
 
-## Security considerations
+## 安全考量
 
-No new network access, file I/O, or credential handling introduced. All
-changes are pure in-memory dataclass/validation logic. No secrets, tokens,
-or cookies touched.
+没有引入新的网络访问、文件 I/O 或凭据处理。所有改动都是纯内存中的 dataclass / 校验逻辑。
+没有触碰任何 secret、token 或 cookie。
 
-## Windows run
+## Windows 运行
 
-Windows NOT run (same as Phase 1 original submission; this R1's changes
-are pure standard-library Python with no platform-specific behavior).
+Windows NOT run（与最初的 Phase 1 提交相同；本轮 R1 的改动是纯标准库 Python，没有任何平台相关行为）。
 
-## Amane integration run
+## Amane 集成运行
 
-Not run / not applicable to Phase 1 R1 (unchanged from Phase 1 original:
-`fc2_metadata_core` remains fully decoupled from `amane`, reverified by the
-unchanged and still-passing `tests/contract/test_core_independent_of_amane.py`).
+没有运行 / 不适用于 Phase 1 R1（与最初的 Phase 1 相同：
+`fc2_metadata_core` 仍然与 `amane` 完全解耦，已由未改变且仍然通过的
+`tests/contract/test_core_independent_of_amane.py` 再次验证）。
 
-## Phase 2 NOT started
+## Phase 2 尚未开始

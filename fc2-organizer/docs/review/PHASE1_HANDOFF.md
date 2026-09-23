@@ -11,7 +11,7 @@ Docs Head: 待本 docs commit 完成后由最终会话消息明确报告
 
 只建立独立于 Amane 的 FC2 Metadata Core（模型契约 + 错误/状态语义 + 番号标准化），**不访问真实网站，不实现 scraper，不实现 source HTTP，不实现多源 aggregator，不实现 batch engine，不实现 Amane plugin adapter，不写 NFO，不移动文件，不操作 Amane DB**。`upstream/amane/` 未被读取/修改（本 Phase 未重新克隆或引用 Amane 源码，只依据 Phase 0 报告中已记录的字段形状差异做设计参考）。所有测试 100% 离线。
 
-## Files changed
+## 变更文件
 
 Diff 范围 `5ac9d69` → `1e2f4d7`（13 个新文件，0 修改/删除）：
 
@@ -33,13 +33,13 @@ fc2-organizer/tests/unit/core/test_source_result.py                   (new)
 
 `fc2-organizer/src/README.md`、`fc2-organizer/tests/README.md`、`fc2-organizer/CLAUDE.md` 均未修改（沿用 Phase 0 状态的占位说明，不影响本 Phase 的实际实现）。
 
-## Models/contracts added
+## 新增的模型 / 合同
 
 - **`NormalizedMetadata`**（`models/metadata.py`）：独立于 Amane `MediaMetadata` 的数据类，字段包括 `number/title/studio/publisher/release/runtime/actors/tags/plot/poster_urls/thumb_urls/fanart_urls/extrafanart/source_urls/external_ids/field_sources`。刻意保留 Phase 0 报告指出的复数 `external_ids`/`source_urls`（Amane 当前是单数 `external_id`/`source_url`），字段收窄留给 Phase 5 Adapter。所有 list/dict 字段用 `field(default_factory=...)`，两实例互不共享底层容器。`meets_minimum_success()` 冻结「canonical number + 非空 title」的最低成功条件。
 - **`SourceResult`**（`models/source_result.py`，frozen dataclass）：`source_id/status/metadata/elapsed_ms/error_kind/error_detail`。`SourceStatus` 7 态：`success/not_found/blocked/rate_limited/network_error/parse_error/invalid_response`。独立 `SourceErrorKind` 枚举与非 success 状态一一对应。`__post_init__` 强制以下不变式：`source_id` 非空、`elapsed_ms` 非负、success 必须有满足最低成功的 metadata 且不得带 error 信息、每个失败态必须带匹配的 `error_kind` 与非空 `error_detail`、`not_found/blocked/rate_limited/network_error` 禁止携带 metadata、`parse_error/invalid_response` 允许携带 partial（未达最低成功）metadata 但禁止携带已达最低成功的 metadata。
 - **`fc2_metadata_core.errors`**：`FC2MetadataCoreError`/`MetadataContractError`/`SourceResultContractError`，替代裸 `raise Exception("failed")` 作为契约违规的统一异常协议。
 
-## Normalization grammar
+## 规范化语法
 
 `fc2_metadata_core.normalize.normalize_fc2_number()`（详见 `docs/specifications/FC2_METADATA_CORE_CONTRACT.md` §4 与 `normalize/fc2_number.py` 模块 docstring）：
 
@@ -53,7 +53,7 @@ fc2-organizer/tests/unit/core/test_source_result.py                   (new)
 - 词边界规则：`FC2` 前一个字符与数字串后一个字符若为 `[A-Za-z0-9]` 则拒绝匹配——这是防止「看到 FC2 + 任意数字就算」朴素解析器误判的关键规则（例如 `SUPERFC2-1234567`、`FC2-1234567EXTRA` 均被拒绝）。
 - 结果类型 `FC2NumberResult`：`status ∈ {RECOGNIZED, NOT_FC2}`，`canonical` 当且仅当 `RECOGNIZED` 时非 `None`（由 `__post_init__` 断言保证，不是约定）。
 
-## Positive regression cases (closed, automated)
+## 正向回归用例（已关闭，自动化）
 
 `tests/unit/core/test_normalize_fc2_number.py::test_positive_dirty_filenames_normalize_to_canonical`（14 组参数化用例）覆盖规格书全部 5 种基础形态 + 扩展噪声：
 
@@ -71,7 +71,7 @@ FC2-4825061（规格书示例真实番号）
 
 全部统一输出 `FC2-1234567`（或对应真实番号）。
 
-## Reviewer F-03 closure evidence
+## 复查者 F-03 的关闭证据
 
 Phase 0 HANDOFF 明确要求：`[广告]FC2PPV-1234567` 与 `xxx@FC2PPV-1234567` 必须在 Phase 1 有真实自动化回归，不能只是文档记录的人工验证。本 Phase 新增专门测试：
 
@@ -82,7 +82,7 @@ tests/unit/core/test_normalize_fc2_number.py::test_f03_regression_xxx_at_prefix_
 
 两者均已实际运行通过（见下方 Tests run / Exact commands），且同时被包含在上方 14 组参数化正向用例中做二次覆盖。
 
-## Negative regression cases (misidentification defense)
+## 反向回归用例（防误识别）
 
 `tests/unit/core/test_normalize_fc2_number.py::test_negative_misidentification_regression`（19 组参数化用例），针对语法本身设计的攻击性用例，而非机械照抄需求文字：
 
@@ -109,7 +109,7 @@ Amane-Release-v0.15.0-build.zip  含版本号但无 FC2 token
 
 全部正确返回 `FC2RecognitionStatus.NOT_FC2` / `canonical=None`。另有 `TestIsValidFc2Number` 类专门测试 canonical 格式校验器本身的正负样例。
 
-## Reviewer F-02 closure evidence
+## 复查者 F-02 的关闭证据
 
 Phase 0 MEDIUM note：Amane `parse_file_info(path=...)` 存在强制 fallback，真正无法识别的文件也可能被伪装成 `TOTALLY-998`/`ContentType.CENSORED` 之类的假结果，不能作为「这是不是有效 FC2」的权威判据（NORM-01）。
 
@@ -119,7 +119,7 @@ Phase 0 MEDIUM note：Amane `parse_file_info(path=...)` 存在强制 fallback，
 3. `tests/unit/core/test_normalize_fc2_number.py` 的负向回归集专门验证「不会把普通数字/其它番号/长数字误判为 FC2」，其中不含任何依赖 Amane fallback 行为的假设。
 4. `NormalizedMetadata.has_valid_canonical_number()` 同样只依赖 Core 自己的 `is_valid_fc2_number()`，不引用 Amane。
 
-## Tests run
+## 已运行的测试
 
 ```text
 tests/contract/test_core_independent_of_amane.py   (9 tests)
@@ -132,7 +132,7 @@ tests/unit/core/test_source_result.py               (32 tests)
 
 **全部测试已在本次会话中实际运行，非声称通过。**
 
-## Exact commands
+## 确切命令
 
 ```bash
 cd fc2-organizer
@@ -150,7 +150,7 @@ python3 -m pytest --collect-only -q
 # 100 tests collected in 0.03s
 ```
 
-## Pass/fail counts
+## 通过 / 失败计数
 
 ```text
 Python version: 3.11.15
@@ -160,7 +160,7 @@ Failed:         0
 Skipped:        0
 ```
 
-## Known limitations
+## 已知局限
 
 1. FC2 数字位数窗口（5-8 位）是 Phase 1 的设计决策，不是从任何权威来源核实的上游事实；已在 `fc2_number.py` docstring 与 contract 文档中明确标注为「可由后续 Phase 用证据修订」。
 2. `release` 字段类型选择 `str | None`（预期 ISO 日期字符串）而非 `datetime.date`，未做日期格式校验——Phase 1 判定日期解析属于具体 source 解析器（Phase 2+）的职责，不在 Core 契约层强制。
@@ -168,33 +168,33 @@ Skipped:        0
 4. `field_sources` 的值类型选择 `dict[str, list[str]]`（每字段的贡献 source 列表）而非单一 source id，以支持规格书 Phase 3 描述的 `tags <- A + C` 式多来源贡献；Phase 3 实现聚合逻辑时需要遵循此形状，不应擅自改回单一来源。
 5. 未安装/未验证真实 `amane` 包本身（`tests/contract` 里的"Amane 未安装"断言只是确认本环境确实没有 `amane`，不代表已验证过真实 Amane 包导入行为）。
 
-## Known external-source instability
+## 已知的外部来源不稳定性
 
-Not applicable / no external source accessed in Phase 1.
+不适用 / Phase 1 未访问任何外部来源。
 
-## Security considerations
+## 安全考量
 
 - 未新增任何网络访问、文件系统写入（测试目录外）、凭据/Cookie 处理代码。
 - `fc2_metadata_core` 全部代码路径为纯 CPU 计算（正则匹配、dataclass 校验），无 I/O。
 - 未在任何文件中写入 secret/token/cookie。
 - `git status`/`git diff --stat` 已核对本次 commit 范围仅含 13 个新文件，均在 `fc2-organizer/` 内，未触及 `upstream/amane/`（该目录本身不存在于当前工作区，本 Phase 未重新克隆）。
 
-## Windows run
+## Windows 运行
 
 Windows NOT run（本次会话运行环境为 Linux 容器；本 Phase 代码为纯 Python 标准库实现，无平台相关路径/系统调用，但未做 Windows 实测，如实标注）。
 
-## Amane integration run
+## Amane 集成运行
 
 Not run / not applicable to Phase 1（本 Phase 明确不接入 Amane，`fc2_metadata_core` 与 `amane` 完全解耦，见 §1 Core 不依赖 Amane 的自动化证据）。
 
-## What reviewer should focus on
+## 复查者应重点关注的内容
 
 1. `SourceResult` 的状态/错误不变式是否存在遗漏的非法组合（例如是否应该允许 `NOT_FOUND` 携带诊断性 partial metadata——本实现选择不允许，理由见 contract 文档表格）。
 2. FC2 番号语法的 5-8 位数字窗口与词边界规则是否合理，是否有真实场景会被误判为负例（例如未来 FC2 编号突破 8 位数字时需要修订上限）。
 3. `tests/contract/test_core_independent_of_amane.py` 的运行时 import 阻断机制（`sys.meta_path` finder）是否真正能捕获所有可能的隐式 `amane` 依赖路径（目前只在测试期间阻断，且仅覆盖本次会话已导入的 core 模块列表）。
 4. `NormalizedMetadata`/`SourceResult` 的字段形状是否已经为 Phase 3（字段级聚合）与 Phase 5（Amane adapter 收窄映射）做好铺垫，是否存在会导致后续 Phase 返工的设计缺陷。
 
-## Out of scope
+## 范围之外
 
 ```text
 真实网站访问
@@ -210,7 +210,7 @@ Windows 平台实测
 Amane 集成运行
 ```
 
-## Next phase NOT started
+## 下一阶段尚未开始
 
 ```text
 Phase 2 NOT started

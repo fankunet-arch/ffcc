@@ -23,35 +23,29 @@ Branch:
 claude/phase-0-amane-integration-fnvhpq
 ```
 
-**This is a review candidate, not a PASS declaration.** Phase 3 (aggregation)
-has not been started.
+**这是一个复查候选，而不是 PASS 声明。** Phase 3（聚合）尚未开始。
 
-> **Corrections applied at Phase 3 Entry C0-05** (facts only, after the
-> independent Phase 2 review returned PASS WITH NON-BLOCKING NOTES; nothing
-> else in this document was rewritten):
-> 1. the header no longer says the Docs Head was "reported externally" (a
->    self-reference placeholder) — it now records the reviewed Docs Head;
-> 2. the "all my commits are local / nothing pushed" line was wrong once
->    Phase 2 was pushed and has been replaced (see *Local workspace notes*);
-> 3. the live near-misses for `FC2-4824605` are `FC2-1824605` and
->    `FC2-4724605` (an earlier draft wrote `FC2-1825061`, which is the near-miss
->    for `FC2-4825061`);
-> 4. the test count is recorded as 309 collected / 309 passed, and the
->    "80 new offline tests" wording in the `45be2b7` commit message is noted as
->    a rough historical description (history is not amended).
+> **在 Phase 3 Entry C0-05 中做的更正**（只更正事实，是在独立 Phase 2 复查给出
+> PASS WITH NON-BLOCKING NOTES 之后进行的；本文其余内容没有改写）：
+> 1. 头部不再写 Docs Head 为 "reported externally"（一个自我引用的占位符）— 现在记录的是经过复查的 Docs Head；
+> 2. “我的所有提交都在本地 / 没有推送”这一行在 Phase 2 推送之后就不对了，已被替换（见 *本地工作区说明*）；
+> 3. `FC2-4824605` 的线上近似未命中项是 `FC2-1824605` 和
+>    `FC2-4724605`（早先的草稿写成了 `FC2-1825061`，那是 `FC2-4825061` 的近似未命中项）；
+> 4. 测试数量记录为 309 collected / 309 passed，`45be2b7` 提交信息中
+>    “80 new offline tests” 的说法被注明为一种粗略的历史描述（历史不做 amend）。
 
-## What Phase 2 delivers
+## Phase 2 交付的内容
 
-| Layer | What | Where |
+| 层 | 内容 | 位置 |
 |---|---|---|
-| Framework (in WIP `948fc23`) | `SourceAdapter` contract, `SourceRegistry`, transport-agnostic `SourceHttpClient` Protocol + `HttpxTransport`, `tools/probe_sources.py` | `src/fc2_metadata_core/{sources,http}`, `tools/` |
-| Live research | 15 candidate entries probed live; 3 adopted | `docs/sources/SOURCE_VIABILITY_*.md`, `docs/SOURCE_STATUS_MATRIX.md` |
-| Probe set | 7 known-valid IDs, each independently corroborated | `docs/PHASE2_PROBE_SET.md` |
-| Evidence | machine JSON (raw + adapter probes) and manual observations | `docs/source-probes/` |
-| Adapters | `fc2db_net`, `javdb`, `av123` + shared `_common.py` | `src/fc2_metadata_core/sources/adapters/` |
-| Offline tests | parser + `fetch` contract against verbatim real-response fixtures | `tests/unit/sources/adapters/`, `tests/fixtures/sources/` |
+| 框架（在 WIP `948fc23` 中） | `SourceAdapter` 合同、`SourceRegistry`、与 transport 无关的 `SourceHttpClient` Protocol + `HttpxTransport`、`tools/probe_sources.py` | `src/fc2_metadata_core/{sources,http}`、`tools/` |
+| 线上调研 | 线上探测了 15 个候选条目；采用 3 个 | `docs/sources/SOURCE_VIABILITY_*.md`、`docs/SOURCE_STATUS_MATRIX.md` |
+| 探测集合 | 7 个已知有效的 ID，每个都经过独立佐证 | `docs/PHASE2_PROBE_SET.md` |
+| 证据 | 机器生成的 JSON（原始探测 + adapter 探测）以及人工观察记录 | `docs/source-probes/` |
+| Adapter | `fc2db_net`、`javdb`、`av123` + 共享的 `_common.py` | `src/fc2_metadata_core/sources/adapters/` |
+| 离线测试 | 基于逐字摘录的真实响应 fixture 的解析器测试 + `fetch` 合同测试 | `tests/unit/sources/adapters/`、`tests/fixtures/sources/` |
 
-Commits after the WIP checkpoint, oldest first:
+WIP checkpoint 之后的提交，从旧到新：
 
 ```text
 ee14d0b chore: ignore .pytest_cache and *.egg-info local artifacts
@@ -60,99 +54,82 @@ ee14d0b chore: ignore .pytest_cache and *.egg-info local artifacts
 3a23e6f docs(source): Phase 2 live source viability research, evidence and probe set
 ```
 
-## Gate result (spec §11 / Phase 2)
+## 门槛结果（规格 §11 / Phase 2）
 
-| Requirement | Result | Evidence |
+| 要求 | 结果 | 证据 |
 |---|---|---|
-| Ordinary public HTTPS is not a sandbox synthetic 403 | met — real 200s from example.com / wikipedia.org / fc2.com; egress is a Spanish network (`cf-ray …-MAD`) | manual observations §1 |
-| Real candidate research with `probe_sources.py raw` before any adapter | met — raw probes precede every adapter; final raw pass 12:57–12:58 UTC | `PHASE2_PROBE_20260920.json` |
-| >=5 provider families, incl. FC2 Official + several aggregators | met — 15 entries (see matrix) | `SOURCE_STATUS_MATRIX.md` |
-| FC2 Official actually investigated | met — **BLOCKED: login wall** (302 chain to `fc2.com/ja/login.php`) | `SOURCE_VIABILITY_fc2_official.md`, manual §2 |
-| >=5 known-valid IDs | met — 7 | `PHASE2_PROBE_SET.md` |
-| SOURCE_VIABILITY document per candidate | met — 15 documents | `docs/sources/` |
-| Adapter only for a live, qualifying source | met — 3 adapters, all for sources that passed raw probing first | — |
-| Each VERIFIED source: real adapter run, >=2 IDs `SUCCESS`, number + non-empty title, no login, no CAPTCHA/CF bypass, offline tests | met for all 3 | table below |
-| >=2 independent VERIFIED sources (Gate); 3 = strong target | **3 VERIFIED** | table below |
-| No Phase 3 aggregation | met — adapters never call each other (asserted by a test) | `test_adapter_registration.py` |
+| 普通的公网 HTTPS 不是沙箱合成的 403 | 满足 — 从 example.com / wikipedia.org / fc2.com 得到了真实的 200s；出口是西班牙的网络（`cf-ray …-MAD`） | 人工观察记录 §1 |
+| 在编写任何 adapter 之前，用 `probe_sources.py raw` 做真实的候选调研 | 满足 — 每个 adapter 之前都先有原始探测；最后一轮原始探测在 12:57–12:58 UTC | `PHASE2_PROBE_20260920.json` |
+| >=5 个 provider 家族，包括 FC2 Official 和若干聚合站 | 满足 — 15 个条目（见矩阵） | `SOURCE_STATUS_MATRIX.md` |
+| 实际调查了 FC2 Official | 满足 — **BLOCKED：登录墙**（302 跳转链指向 `fc2.com/ja/login.php`） | `SOURCE_VIABILITY_fc2_official.md`、人工观察 §2 |
+| >=5 个已知有效的 ID | 满足 — 7 个 | `PHASE2_PROBE_SET.md` |
+| 每个候选都有一份 SOURCE_VIABILITY 文档 | 满足 — 15 份文档 | `docs/sources/` |
+| 只为线上可用且合格的来源编写 adapter | 满足 — 3 个 adapter，全部针对先通过了原始探测的来源 | — |
+| 每个 VERIFIED 来源：真实运行 adapter、>=2 个 ID 为 `SUCCESS`、番号 + 非空标题、无需登录、不绕过 CAPTCHA/CF、有离线测试 | 3 个来源全部满足 | 见下表 |
+| >=2 个独立的 VERIFIED 来源（门槛）；3 = 更强的目标 | **3 VERIFIED** | 见下表 |
+| 没有 Phase 3 聚合 | 满足 — adapter 之间从不相互调用（有测试断言） | `test_adapter_registration.py` |
 
-VERIFIED sources (Gate run 2026-09-20 13:02:27–13:03:21 UTC, code `3a21c4b`;
-adapter runs went through the real `HttpxTransport`, one request per lookup,
-~2.5 s apart, no cookies):
+VERIFIED 来源（门槛运行于 2026-09-20 13:02:27–13:03:21 UTC，代码 `3a21c4b`；
+adapter 运行经过真实的 `HttpxTransport`，每次查找一个请求，间隔约 ~2.5 s，不带 cookie）：
 
-| Source ID | Provider | `SUCCESS` IDs (of 7) | Fields beyond number/title |
+| Source ID | Provider | `SUCCESS` 的 ID（共 7） | 番号 / 标题之外的字段 |
 |---|---|---|---|
-| `fc2db_net` | fc2db.net | 6 (`4824605 4979299 4976588 1042815 4978035 4972767`) | release, runtime, actors, publisher(seller), tags, thumb |
-| `javdb` | javdb.com public search listing | 6 (`4825061 4979299 4976588 1042815 4978035 4972767`) | release, thumb, external id |
-| `av123` | 123av.com | 3 (`4825061 4979299 4978035`) | release, runtime, tags |
+| `fc2db_net` | fc2db.net | 6（`4824605 4979299 4976588 1042815 4978035 4972767`） | release、runtime、actors、publisher(seller)、tags、thumb |
+| `javdb` | javdb.com 公开搜索列表 | 6（`4825061 4979299 4976588 1042815 4978035 4972767`） | release、thumb、external id |
+| `av123` | 123av.com | 3（`4825061 4979299 4978035`） | release、runtime、tags |
 
-Each source also returned `NOT_FOUND` for IDs the *others* carry (a real 404
-or "no exact hit"), which is the point of having three: see the per-ID table
-in `SOURCE_STATUS_MATRIX.md`.
+每个来源对于*其他*来源所收录的 ID 也都返回了 `NOT_FOUND`（真实的 404，或“没有精确命中”），这正是需要三个来源的原因：
+见 `SOURCE_STATUS_MATRIX.md` 中按 ID 列出的表格。
 
-**Also honestly recorded:** one transient timeout (`fc2db_net`,
-`FC2-4978035`, 13:01, first gate pass at `45be2b7`). It exposed an
-`error_detail` of just `transport error: ` (httpx timeouts stringify to `""`);
-fixed in `3a21c4b` (`transport error: HttpTimeoutError`), the whole gate was
-re-run at `3a21c4b` and passed. Both passes are in the JSON.
+**同样如实记录：** 出现过一次瞬时超时（`fc2db_net`、
+`FC2-4978035`、13:01，在 `45be2b7` 上的第一轮门槛运行）。它暴露出一个只有 `transport error: ` 的
+`error_detail`（httpx 的超时异常字符串化后为 `""`）；已在 `3a21c4b` 中修复（`transport error: HttpTimeoutError`），
+整个门槛在 `3a21c4b` 上重新运行并通过。两轮结果都记录在 JSON 中。
 
-## Decisions that a reviewer should challenge
+## 复查者应当质疑的决定
 
-1. **`javdb` is search-listing only.** Its detail pages redirect to `/login`
-   (manual §3), so the adapter never requests them and cannot supply
-   actors/tags/runtime. It still satisfies the Gate (number + Japanese title +
-   release + cover) without any private session. If you consider a
-   fields-poor source unacceptable as a "VERIFIED", the Gate still holds with
-   `fc2db_net` + `av123` alone (2 sources), but with only one Japanese-title
-   source.
-2. **`javdb` search is fuzzy.** The adapter accepts only the hit whose number
-   equals the request; near-misses (`FC2-1824605`, `FC2-4724605` for
-   `4824605`) give `NOT_FOUND`. Tested offline against the real fuzzy page
-   and live (`FC2-4824605` → `NOT_FOUND`).
-3. **`NormalizedMetadata.runtime` unit.** The Core contract only says
-   `int >= 0`. The adapters emit **whole minutes** (`"55:23"` → 55,
-   `"1:02:03"` → 62; seconds dropped). This is my choice, documented in
-   `_common.duration_to_minutes`; Phase 1's contract does not settle it and
-   the Phase 5 NFO writer must agree.
-4. **`123av` titles are English machine translations**, and its "Maker" is the
-   constant bucket `FC2`, deliberately *not* mapped to `studio`/`publisher`.
-   Phase 3 should weight it below JP-title sources for `title`.
-5. **`fc2db_net.thumb_urls` vs `poster_urls`.** The cover is a 600×600 crop
-   labelled as a thumbnail, so it goes to `thumb_urls`; no source here
-   provides a poster/fanart.
-6. **One change to Phase-2 framework code after the WIP checkpoint:**
-   `sources/base.py::transport_error_result` now names the exception type in
-   `error_detail` (+1 test in `tests/unit/sources/test_base.py`). Everything
-   else in the framework/WIP is untouched.
-7. **Probe tool change:** `tools/probe_sources.py raw` now also records page
-   `<title>`, `server` and `cf-mitigated` (still no bodies/cookies), so the
-   evidence file says what kind of 200/403/404 it saw. Records written before
-   that lack the three fields (noted in the manual-observations file).
+1. **`javdb` 只使用搜索列表。** 它的详情页会重定向到 `/login`（人工观察 §3），因此 adapter 从不请求详情页，
+   也无法提供 actors/tags/runtime。它仍然满足门槛（番号 + 日文标题 + 发行日期 + 封面），而且不需要任何私人会话。
+   如果你认为字段贫乏的来源不能算 “VERIFIED”，仅凭 `fc2db_net` + `av123`（2 个来源）门槛依然成立，
+   只是届时只有一个提供日文标题的来源。
+2. **`javdb` 的搜索是模糊的。** adapter 只接受番号与请求完全相等的命中项；近似未命中项（对于
+   `4824605` 的 `FC2-1824605`、`FC2-4724605`）会得到 `NOT_FOUND`。已针对真实的模糊搜索页面做了离线测试，
+   也做了线上验证（`FC2-4824605` → `NOT_FOUND`）。
+3. **`NormalizedMetadata.runtime` 的单位。** Core 合同只规定了 `int >= 0`。adapter 输出的是**整分钟**
+   （`"55:23"` → 55，`"1:02:03"` → 62；秒数丢弃）。这是我的选择，写在 `_common.duration_to_minutes` 中；
+   Phase 1 的合同没有确定这一点，Phase 5 的 NFO writer 必须与之一致。
+4. **`123av` 的标题是英文机器翻译**，它的 “Maker” 是一个固定的桶值 `FC2`，刻意*没有*映射到
+   `studio`/`publisher`。Phase 3 在选取 `title` 时应当让它的权重低于提供日文标题的来源。
+5. **`fc2db_net.thumb_urls` 与 `poster_urls`。** 它的封面是一个标注为缩略图的 600×600 裁切图，因此放入
+   `thumb_urls`；这里没有任何来源提供 poster/fanart。
+6. **WIP checkpoint 之后对 Phase-2 框架代码只有一处改动：**
+   `sources/base.py::transport_error_result` 现在会在 `error_detail` 中写出异常类型（在
+   `tests/unit/sources/test_base.py` 中 +1 个测试）。框架 / WIP 中的其他内容都没有被触碰。
+7. **探测工具的改动：** `tools/probe_sources.py raw` 现在还会记录页面的 `<title>`、`server` 和
+   `cf-mitigated`（仍然不记录响应体 / cookie），这样证据文件就能说明它看到的是哪一种 200/403/404。
+   在此之前写入的记录缺少这三个字段（已在人工观察记录文件中注明）。
 
-## Independence — read this before relying on "3 sources"
+## 独立性 — 在依赖“3 个来源”之前请先读这一节
 
-The three VERIFIED sources are independent *services* (different operators,
-hosts, page formats, and each carries works the others lack). They are **not**
-independent *origins*: all copy FC2 Content Market data, and all three sit
-behind Cloudflare's CDN. An FC2 takedown wave or a Cloudflare-wide incident
-would hit all three. FC2 Official itself is the only origin and is login-gated.
+这三个 VERIFIED 来源是彼此独立的*服务*（不同的运营者、host、页面格式，而且每一个都收录了其他来源没有的作品）。
+它们**不是**彼此独立的*源头*：它们都复制 FC2 Content Market 的数据，而且三者都位于 Cloudflare 的 CDN 之后。
+一次 FC2 下架潮或一次 Cloudflare 全局故障会同时波及这三者。FC2 Official 本身是唯一的源头，而且需要登录。
 
-## Environment facts that shaped the research
+## 影响调研的环境事实
 
-- **Spanish ISP-level IP block.** `fc2ppvdb.com` and `onejav.com` resolve to
-  `188.114.96.5`/`188.114.97.5`; from this network HTTPS fails with
-  `self-signed certificate` and plain HTTP returns a notice citing a
-  Barcelona commercial-court judgement (18 Dec 2024, LaLiga/Telefónica).
-  Both are therefore **unevaluated, not dead** (manual §4). Certificate
-  verification was not disabled and no alternative route was used. They should
-  be re-probed from another network before Phase 3 fixes its source list.
-- Cloudflare-challenged (403, `cf-mitigated: challenge`), **not bypassed**:
-  `fd2ppv.cc` work pages, `javten.com`, `supjav.com`, `missav.ws`, `fc2db.com`.
-- `fc2cm.com` is stale (newest work 4699535), flaky (`sql error` bodies) and
-  reports missing works as HTTP 200 — rejected.
+- **西班牙 ISP 层面的 IP 封锁。** `fc2ppvdb.com` 和 `onejav.com` 解析到
+  `188.114.96.5`/`188.114.97.5`；从这个网络访问时，HTTPS 以 `self-signed certificate` 失败，
+  而普通 HTTP 返回一则引用巴塞罗那商事法院判决的通知（18 Dec 2024，LaLiga/Telefónica）。
+  因此这两者都是**未评估，而不是已失效**（人工观察 §4）。没有关闭证书校验，也没有使用其他路由。
+  在 Phase 3 确定其来源列表之前，应当从另一个网络重新探测它们。
+- 遇到 Cloudflare challenge（403，`cf-mitigated: challenge`）且**没有绕过**的：
+  `fd2ppv.cc` 作品页、`javten.com`、`supjav.com`、`missav.ws`、`fc2db.com`。
+- `fc2cm.com` 数据陈旧（最新作品为 4699535），不稳定（响应体中出现 `sql error`），并且对缺失的作品返回
+  HTTP 200 — 已拒绝。
 
-## Tests
+## 测试
 
-Offline suite (no network):
+离线测试套件（无网络）：
 
 ```text
 cd fc2-organizer
@@ -160,28 +137,20 @@ python -m pytest -q
 309 collected / 309 passed
 ```
 
-Breakdown of the change from the 228 at the WIP checkpoint: **+76** new tests in
-`tests/unit/sources/adapters/` (common 24, fc2db_net 17, javdb 17, av123 15,
-registration 3), **+1** in `tests/unit/sources/test_base.py`, and **+4**
-because `tests/contract/test_core_independent_of_amane.py` is parametrized
-over every module in the package and therefore automatically covers the four
-new modules (`_common`, `fc2db_net`, `av123`, `javdb`) — so none of them
-imports Amane. (The `45be2b7` commit message says "80 new offline tests"; that
-is only a rough description in a historical commit message, which is
-deliberately not amended. The numbers above are the record: 309 collected /
-309 passed.)
+相对于 WIP checkpoint 时 228 个测试的变化明细：`tests/unit/sources/adapters/` 中新增 **+76** 个测试
+（common 24、fc2db_net 17、javdb 17、av123 15、registration 3），`tests/unit/sources/test_base.py` 中 **+1**，
+以及 **+4** 个：因为 `tests/contract/test_core_independent_of_amane.py` 对 package 中的每个模块做参数化，
+因此自动覆盖了四个新模块（`_common`、`fc2db_net`、`av123`、`javdb`）— 所以它们都没有 import Amane。
+（`45be2b7` 的提交信息写的是 “80 new offline tests”；那只是一条历史提交信息中的粗略描述，刻意不做 amend。
+以上数字才是正式记录：309 collected / 309 passed。）
 
-Adapter tests use fixtures under `tests/fixtures/sources/`, each a *verbatim
-excerpt of a real response* (provenance comment at the top of each file);
-only ads/scripts/navigation were removed. They cover, per adapter: exact field
-extraction on two real pages, real 404 page, every failure status
-(403/429/5xx/Cloudflare-challenge-under-200/login redirect), transport errors,
-wrong-number page (`INVALID_RESPONSE`, never a silent success), missing/blank
-title (`PARSE_ERROR`), non-canonical input rejected before any request, and
-`base_url` override.
+adapter 测试使用 `tests/fixtures/sources/` 下的 fixture，每一个都是*真实响应的逐字摘录*
+（每个文件顶部有出处注释）；只删除了广告 / 脚本 / 导航。每个 adapter 覆盖：在两个真实页面上的精确字段提取、
+真实的 404 页面、每一种失败状态（403/429/5xx/Cloudflare-challenge-under-200/登录重定向）、transport 错误、
+番号不符的页面（`INVALID_RESPONSE`，绝不会悄悄成功）、缺失 / 空白的标题（`PARSE_ERROR`）、在任何请求之前
+拒绝非规范输入，以及 `base_url` 覆盖。
 
-Live checks are **not** part of the offline suite (they depend on the network
-and on third-party sites). To repeat them:
+线上检查**不**属于离线测试套件（它们依赖网络和第三方站点）。如需重复运行：
 
 ```text
 python tools/probe_sources.py adapter --source fc2db_net FC2-4824605 FC2-4979299
@@ -189,43 +158,34 @@ python tools/probe_sources.py adapter --source javdb     FC2-4825061 FC2-4979299
 python tools/probe_sources.py adapter --source av123     FC2-4825061 FC2-4979299
 ```
 
-(2.0 s between requests by default; each run appends to
-`docs/source-probes/PHASE2_PROBE_<date>.json` unless `--no-record`.)
+（默认每次请求间隔 2.0 s；除非使用 `--no-record`，否则每次运行都会追加写入
+`docs/source-probes/PHASE2_PROBE_<date>.json`。）
 
-## Known limitations / deliberately deferred
+## 已知局限 / 刻意延后
 
-- No throttling, retry, backoff, per-host concurrency or circuit breaking:
-  Phase 3. Each `fetch` makes exactly one request. `javdb` is the most likely
-  to rate-limit; a `429` maps to `RATE_LIMITED`.
-- The parsers are regex/JSON-LD based against today's markup. Layout changes
-  will surface as `PARSE_ERROR`/`INVALID_RESPONSE`, not as wrong data (number is
-  always cross-checked against the page); fixtures pin the current markup.
-- The 15 s default transport timeout produced one transient failure in live use;
-  retry policy is a Phase 3 concern.
-- Terms-of-service: these are third-party adult index sites. The adapters read
-  one public page per lookup at a low rate and are not bulk crawlers; whether
-  to ship them enabled by default is a product decision for later phases.
-- Coverage is uneven (see the per-ID table): no single source carries all 7 IDs;
-  `av123` covers 3/7. Phase 3 must treat `NOT_FOUND` from one source as normal.
+- 没有节流、重试、退避、按 host 的并发限制或熔断：属于 Phase 3。每次 `fetch` 恰好发出一个请求。
+  `javdb` 最有可能触发限流；`429` 映射为 `RATE_LIMITED`。
+- 解析器基于正则 / JSON-LD，针对的是今天的页面标记。页面布局变化会表现为 `PARSE_ERROR`/`INVALID_RESPONSE`，
+  而不会产生错误的数据（番号总是与页面交叉核对）；fixture 固定了当前的页面标记。
+- 默认 15 s 的 transport 超时在线上使用中产生过一次瞬时失败；重试策略属于 Phase 3 的范畴。
+- 服务条款：这些都是第三方成人索引站点。adapter 每次查找只以较低的频率读取一个公开页面，不是批量爬虫；
+  是否默认启用它们发布，是后续阶段的产品决策。
+- 覆盖不均衡（见按 ID 列出的表格）：没有任何单一来源收录全部 7 个 ID；
+  `av123` 覆盖 3/7。Phase 3 必须把某一个来源返回的 `NOT_FOUND` 视为正常情况。
 
-## Local workspace notes
+## 本地工作区说明
 
-- `.gitignore` now ignores `.pytest_cache/` and `*.egg-info/` (`ee14d0b`);
-  the stray `src/fc2_metadata_core.egg-info/` was deleted.
-- `fc2-organizer/.pytest_cache/` could **not** be deleted: it is unreadable to
-  the current (non-elevated, medium-integrity) user — `Get-ChildItem`,
-  `icacls`, `Get-Acl` all return *Access denied*; `dir /q` shows an
-  unresolvable owner (`...`); the parent directory grants `Ctg` full control.
-  `.venv` next to it is owned by `BUILTIN\Administrators`, suggesting an
-  earlier elevated run created these. It is git-ignored now and only produces
-  a `PytestCacheWarning`; all tests pass. Minimal fix (elevated PowerShell,
-  this directory only):
-  `takeown /f .pytest_cache /r /d y; icacls .pytest_cache /reset /t; Remove-Item -Recurse -Force .pytest_cache`.
-- Push status: Phase 2 (through Docs Head `4e7883e87bd6195080d1eb5afcefda0a8897600d`)
-  has been pushed to `origin/claude/phase-0-amane-integration-fnvhpq` and
-  independently reviewed (PASS WITH NON-BLOCKING NOTES).
+- `.gitignore` 现在会忽略 `.pytest_cache/` 和 `*.egg-info/`（`ee14d0b`）；
+  多余的 `src/fc2_metadata_core.egg-info/` 已被删除。
+- `fc2-organizer/.pytest_cache/` **无法**删除：当前（非提权、中等完整性级别的）用户无法读取它 —
+  `Get-ChildItem`、`icacls`、`Get-Acl` 都返回 *Access denied*；`dir /q` 显示一个无法解析的所有者（`...`）；
+  父目录授予了 `Ctg` 完全控制权限。旁边的 `.venv` 归 `BUILTIN\Administrators` 所有，说明它们是早先一次
+  提权运行创建的。它现在已被 git 忽略，只会产生一条 `PytestCacheWarning`；所有测试都通过。最小修复方式
+  （提权的 PowerShell，只针对这个目录）：
+  `takeown /f .pytest_cache /r /d y; icacls .pytest_cache /reset /t; Remove-Item -Recurse -Force .pytest_cache`。
+- 推送状态：Phase 2（截至 Docs Head `4e7883e87bd6195080d1eb5afcefda0a8897600d`）
+  已推送到 `origin/claude/phase-0-amane-integration-fnvhpq`，并已通过独立复查（PASS WITH NON-BLOCKING NOTES）。
 
-## Phase 3 NOT started
+## Phase 3 尚未开始
 
-No aggregation, no cross-source scheduling, no field-level merge, no retry
-policy, no Amane adapter work has been done.
+没有做任何聚合、跨来源调度、字段级合并、重试策略或 Amane adapter 工作。

@@ -1,4 +1,4 @@
-# Phase 4 / P4-C2 Handoff -- Immutable Organize Plan
+# Phase 4 / P4-C2 Handoff -- 不可变整理计划（Immutable Organize Plan）
 
 ```text
 Phase        = 4
@@ -7,7 +7,7 @@ Role         = Developer
 Branch       = claude/phase4-c2-organize-plan
 ```
 
-## 1. Coordinates
+## 1. 坐标
 
 ```text
 Frozen Base                = 51933a81382d7922a61b5fcdddc54b17b5293e6f
@@ -19,22 +19,20 @@ Code Review Range: 51933a81382d7922a61b5fcdddc54b17b5293e6f..1a4ca88bf9d10ca94f2
 Docs Review Range: 1a4ca88bf9d10ca94f2a8a640b734c96c558a8a8..<Docs Head>
 ```
 
-Verified before any change: `git fetch --all --tags`,
-`origin/claude/phase4-c1-recursive-discovery` == `51933a81382d7922a61b5fcdddc54b17b5293e6f`,
-working tree clean (only untracked `.claude/`), new branch
-`claude/phase4-c2-organize-plan` created from that exact commit, developed
-in an isolated worktree.
+在任何改动之前已验证：`git fetch --all --tags`，
+`origin/claude/phase4-c1-recursive-discovery` == `51933a81382d7922a61b5fcdddc54b17b5293e6f`，
+工作区干净（只有未跟踪的 `.claude/`），从那个确切的提交创建了新分支
+`claude/phase4-c2-organize-plan`，并在一个隔离的 worktree 中开发。
 
-## 2. Type
+## 2. 类型
 
-**NEW PACKAGE** (`fc2_organizer.planning`), plus two minimal touches to
-existing files -- see section 4.
+**NEW PACKAGE**（`fc2_organizer.planning`），外加对现有文件的两处最小改动 -- 见第 4 节。
 
-## 3. Changed files
+## 3. 变更文件
 
-**Code Review Candidate (`1a4ca88`), 16 files:**
+**Code Review Candidate（`1a4ca88`），16 个文件：**
 
-New (14):
+新增（14）：
 ```text
 fc2-organizer/src/fc2_organizer/planning/__init__.py
 fc2-organizer/src/fc2_organizer/planning/errors.py
@@ -52,43 +50,37 @@ fc2-organizer/tests/unit/planning/test_planning_policy.py
 fc2-organizer/tests/unit/planning/test_planning_synthetic_gate.py
 ```
 
-Modified (2):
+修改（2）：
 ```text
 fc2-organizer/src/fc2_organizer/__init__.py             (M -- see section 8)
 fc2-organizer/tests/contract/test_discovery_architecture.py  (M -- see section 4)
 ```
 
-**Docs Head (this commit), 2 files, both new:**
+**Docs Head（本提交），2 个文件，都为新增：**
 ```text
 fc2-organizer/docs/specifications/PHASE4_ORGANIZE_PLAN_CONTRACT.md
 fc2-organizer/docs/review/P4_C2_HANDOFF.md
 ```
 
-No `pyproject.toml` change was needed: `fc2_organizer.planning` is picked
-up the same way `fc2_organizer.discovery` already is (`[tool.setuptools.packages.find]
-where = ["src"]`, `[tool.pytest.ini_options] pythonpath = ["src", "tests"]`).
+不需要修改 `pyproject.toml`：`fc2_organizer.planning` 与 `fc2_organizer.discovery` 以同样的方式被识别
+（`[tool.setuptools.packages.find]
+where = ["src"]`、`[tool.pytest.ini_options] pythonpath = ["src", "tests"]`）。
 
-## 4. The one touch to a P4-C1 file, and why
+## 4. 对 P4-C1 文件的那一处改动及其原因
 
-`fc2-organizer/tests/contract/test_discovery_architecture.py`'s
-`test_organizer_package_has_no_other_stray_top_level_modules_yet` asserted
-`top_level_dirs == {"discovery"}`. Its own docstring already read *"the
-only subpackage under fc2_organizer is discovery **yet**"* -- an explicit
-scope guard anticipating a next package, not a claim about discovery's own
-internals. Adding `fc2_organizer.planning` as a sibling package (never
-modifying `discovery/**`) necessarily makes that specific assertion false;
-leaving it unchanged would have turned a previously-passing P4-C1 test into
-a false failure. The assertion was updated to
-`top_level_dirs == {"discovery", "planning"}`, with an expanded docstring
-explaining the change and pointing at this handoff. **No other line in that
-file, and no file under `src/fc2_organizer/discovery/**` or
-`src/fc2_metadata_core/**`, was touched.** No `discover_media` behavior,
-model, or error semantic changed.
+`fc2-organizer/tests/contract/test_discovery_architecture.py` 中的
+`test_organizer_package_has_no_other_stray_top_level_modules_yet` 断言了
+`top_level_dirs == {"discovery"}`。它自己的 docstring 本来就写着 *"the
+only subpackage under fc2_organizer is discovery **yet**"* -- 这是一个明确预见到下一个 package 的作用域守卫，而不是关于
+discovery 自身内部的声明。把 `fc2_organizer.planning` 作为同级 package 加入（从不修改 `discovery/**`），必然会让这个特定断言
+不成立；如果保持不变，就会把一个原本通过的 P4-C1 测试变成一次虚假的失败。该断言已更新为
+`top_level_dirs == {"discovery", "planning"}`，并扩充了 docstring 来说明这一改动并指向本 handoff。**该文件中的其他任何一行，
+以及 `src/fc2_organizer/discovery/**` 或 `src/fc2_metadata_core/**` 下的任何文件，都没有被触碰。** `discover_media` 的行为、
+模型和错误语义都没有改变。
 
-This was flagged in the pre-code-write report (per the task brief's
-Context Handshake step) before it was made, not discovered after the fact.
+这一点在编写代码之前的报告中（依照任务简报的 Context Handshake 步骤）就已提出，而不是事后才发现的。
 
-## 5. Architecture summary
+## 5. 架构摘要
 
 ```text
 DiscoveredMediaItem (P4-C1, closed)
@@ -103,15 +95,13 @@ build_organize_plan(...)
 OrganizePlan(source identity, canonical number, target paths, planned operations)
 ```
 
-`fc2_organizer -> fc2_metadata_core` is the only allowed dependency
-direction (unchanged, frozen). `fc2_organizer.planning` depends on
-`fc2_organizer.discovery`'s public package (`DiscoveredMediaItem` only) and
-on `fc2_metadata_core.models` / `fc2_metadata_core.normalize` (never
-`.sources`/`.aggregation`/`.resource_control`/`.http`/`.batch`, never
-discovery's internal modules). Full detail:
-`docs/specifications/PHASE4_ORGANIZE_PLAN_CONTRACT.md`.
+`fc2_organizer -> fc2_metadata_core` 是唯一允许的依赖方向（未改变，冻结）。`fc2_organizer.planning` 依赖
+`fc2_organizer.discovery` 的公开 package（只用 `DiscoveredMediaItem`）以及
+`fc2_metadata_core.models` / `fc2_metadata_core.normalize`（从不依赖
+`.sources`/`.aggregation`/`.resource_control`/`.http`/`.batch`，也从不依赖 discovery 的内部模块）。完整细节：
+`docs/specifications/PHASE4_ORGANIZE_PLAN_CONTRACT.md`。
 
-## 6. Public API
+## 6. 公开 API
 
 ```python
 from fc2_organizer.planning import (
@@ -122,7 +112,7 @@ from fc2_organizer.planning import (
 plan = build_organize_plan(media_item, canonical_number, metadata, library_root, policy=None)
 ```
 
-## 7. Default directory layout
+## 7. 默认目录布局
 
 ```text
 <library_root>/
@@ -135,121 +125,86 @@ plan = build_organize_plan(media_item, canonical_number, metadata, library_root,
     extrafanart/
 ```
 
-Title never participates; verified directly by
-`test_title_does_not_alter_default_target_path` and
-`test_unicode_metadata_does_not_alter_default_target_path`, plus the
-400-item synthetic gate's `test_synthetic_gate_unicode_titles_never_leak_into_target_paths`.
+标题从不参与；由
+`test_title_does_not_alter_default_target_path` 和
+`test_unicode_metadata_does_not_alter_default_target_path` 直接验证，外加 400-item 合成门槛中的
+`test_synthetic_gate_unicode_titles_never_leak_into_target_paths`。
 
-## 8. Target containment strategy
+## 8. 目标包含关系的策略
 
-**Structural, not filesystem-probed.** Every caller-controlled path
-component (directory name, media/NFO basename, artifact filenames) is
-validated to contain no path separator and no `..` *before* being joined
-onto `library_root`/`target_directory` via `os.path.join` -- so the result
-is nested under the root by construction, regardless of what
-`library_root`'s own string content is. `OrganizePlan.__post_init__`
-independently re-checks every target field via a purely lexical,
-Windows-case-insensitive containment check
-(`fc2_organizer.planning.paths.is_contained_within`) and raises
-`TargetEscapesLibraryRootError` if that ever fails -- a redundant,
-defense-in-depth invariant at the model layer, mirroring P4-C1-R-01's
-dual-layer (scanner + model) pattern for `DiscoveredMediaItem.source_path`.
-No `exists()`/`resolve()`/`realpath()` call appears anywhere in this
-package.
+**结构性的，不探测文件系统。** 每一个由调用方控制的路径组件（目录名、媒体 / NFO basename、artifact 文件名）在通过
+`os.path.join` 拼接到 `library_root`/`target_directory` 之上*之前*，都被校验为不含路径分隔符、不含 `..` -- 因此无论
+`library_root` 本身的字符串内容是什么，结果在构造上就嵌套在根目录之下。`OrganizePlan.__post_init__` 还会通过一个纯词法的、
+Windows 下不区分大小写的包含关系检查（`fc2_organizer.planning.paths.is_contained_within`）独立地再次检查每一个目标字段，
+一旦失败即抛出 `TargetEscapesLibraryRootError` -- 这是模型层上冗余的纵深防御不变量，与 P4-C1-R-01 针对
+`DiscoveredMediaItem.source_path` 的双层（scanner + 模型）模式相同。
+本 package 中任何地方都没有 `exists()`/`resolve()`/`realpath()` 调用。
 
-## 9. Windows filename safety strategy
+## 9. Windows 文件名安全策略
 
-Centralized in one function, `fc2_organizer.planning.paths.validate_path_component`
-(section 10 of the contract spec): illegal characters (`< > : " / \ | ? *`),
-ASCII control characters, trailing dot/space, and Windows reserved device
-names (`CON`/`PRN`/`AUX`/`NUL`/`COM1`-`9`/`LPT1`-`9`, case-insensitive,
-checked against the portion before the first dot) are all rejected with
-`UnsafeTargetComponentError`. Both `planner.py` and `models.py` call into
-this single function -- no sanitization logic is duplicated. The frozen
-v1.0 default values never trigger it.
+集中在一个函数中，`fc2_organizer.planning.paths.validate_path_component`
+（合同规格第 10 节）：非法字符（`< > : " / \ | ? *`）、ASCII 控制字符、结尾的点 / 空格，以及 Windows 保留设备名
+（`CON`/`PRN`/`AUX`/`NUL`/`COM1`-`9`/`LPT1`-`9`，不区分大小写，依据第一个点之前的部分判断）全部以
+`UnsafeTargetComponentError` 拒绝。`planner.py` 和 `models.py` 都调用这一个函数 -- 没有重复的净化逻辑。冻结的
+v1.0 默认值永远不会触发它。
 
-## 10. Collision policy
+## 10. 冲突策略
 
-**Fail closed, frozen, not a knob.** `InternalTargetCollisionError` if any
-two of a plan's own generated basenames would collide under Windows
-case-insensitive semantics. No automatic suffixing (`(1)`/`_2`/`-copy`), no
-silent rename. `OutputPolicy` has no collision-strategy field;
-`build_organize_plan` has no `on_collision=` parameter.
+**Fail closed，冻结，不是旋钮。** 如果一个计划自己生成的任意两个 basename 在 Windows 不区分大小写的语义下会冲突，
+则抛出 `InternalTargetCollisionError`。不自动加后缀（`(1)`/`_2`/`-copy`），也不悄悄重命名。`OutputPolicy` 没有冲突策略字段；
+`build_organize_plan` 没有 `on_collision=` 参数。
 
-## 11. Overwrite policy
+## 11. 覆盖策略
 
-**Never, for source media, target media, and every generated artifact.**
-Frozen constant, not represented as a field/parameter anywhere in this
-package (verified directly: `test_overwrite_policy_is_frozen_never_and_not_a_caller_knob`
-checks `OutputPolicy` has no `overwrite`/`overwrite_policy` attribute and
-`build_organize_plan`'s signature has no `overwrite` parameter). No real
-filesystem preflight (existing-file detection) is performed -- P4-C2
-performs zero filesystem access of any kind; a real preflight against what
-actually exists on disk is explicitly deferred to a future execution
-package.
+**永不覆盖，适用于源媒体、目标媒体以及每一个生成的 artifact。**
+这是冻结的常量，在本 package 中任何地方都没有表示为字段 / 参数（已直接验证：
+`test_overwrite_policy_is_frozen_never_and_not_a_caller_knob` 检查 `OutputPolicy` 没有 `overwrite`/`overwrite_policy`
+属性，并且 `build_organize_plan` 的签名中没有 `overwrite` 参数）。不做任何真实的文件系统预检（检测已存在的文件）--
+P4-C2 不做任何形式的文件系统访问；针对磁盘上实际存在内容的真实预检被明确推迟到将来的执行 package。
 
-## 12. Immutability strategy
+## 12. 不可变性策略
 
-Every public model (`OutputPolicy`, `PlannedPath`, `PlannedOperation`,
-`OrganizePlan`) is `@dataclass(frozen=True, slots=True)`.
-`OrganizePlan.operations` is a real `tuple[PlannedOperation, ...]` (not a
-list); there is no caller-owned mutable container anywhere in the object
-graph. `test_planning_models.py::TestOrganizePlanImmutability` proves scalar
-reassignment raises `dataclasses.FrozenInstanceError`, `operations[i] = x`
-raises `TypeError` (tuple item assignment), `operations` is a real `tuple`
-(not `isinstance(..., list)`), and no mutator method (`append`/`extend`/...)
-exists on the public surface.
+每个公开模型（`OutputPolicy`、`PlannedPath`、`PlannedOperation`、
+`OrganizePlan`）都是 `@dataclass(frozen=True, slots=True)`。
+`OrganizePlan.operations` 是真正的 `tuple[PlannedOperation, ...]`（不是 list）；对象图中任何地方都没有调用方持有的可变容器。
+`test_planning_models.py::TestOrganizePlanImmutability` 证明：对标量重新赋值会抛出 `dataclasses.FrozenInstanceError`，
+`operations[i] = x` 会抛出 `TypeError`（tuple 条目赋值），`operations` 是真正的 `tuple`（不是 `isinstance(..., list)`），
+并且公开接口上不存在任何修改方法（`append`/`extend`/...）。
 
-## 13. Determinism strategy
+## 13. 确定性策略
 
-`build_organize_plan` reads no randomness, no wall clock, no filesystem
-enumeration order, and generates no UUID -- every target path is a pure
-string computation from its five inputs. `test_identical_input_produces_identical_plan`
-and the synthetic gate's `test_synthetic_gate_all_plans_deterministic_on_replay`
-(400 items, replayed twice) both assert full `OrganizePlan.__eq__` equality
-(dataclass field-by-field, including `operations` tuple ordering) across
-repeated calls with identical inputs.
+`build_organize_plan` 不读取随机数，不读取墙钟，不依赖文件系统枚举顺序，也不生成 UUID -- 每个目标路径都是由其五个输入
+计算出来的纯字符串。`test_identical_input_produces_identical_plan`
+以及合成门槛中的 `test_synthetic_gate_all_plans_deterministic_on_replay`
+（400 个条目，重放两次）都断言：在相同输入下多次调用，`OrganizePlan.__eq__` 完全相等
+（dataclass 逐字段比较，包括 `operations` tuple 的顺序）。
 
-## 14. No-mutation evidence
+## 14. 不修改文件系统的证据
 
-Two independent proofs (`test_planning_no_mutation.py`), per the brief's
-explicit requirement that "looks like it doesn't write" is not sufficient
-evidence:
+两个独立的证明（`test_planning_no_mutation.py`），因为简报明确要求“看起来不写入”不是充分的证据：
 
-1. **Before/after directory snapshot.** A real directory with existing
-   files is snapshotted (path -> content) before and after building five
-   plans against a library root that itself does not exist on disk; the
-   snapshots are asserted byte-identical, and the (never-created) library
-   root is asserted to still not exist.
-2. **Mutation-API trap.** Every common mutation API is monkeypatched to
-   raise if called: `os.mkdir`/`makedirs`/`rename`/`replace`/`remove`/
-   `unlink`/`rmdir`/`removedirs`/`chmod`/`utime`/`symlink`/`link`,
-   `shutil.move`/`copy`/`copy2`/`copyfile`/`copytree`/`rmtree`,
+1. **前后目录快照。** 对一个包含现有文件的真实目录，在针对一个本身不存在于磁盘上的库根目录构建五个计划之前和之后分别做快照
+   （路径 -> 内容）；断言两份快照逐字节相同，并断言那个（从未被创建的）库根目录仍然不存在。
+2. **修改类 API 陷阱。** 每一个常见的修改类 API 都被 monkeypatch 为一旦被调用就抛出异常：`os.mkdir`/`makedirs`/`rename`/
+   `replace`/`remove`/
+   `unlink`/`rmdir`/`removedirs`/`chmod`/`utime`/`symlink`/`link`、
+   `shutil.move`/`copy`/`copy2`/`copyfile`/`copytree`/`rmtree`、
    `pathlib.Path.mkdir`/`write_text`/`write_bytes`/`touch`/`rename`/
-   `replace`/`unlink`/`rmdir`/`symlink_to`, and builtin `open()` in any
-   write-capable mode. `build_organize_plan` is called repeatedly under all
-   of these traps and must run to completion without tripping any of them.
-   A self-test (`test_blocked_mutation_trap_is_itself_effective`) proves the
-   trap mechanism itself actually catches a real mutation call (mirrors
-   P4-C1's `UnguardedScheduler`-style self-test pattern from C4).
+   `replace`/`unlink`/`rmdir`/`symlink_to`，以及任何可写模式下的内置 `open()`。在所有这些陷阱之下反复调用
+   `build_organize_plan`，它必须运行完成而不触发其中任何一个。一个自测（`test_blocked_mutation_trap_is_itself_effective`）
+   证明陷阱机制本身确实能捕获真实的修改调用（沿用 C4 中 P4-C1 的 `UnguardedScheduler` 风格自测模式）。
 
-## 15. Architecture-boundary evidence
+## 15. 架构边界的证据
 
-`test_planning_architecture.py`: static AST scan of every `planning/*.py`
-file forbidding `amane` and the `fc2_metadata_core`/discovery internal
-prefixes listed in the contract spec section 1; an explicit allow-list
-check that only `fc2_metadata_core.models`/`.normalize` and the bare
-`fc2_organizer.discovery` package are ever imported; a dynamic meta-path
-block proving `amane` cannot be imported even lazily while
-`build_organize_plan` is exercised end to end under the block (see the
-contract spec section 1 for why the dynamic block covers only `amane`, not
-`fc2_metadata_core` internals -- that boundary is covered statically
-instead, for a structural reason specific to `fc2_metadata_core`'s own
-`__init__.py`); confirmation `amane` is not actually installed in this
-environment (sanity check the block is meaningful); and a scope guard that
-`fc2_organizer` now has exactly `{discovery, planning}` as subpackages.
+`test_planning_architecture.py`：对每个 `planning/*.py` 文件做静态 AST 扫描，禁止 `amane` 以及合同规格第 1 节中列出的
+`fc2_metadata_core`/discovery 内部前缀；一个明确的允许列表检查，确认只 import 了 `fc2_metadata_core.models`/`.normalize`
+以及裸的 `fc2_organizer.discovery` package；一个动态 meta-path 阻断，在该阻断下端到端运行 `build_organize_plan` 的同时，
+证明即使是惰性 import 也无法加载 `amane`（关于该动态阻断为什么只覆盖 `amane` 而不覆盖 `fc2_metadata_core` 的内部实现，
+见合同规格第 1 节 -- 那个边界改由静态检查覆盖，原因在于 `fc2_metadata_core` 自身的 `__init__.py` 的结构）；确认 `amane`
+实际上没有安装在本环境中（确认阻断是有意义的）；以及一个作用域守卫，确认 `fc2_organizer` 现在恰好有 `{discovery, planning}`
+这两个子 package。
 
-## 16. Targeted tests
+## 16. 针对性测试
 
 ```bash
 # From fc2-organizer/:
@@ -260,11 +215,10 @@ python -m pytest tests/unit/planning tests/contract/test_planning_architecture.p
 179 passed
 ```
 
-(Also reran `tests/contract/test_discovery_architecture.py` alongside --
-all pre-existing P4-C1 architecture tests still pass with the one updated
-assertion, see section 4.)
+（同时还重新运行了 `tests/contract/test_discovery_architecture.py` --
+所有原有的 P4-C1 架构测试在那一处更新过的断言下仍然通过，见第 4 节。）
 
-## 17. Full suite
+## 17. 全量测试
 
 ```bash
 python -m pytest -q
@@ -274,68 +228,45 @@ python -m pytest -q
 2659 passed, 4 skipped
 ```
 
-`2480 (P4-C1 final-closure baseline) + 179 (new P4-C2 tests) = 2659`. No
-pre-existing test was modified beyond the single assertion in section 4, no
-pre-existing test newly failed, and the 4 skips are the same pre-existing
-Windows symlink-privilege skips from P4-C1 (unaffected, unchanged reasons).
+`2480 (P4-C1 final-closure baseline) + 179 (new P4-C2 tests) = 2659`。除了第 4 节中的那一个断言之外，没有任何原有测试被修改，
+没有任何原有测试新出现失败，4 个跳过项与 P4-C1 中已有的 Windows symlink 权限跳过相同（不受影响，原因未变）。
 
-(`--basetemp=<dir>` was used in this environment only to avoid the same
-pytest-internal teardown race against a shared `%TEMP%\pytest-of-<user>`
-directory that P4-C1's handoff documented (section 9 there) -- irrelevant
-to the tests themselves.)
+（在本环境中使用 `--basetemp=<dir>`，只是为了避免 P4-C1 handoff 中记录过的同一个 pytest 内部清理竞争（见那里的第 9 节），
+即共享的 `%TEMP%\pytest-of-<user>` 目录问题 -- 与测试本身无关。）
 
-## 18. Synthetic planning gate
+## 18. 合成计划门槛
 
 ```text
 PASS
 ```
 
-`test_planning_synthetic_gate.py` builds 400 synthetic
-`DiscoveredMediaItem`s across 7 extensions, 400 distinct canonical FC2
-numbers, and 5 Unicode/emoji titles, fully offline, on a fixed
-(non-random) layout. Verifies: full replay determinism (built twice,
-asserted `==`), full target containment for every generated path, zero
-internal collisions across all 400 unique-number plans' media targets, zero
-Unicode-title leakage into any target path, correctness under a custom
-`OutputPolicy` (containment + determinism still hold), zero filesystem
-mutation (library root never created), and (via a dedicated AST scan of the
-`planning/` source tree) zero reachable import of `socket`/`httpx`/
-`urllib`/`requests`/`asyncio`.
+`test_planning_synthetic_gate.py` 在一个固定的（非随机）布局上完全离线地构建 400 个合成的
+`DiscoveredMediaItem`，覆盖 7 种扩展名、400 个不同的规范 FC2 番号以及 5 个 Unicode / emoji 标题。验证：完整的重放确定性
+（构建两次，断言 `==`）、每一个生成路径的完整目标包含关系、全部 400 个唯一番号计划的媒体目标之间零内部冲突、Unicode 标题
+零泄漏到任何目标路径、在自定义 `OutputPolicy` 下的正确性（包含关系 + 确定性仍然成立）、零文件系统修改（库根目录从未被创建），
+以及（通过对 `planning/` 源码树的专门 AST 扫描）不存在任何可达的 `socket`/`httpx`/
+`urllib`/`requests`/`asyncio` import。
 
-## 19. Known limitations
+## 19. 已知局限
 
-* **`fc2_organizer/__init__.py` does not eagerly import `planning`.** This
-  was discovered as a real regression during development (not merely a
-  design choice made up front): the first version of this file did
-  `from fc2_organizer import discovery, planning`, which broke P4-C1's own
-  frozen `test_discover_media_runs_end_to_end_with_forbidden_modules_blocked_at_runtime`
-  test, because `fc2_metadata_core`'s own `__init__.py` eagerly imports
-  `aggregation`/`batch`/`http`/`sources` as soon as *any* of its submodules
-  (including the allowed `models`) is imported -- so eagerly importing
-  `planning` from `fc2_organizer/__init__.py` made that transitive load
-  happen merely by importing `fc2_organizer.discovery`. Fixed by not
-  eagerly importing `planning`; it is reached via
-  `from fc2_organizer import planning` (an ordinary, explicit subpackage
-  import). Documented in the contract spec section 1 and in this file so a
-  future package does not reintroduce the same regression.
-* No cross-check that `metadata.number == canonical_number`. The default
-  v1.0 path derivation does not read `metadata.number` at all (only
-  `meets_minimum_success()` is checked), so a caller could in principle
-  pass metadata for a different number than `canonical_number`; P4-C2 does
-  not treat this as a planning error, since nothing in the brief requires
-  it and the resulting plan is still internally consistent (it plans
-  correctly for `canonical_number`, which is the authoritative identity
-  here). Left for a future round to decide if it should become an error.
-* `OrganizePlan` does not carry the `OutputPolicy` used to build it. Not
-  required by the brief's "at least include" field list (section 6 of the
-  task); omitted deliberately to avoid expanding the plan's responsibility
-  beyond what was asked.
-* No real-filesystem preflight of any kind (existing-file detection,
-  writability probing) -- by design, this is P4-C2's central constraint
-  (ZERO FILESYSTEM MUTATION), not an oversight; deferred to a future
-  execution package per the brief.
+* **`fc2_organizer/__init__.py` 不会急切地 import `planning`。** 这是在开发过程中发现的一个真实回归（而不仅仅是事先做出的
+  设计选择）：该文件的第一个版本写的是 `from fc2_organizer import discovery, planning`，这破坏了 P4-C1 自己冻结的
+  `test_discover_media_runs_end_to_end_with_forbidden_modules_blocked_at_runtime` 测试，因为 `fc2_metadata_core` 自己的
+  `__init__.py` 只要它的*任何*一个子模块（包括允许使用的 `models`）被 import，就会急切地 import
+  `aggregation`/`batch`/`http`/`sources` -- 因此从 `fc2_organizer/__init__.py` 急切地 import `planning`，会让仅仅 import
+  `fc2_organizer.discovery` 就触发那次传递加载。修复方式是不急切地 import `planning`；通过
+  `from fc2_organizer import planning`（一个普通的、显式的子 package import）使用它。这一点记录在合同规格第 1 节和本文件中，
+  以免将来的 package 重新引入同样的回归。
+* 没有交叉检查 `metadata.number == canonical_number`。v1.0 默认的路径推导根本不读取 `metadata.number`（只检查
+  `meets_minimum_success()`），因此调用方理论上可以传入与 `canonical_number` 番号不同的 metadata；P4-C2 不把这视为计划错误，
+  因为简报中没有任何内容要求这样做，而且生成的计划仍然是内部一致的（它针对 `canonical_number` 正确地做出计划，而它就是这里的
+  权威身份）。是否应将其变为错误，留待将来的轮次决定。
+* `OrganizePlan` 不携带用于构建它的 `OutputPolicy`。简报中“至少包括”的字段列表（任务第 6 节）并不要求它；刻意省略，
+  以避免把计划的职责扩大到超出要求的范围。
+* 不做任何形式的真实文件系统预检（检测已存在的文件、探测可写性）-- 按照设计，这是 P4-C2 的核心约束
+  （ZERO FILESYSTEM MUTATION），而不是疏忽；按简报推迟到将来的执行 package。
 
-## 20. Carried debts (not triggered / not addressed by P4-C2)
+## 20. 延续的债务（P4-C2 未触发 / 未处理）
 
 ```text
 P4-C1-R-02, P4-C1-R-03, P4-C1-R-04, P4-C1-R-05,
@@ -345,12 +276,9 @@ C4-N1, C4-R1-N1, C4-R1-N2, C4-R1-N3,
 F3, F5, C5-R1-L1
 ```
 
-None of these are read, touched, or relevant: `fc2_organizer.planning`
-has zero runtime dependency on any module any of them concern (its only
-`fc2_metadata_core` dependency is the read-only `models`/`normalize`
-boundary; it has zero dependency on `batch`, `aggregation`,
-`resource_control`, `sources`, or `http`). None was triggered during
-development; none was fixed, upgraded, or reopened.
+这些债务都没有被读取、触碰，也与本 package 无关：`fc2_organizer.planning` 对它们所涉及的任何模块都没有运行时依赖（它对
+`fc2_metadata_core` 的唯一依赖是只读的 `models`/`normalize` 边界；它对 `batch`、`aggregation`、
+`resource_control`、`sources` 或 `http` 零依赖）。开发过程中没有触发任何一项；也没有修复、升级或重新打开任何一项。
 
 ## 21. `git diff --check`
 
@@ -360,16 +288,13 @@ clean (no output)
 
 ## 22. `git status --porcelain`
 
-Clean after the code commit; clean again after this docs commit (verify
-with `git status --porcelain` -- expected empty once this file is
-committed).
+代码提交之后是干净的；本次 docs 提交之后再次是干净的（用 `git status --porcelain` 验证 -- 本文件提交后预期为空）。
 
-## 23. Push
+## 23. 推送
 
-To be pushed to `origin/claude/phase4-c2-organize-plan` after the docs
-commit; Remote Head recorded above once pushed.
+在 docs 提交之后推送到 `origin/claude/phase4-c2-organize-plan`；推送后会在上面记录 Remote Head。
 
-## 24. Independent Review
+## 24. 独立复查
 
 ```text
 REQUIRED
@@ -389,13 +314,11 @@ NOT CLOSED
 
 ---
 
-# R1 Closure -- P4-C2-GOV-01, P4-C2-GOV-02, P4-C2-GOV-03
+# R1 关闭 -- P4-C2-GOV-01、P4-C2-GOV-02、P4-C2-GOV-03
 
-The section above is the original, as-reviewed P4-C2 submission and is
-left unmodified for history. This section records the R1 incremental-
-closure round.
+上面的部分是原始的、经过复查的 P4-C2 提交，为保留历史而不做修改。本节记录 R1 增量关闭轮次。
 
-## R1.1 Coordinates
+## R1.1 坐标
 
 ```text
 Reviewed-Failed Code Head = 1a4ca88bf9d10ca94f2a8a640b734c96c558a8a8
@@ -406,13 +329,10 @@ R1 Code Review Range      = e8ebd153b2160f3dfc812668c34cc8e382614ee4..d43608645a
 R1 Docs Review Range      = d43608645a960401c0cf0cc03d56418bdfa760be..<R1 Docs Head>
 ```
 
-## R1.2 Governance context
+## R1.2 治理背景
 
-Two independent Level 1 reviews conflicted on finding severity. Per the
-issuing instruction, this round does not build against either reviewer's
-own finding numbering; it builds solely against the three GOV findings the
-instruction itself specified as the arbitrated, authoritative closure
-scope:
+两份独立的 Level 1 复查在 finding 的严重程度上存在冲突。按照下发的指示，本轮不以任何一位复查者自己的 finding 编号为依据；
+只以指示本身规定为经过裁决的、权威关闭范围的三个 GOV finding 为依据：
 
 ```text
 P4-C2-GOV-01   HIGH / BLOCKING            -- vacuous synthetic-gate network-isolation test
@@ -420,121 +340,81 @@ P4-C2-GOV-02   MEDIUM / CLOSURE-REQUIRED  -- legitimate absolute roots wrongly j
 P4-C2-GOV-03   MEDIUM / CLOSURE-REQUIRED  -- ambiguous Windows rooted-but-driveless library_root
 ```
 
-## R1.3 Findings addressed
+## R1.3 处理的 finding
 
 ### P4-C2-GOV-01 -- CLOSED
 
-**Defect:** `test_planning_synthetic_gate.py::test_synthetic_gate_no_network_import_reachable`
-computed its production-source directory as
-`Path(__file__).resolve().parents[2] / "src" / "fc2_organizer" / "planning"`.
-This file lives at `tests/unit/planning/test_planning_synthetic_gate.py`;
-`parents[2]` from there is `tests/` (one directory too shallow -- the value
-`2` was copied from `tests/contract/test_planning_architecture.py`, which
-*is* one directory shallower, where `parents[2]` correctly resolves to the
-repo root). The computed path was therefore the nonexistent
-`tests/src/fc2_organizer/planning`; `rglob("*.py")` silently returned an
-empty list, and the `for path in ...: assert ...` loop body never executed
--- a vacuous test that always passed regardless of what the production code
-actually imported.
+**缺陷：** `test_planning_synthetic_gate.py::test_synthetic_gate_no_network_import_reachable`
+把它的生产源码目录计算为
+`Path(__file__).resolve().parents[2] / "src" / "fc2_organizer" / "planning"`。
+该文件位于 `tests/unit/planning/test_planning_synthetic_gate.py`；从那里算起的 `parents[2]` 是 `tests/`（浅了一层 -- 数值
+`2` 是从 `tests/contract/test_planning_architecture.py` 复制过来的，那个文件*确实*浅一层，在那里 `parents[2]` 正确地解析到
+仓库根目录）。因此计算出的路径是不存在的 `tests/src/fc2_organizer/planning`；`rglob("*.py")` 悄悄返回了空列表，
+`for path in ...: assert ...` 的循环体从未执行 -- 这是一个无论生产代码实际 import 了什么都总是通过的空洞测试。
 
-**Repair:** fixed the index to `parents[3]` (verified directly, R1.5 Repro
-A). Added `test_synthetic_gate_planning_src_root_resolves_and_has_production_files`,
-which asserts the resolved directory exists, `rglob("*.py")` returns a
-non-empty file list, and that list contains every known production module
-by name (`__init__.py`, `errors.py`, `models.py`, `paths.py`, `planner.py`,
-`policy.py`) -- so a future accidental re-introduction of the same
-off-by-one is caught by an explicit assertion, not merely by the guard
-"happening" to scan the right files. Extracted the AST-walking scan itself
-into a small, reusable, pure function (`_scan_forbidden_imports`), then
-added two planted-import proof tests
-(`test_network_guard_fails_on_planted_import_statement`,
-`test_network_guard_fails_on_planted_import_from_form`) that write `import
-socket` / `from urllib import request` into an isolated `tmp_path` file
-(never a production file) and assert the scanner detects it -- proving the
-guard can actually FAIL, not just proving it PASSes on whatever happens to
-be clean today. Added a fourth test
-(`test_network_guard_does_not_false_positive_on_ordinary_stdlib_imports`)
-proving the same scanner does not flag ordinary allowed imports this very
-package uses (`os`, `pathlib`, `dataclasses`, `enum`).
+**修复：** 把下标修正为 `parents[3]`（已直接验证，R1.5 Repro A）。新增
+`test_synthetic_gate_planning_src_root_resolves_and_has_production_files`，断言解析出的目录存在、`rglob("*.py")`
+返回非空的文件列表，并且该列表按名称包含每一个已知的生产模块（`__init__.py`、`errors.py`、`models.py`、`paths.py`、
+`planner.py`、`policy.py`）-- 这样将来如果意外再次引入同样的差一错误，会被一个明确的断言捕获，而不仅仅依赖守卫“碰巧”扫描到了
+正确的文件。把 AST 遍历扫描本身抽取为一个小的、可复用的纯函数（`_scan_forbidden_imports`），然后新增了两个植入 import 的
+证明测试（`test_network_guard_fails_on_planted_import_statement`、
+`test_network_guard_fails_on_planted_import_from_form`），它们把 `import
+socket` / `from urllib import request` 写入一个隔离的 `tmp_path` 文件（从不是生产文件），并断言扫描器能检测到 --
+证明该守卫确实能够 FAIL，而不仅仅证明它在今天恰好干净的代码上 PASSes。又新增了第四个测试
+（`test_network_guard_does_not_false_positive_on_ordinary_stdlib_imports`），证明同一个扫描器不会把本 package 自己也在使用的
+普通允许 import（`os`、`pathlib`、`dataclasses`、`enum`）误报出来。
 
-**No production code was changed to make this pass** -- both original
-independent reviewers already confirmed `fc2_organizer.planning` has no
-real network dependency; this was purely a test-evidence defect, exactly
-as the issuing instruction characterized it.
+**没有为了让它通过而修改任何生产代码** -- 两位原始的独立复查者都已确认 `fc2_organizer.planning` 没有真实的网络依赖；
+这纯粹是测试证据层面的缺陷，正如下发的指示所定性的那样。
 
 ### P4-C2-GOV-02 -- CLOSED
 
-**Defect:** `fc2_organizer.planning.paths.is_contained_within` computed
-segments via `os.path.normpath(candidate_or_root).split(os.sep)`. A bare
-drive root (`C:\`) or a bare UNC share root (`\\server\share\`) normalizes
-to a string *ending* in the separator; splitting that on `os.sep` produces
-a spurious trailing empty string segment, inflating the root's part count.
-The containment check's early-exit guard
-(`len(candidate_parts) <= len(root_parts): return False`) then fired for a
-*genuine* child (`C:\library-child` under `C:\`) purely because of that
-extra phantom segment -- a false "target escapes root" verdict for a
-perfectly legitimate absolute root.
+**缺陷：** `fc2_organizer.planning.paths.is_contained_within` 通过
+`os.path.normpath(candidate_or_root).split(os.sep)` 计算路径段。裸盘符根目录（`C:\`）或裸 UNC 共享根目录
+（`\\server\share\`）规范化后得到的字符串*以*分隔符结尾；在 `os.sep` 上切分会产生一个多余的结尾空字符串段，抬高了根目录的段数。
+包含关系检查的提前退出守卫
+（`len(candidate_parts) <= len(root_parts): return False`）于是仅仅因为那个额外的幽灵段，就对一个*真正的*子路径
+（`C:\` 之下的 `C:\library-child`）触发了 -- 对一个完全合法的绝对根目录给出了错误的“目标逃出根目录”判定。
 
-**Repair:** `is_contained_within` now computes segments via
-`pathlib.Path(...).parts` instead of `os.path.normpath(...).split(os.sep)`.
-`pathlib` collapses a drive-and-root (`C:\` -> `('C:\\',)`) or a
-UNC-share-and-root (`\\server\share\` -> `('\\\\server\\share\\',)`) into a
-*single* anchor part with no trailing-empty-segment artifact, regardless of
-whether the string carries a trailing separator or not. This is still
-purely lexical (`Path` construction and `.parts` perform zero filesystem
-access -- no `stat`/`exists`/`resolve`) and still segment-based, not
-`str.startswith` (so `C:\library2` still correctly compares as *not*
-contained under `C:\library` -- verified unchanged,
-`test_prefix_collision_without_separator_boundary_is_not_contained` and the
-new `test_no_string_startswith_false_positive_on_drive_root`).
+**修复：** `is_contained_within` 现在通过 `pathlib.Path(...).parts` 计算路径段，而不是 `os.path.normpath(...).split(os.sep)`。
+无论字符串是否带有结尾分隔符，`pathlib` 都会把盘符加根目录（`C:\` -> `('C:\\',)`）或 UNC 共享加根目录
+（`\\server\share\` -> `('\\\\server\\share\\',)`）合并为*一个*锚点段，不存在结尾空段的伪影。这仍然是纯词法的
+（`Path` 的构造和 `.parts` 都不做任何文件系统访问 -- 没有 `stat`/`exists`/`resolve`），并且仍然基于路径段，而不是
+`str.startswith`（因此 `C:\library2` 仍然被正确地判定为*不*包含在 `C:\library` 之下 -- 已验证未变，
+`test_prefix_collision_without_separator_boundary_is_not_contained` 以及新增的
+`test_no_string_startswith_false_positive_on_drive_root`）。
 
-Directly reproduced and fixed (R1.5 Repro C): `C:\` now correctly contains
-`C:\FC2-1234567` and `C:\FC2-1234567\poster.jpg`; `D:\FC2-1234567` is
-correctly excluded from `C:\`; `\\server\share\` correctly contains
-`\\server\share\FC2-1234567`; `\\server\other\FC2-1234567` is correctly
-excluded.
+已直接复现并修复（R1.5 Repro C）：`C:\` 现在正确地包含
+`C:\FC2-1234567` 和 `C:\FC2-1234567\poster.jpg`；`D:\FC2-1234567` 被正确地排除在 `C:\` 之外；`\\server\share\` 正确地包含
+`\\server\share\FC2-1234567`；`\\server\other\FC2-1234567` 被正确地排除。
 
 ### P4-C2-GOV-03 -- CLOSED
 
-**Governance decision (frozen by this round, per the issuing instruction):**
-`library_root` for P4-C2 v1.0 must be an **unambiguous, fully-qualified
-absolute path**. A Windows *rooted-but-driveless* form (`\lib`, `/lib`) is
-rejected fail-closed, never silently bound to whichever drive happens to be
-current, and never decided by relying on `os.path.isabs()`'s own
-cross-Python-version treatment of that form.
+**治理决定（由本轮冻结，依据下发的指示）：** P4-C2 v1.0 的 `library_root` 必须是一个**无歧义、完全限定的绝对路径**。
+Windows 的*有根但无盘符*形式（`\lib`、`/lib`）以 fail-closed 方式拒绝，绝不会被悄悄绑定到恰好处于当前状态的盘符，
+也绝不依据 `os.path.isabs()` 自身在不同 Python 版本之间对这种形式的处理来判断。
 
-**Repair:** added `fc2_organizer.planning.paths.is_fully_qualified_absolute_root`
-as the single, centralized library-root qualification boundary (contract
-section 11a):
+**修复：** 新增 `fc2_organizer.planning.paths.is_fully_qualified_absolute_root`，作为唯一的、集中的库根目录资格边界（合同
+第 11a 节）：
 
-* **Windows** (`os.name == "nt"`): accepted only if `os.path.splitdrive`
-  finds a real drive with a root (`C:\lib`, `C:/lib`) or a UNC share
-  (`\\server\share`, `\\server\share\lib`, with or without a trailing
-  separator -- a bare share is already unambiguous, unlike a bare drive
-  letter `C:` alone, which means "current directory on that drive" and is
-  rejected). Rejected: `library`, `.\library`, `..\library`, `C:library`,
-  `\library`, `/library`.
-* **POSIX** (anything else, chosen by the *current runtime OS*, never by
-  guessing from the string's shape): plain `os.path.isabs(path)` --
-  `/library` remains legal, `library` remains rejected.
+* **Windows**（`os.name == "nt"`）：只有当 `os.path.splitdrive` 找到带根目录的真实盘符（`C:\lib`、`C:/lib`）或 UNC 共享
+  （`\\server\share`、`\\server\share\lib`，带或不带结尾分隔符 -- 裸共享本身已经无歧义，这与单独的裸盘符 `C:` 不同，后者表示
+  “该盘符上的当前目录”，会被拒绝）时才接受。拒绝：`library`、`.\library`、`..\library`、`C:library`、
+  `\library`、`/library`。
+* **POSIX**（其他所有情况，按*当前运行时操作系统*选择，绝不根据字符串的形态猜测）：普通的 `os.path.isabs(path)` --
+  `/library` 仍然合法，`library` 仍然被拒绝。
 
-Wired into both `planner.py` (`InvalidLibraryRootError`, replacing the bare
-`os.path.isabs()` call) and `models.py`'s redundant model-layer check on
-`OrganizePlan.library_root` (`OrganizePlanContractError`), mirroring the
-existing dual-layer pattern already used for target containment
-(section 11) and for `DiscoveredMediaItem.source_path` in P4-C1-R-01.
+同时接入 `planner.py`（`InvalidLibraryRootError`，取代裸的 `os.path.isabs()` 调用）以及 `models.py` 中对
+`OrganizePlan.library_root` 的冗余模型层检查（`OrganizePlanContractError`），与已经用于目标包含关系（第 11 节）以及 P4-C1-R-01
+中 `DiscoveredMediaItem.source_path` 的双层模式一致。
 
-Directly reproduced (R1.5 Repro D): `\lib` and `/lib` both rejected by
-`is_fully_qualified_absolute_root` and by `build_organize_plan` itself
-(raises `InvalidLibraryRootError`); `C:\lib` and `\\server\share\lib` both
-accepted; `build_organize_plan(..., library_root="C:\\")` (the exact
-GOV-02/GOV-03 boundary case) succeeds end-to-end and produces
-`target_directory == "C:\\FC2-1234567"`.
+已直接复现（R1.5 Repro D）：`\lib` 和 `/lib` 都被 `is_fully_qualified_absolute_root` 以及 `build_organize_plan` 本身拒绝
+（抛出 `InvalidLibraryRootError`）；`C:\lib` 和 `\\server\share\lib` 都被接受；`build_organize_plan(..., library_root="C:\\")`
+（GOV-02/GOV-03 的确切边界情况）端到端成功，并产生 `target_directory == "C:\\FC2-1234567"`。
 
-## R1.4 Exact changed files
+## R1.4 确切的变更文件
 
-**R1 Code Review Candidate (`d436086`), 8 files, all modified (no new
-files, no renames):**
+**R1 Code Review Candidate（`d436086`），8 个文件，全部为修改（没有新文件，没有重命名）：**
 
 ```text
 fc2-organizer/docs/specifications/PHASE4_ORGANIZE_PLAN_CONTRACT.md    (M)
@@ -547,19 +427,17 @@ fc2-organizer/tests/unit/planning/test_planning_planner.py            (M)
 fc2-organizer/tests/unit/planning/test_planning_synthetic_gate.py     (M)
 ```
 
-No file under `fc2_metadata_core/**` or `fc2_organizer/discovery/**` was
-touched. No new source file was added (the brief permitted a new
-path/root helper "if necessary, minimized" -- `is_fully_qualified_absolute_root`
-was added as a new *function* inside the already-existing, already-central
-`paths.py`, not as a new module).
+`fc2_metadata_core/**` 或 `fc2_organizer/discovery/**` 下的任何文件都没有被触碰。没有新增任何源文件（简报允许“在必要时，
+尽量精简地”新增一个路径 / 根目录 helper -- `is_fully_qualified_absolute_root` 是作为一个新*函数*加在本来就存在、本来就是
+集中位置的 `paths.py` 中，而不是作为一个新模块）。
 
-**R1 Docs Head (this commit), 1 file:**
+**R1 Docs Head（本提交），1 个文件：**
 
 ```text
 fc2-organizer/docs/review/P4_C2_HANDOFF.md   (M -- this section)
 ```
 
-## R1.5 Direct reproductions (outside pytest)
+## R1.5 直接复现（在 pytest 之外）
 
 ```text
 Repro A -- network guard scans real production files:
@@ -595,64 +473,49 @@ Repro D -- Windows rooted-but-driveless root fails closed:
   -> PASS
 ```
 
-This host is Windows (win32, Python 3.12.10), so Repros A-D above all ran
-for real. The POSIX-side unit coverage added in R1 (`is_fully_qualified_absolute_root`
-POSIX-absolute-accepted / relative-rejected / dot-relative-rejected, and
-`build_organize_plan`'s `test_posix_absolute_root_still_accepted`) is
-present and correct but **NOT RUN** on this host (`pytest.mark.skipif(os.name
-== "nt", ...)`); per the issuing instruction's explicit allowance for this
-case, the coverage exists and is platform-gated correctly rather than
-being executed here.
+本主机是 Windows（win32，Python 3.12.10），因此上面的 Repro A-D 都真实运行了。R1 中新增的 POSIX 一侧单元测试覆盖
+（`is_fully_qualified_absolute_root` 的 POSIX 绝对路径接受 / 相对路径拒绝 / 点开头相对路径拒绝，以及
+`build_organize_plan` 的 `test_posix_absolute_root_still_accepted`）存在且正确，但在本主机上 **NOT RUN**
+（`pytest.mark.skipif(os.name
+== "nt", ...)`）；依照下发指示对这种情况的明确许可，这些覆盖存在并且正确地按平台门控，而不是在这里执行。
 
-## R1.6 Targeted tests
+## R1.6 针对性测试
 
 ```text
 212 passed, 4 skipped
 ```
 
-Command: `python -m pytest tests/unit/planning tests/contract/test_planning_architecture.py -q`
-(179 prior P4-C2 tests + 33 new passing + 4 new POSIX-only skips, all
-green; the 4 skips are the new POSIX-gated tests, correctly inert on this
-Windows host -- not the same skips as the full suite's pre-existing
-P4-C1 symlink-privilege skips, see R1.7).
+命令：`python -m pytest tests/unit/planning tests/contract/test_planning_architecture.py -q`
+（179 个之前的 P4-C2 测试 + 33 个新增通过的测试 + 4 个新增的仅 POSIX 跳过，全部通过；这 4 个跳过是新增的 POSIX 门控测试，
+在这台 Windows 主机上正确地不执行 -- 与全量测试中原有的 P4-C1 symlink 权限跳过不是同一批，见 R1.7）。
 
-## R1.7 Full suite
+## R1.7 全量测试
 
 ```text
 2692 passed, 8 skipped
 ```
 
-Command: `python -m pytest -q`. `2659 (original P4-C2 submission baseline)
-+ 33 (new R1 tests, passing on this host) = 2692`; `4 (pre-existing P4-C1
+命令：`python -m pytest -q`。`2659 (original P4-C2 submission baseline)
++ 33 (new R1 tests, passing on this host) = 2692`；`4 (pre-existing P4-C1
 symlink-privilege skips) + 4 (new R1 POSIX-gated skips on this Windows
-host) = 8`. No pre-existing test was modified, newly failing, or newly
-skipped for a different reason than before.
+host) = 8`。没有任何原有测试被修改、新出现失败，或因不同于以往的原因被新跳过。
 
-## R1.8 P4-C1 frozen protection
+## R1.8 P4-C1 的冻结保护
 
-No file under `src/fc2_organizer/discovery/**` or `src/fc2_metadata_core/**`
-was read for the purpose of modification, and none was touched. The full
-suite's unchanged P4-C1 test count and pass status (section R1.7) is the
-behavioral proof; `git status --porcelain` after the R1 commit (section
-R1.11) is the file-level proof.
+`src/fc2_organizer/discovery/**` 或 `src/fc2_metadata_core/**` 下的任何文件都没有为了修改而被读取，也都没有被触碰。
+全量测试中未改变的 P4-C1 测试数量和通过状态（第 R1.7 节）是行为层面的证明；R1 提交之后的 `git status --porcelain`
+（第 R1.11 节）是文件层面的证明。
 
-## R1.9 Preserved behaviors (not regressed)
+## R1.9 保持不变的行为（没有回归）
 
-Verified via the unmodified, still-100%-green pre-R1 test files (`test_planning_models.py`'s
-immutability tests, `test_planning_planner.py`'s canonical-number/metadata/
-source-identity/default-layout/title-isolation/policy/collision/overwrite/
-determinism tests, `test_planning_no_mutation.py`, `test_planning_architecture.py`'s
-dependency-boundary tests) plus the full-suite regression count: Deep
-Immutability, Canonical Number Boundary, Metadata minimum-success
-validation, Source Identity, Default Layout, Title Isolation, `OutputPolicy`
-artifact naming, Collision = FAIL CLOSED, Overwrite = NEVER (frozen, no new
-field/parameter added -- re-verified directly,
-`test_overwrite_policy_is_frozen_never_and_not_a_caller_knob` still passes
-unmodified), Windows component validation, no filesystem mutation,
-filesystem-state independence, architecture boundary, package import
-safety, determinism -- all unchanged, none weakened, none re-scoped.
+通过未修改、仍然 still-100%-green 的 R1 之前的测试文件（`test_planning_models.py` 的不可变性测试、`test_planning_planner.py` 的
+规范番号 / metadata / 来源身份 / 默认布局 / 标题隔离 / 策略 / 冲突 / 覆盖 / 确定性测试、`test_planning_no_mutation.py`、
+`test_planning_architecture.py` 的依赖边界测试）以及全量回归计数验证：深度不可变、规范番号边界、metadata 最低成功标准校验、
+来源身份、默认布局、标题隔离、`OutputPolicy` artifact 命名、Collision = FAIL CLOSED、Overwrite = NEVER（冻结，没有新增字段 /
+参数 -- 已直接重新验证，`test_overwrite_policy_is_frozen_never_and_not_a_caller_knob` 仍然原样通过）、Windows 组件校验、
+不修改文件系统、与文件系统状态无关、架构边界、package import 安全、确定性 -- 全部未改变，没有任何一项被削弱或改变范围。
 
-## R1.10 Carried findings (explicitly not addressed this round)
+## R1.10 延续的 finding（本轮明确不处理）
 
 ```text
 metadata.number != canonical_number identity gap
@@ -688,12 +551,10 @@ clean (no output)
 
 ## R1.12 `git status --porcelain`
 
-Clean after the R1 code commit; clean again after this R1 docs commit
-(verify with `git status --porcelain`). No stray files (`_tmp_probe*.py`,
-`_tmp_repro.py` used during development were deleted before either commit
-and never staged).
+R1 代码提交之后是干净的；本次 R1 docs 提交之后再次是干净的（用 `git status --porcelain` 验证）。没有残留文件
+（开发期间使用的 `_tmp_probe*.py`、`_tmp_repro.py` 在两次提交之前都已删除，从未被暂存）。
 
-## R1.13 Independent R1 Closure Review
+## R1.13 独立 R1 关闭复查
 
 ```text
 REQUIRED
@@ -713,12 +574,11 @@ NOT CLOSED
 
 ---
 
-# R2 Closure -- P4-C2-R1-01
+# R2 关闭 -- P4-C2-R1-01
 
-The two sections above (original P4-C2, R1) are left unmodified for
-history. This section records the R2 incremental-closure round.
+上面的两部分（原始 P4-C2、R1）为保留历史而不做修改。本节记录 R2 增量关闭轮次。
 
-## R2.1 Coordinates
+## R2.1 坐标
 
 ```text
 R1 Reviewed-Failed Code Head = d43608645a960401c0cf0cc03d56418bdfa760be
@@ -736,22 +596,18 @@ P4-C2-GOV-03: REMAINS CLOSED (reverified, R2.5)
 P4-C2-R1-01:  CLOSED by this round (R2.5 Repro A/C/D)
 ```
 
-## R2.2 Finding addressed
+## R2.2 处理的 finding
 
 ```text
 P4-C2-R1-01
 Severity: HIGH / BLOCKING
 ```
 
-**Defect:** R1's fix for P4-C2-GOV-02 switched
-`fc2_organizer.planning.paths.is_contained_within` from
-`os.path.normpath(...).split(os.sep)` to `pathlib.Path(...).parts` to fix a
-trailing-empty-segment bug on bare drive/UNC roots. `pathlib.PurePath.parts`
-is a pure string-splitting operation, though -- it does **not** collapse
-`.`/`..` segments. Consequently a candidate whose *raw* segments happened
-to start with the root's segments compared as "contained" even when the
-path's actual lexical meaning (what it would resolve to once `..` is
-accounted for) escapes the root entirely:
+**缺陷：** R1 为修复 P4-C2-GOV-02，把
+`fc2_organizer.planning.paths.is_contained_within` 从
+`os.path.normpath(...).split(os.sep)` 改为 `pathlib.Path(...).parts`，以修复裸盘符 / UNC 根目录上的结尾空段 bug。
+然而，`pathlib.PurePath.parts` 是一个纯字符串切分操作 -- 它**不会**折叠 `.`/`..` 段。因此，一个*原始*路径段恰好以根目录的
+路径段开头的候选路径，即使其实际的词法含义（把 `..` 考虑进去后解析到的位置）完全逃出了根目录，也会被判定为“包含”：
 
 ```text
 root:      C:\library
@@ -765,10 +621,9 @@ R1's Path(...).parts comparison: ('C:\\', 'library', 'outside_wrongly_seen_as_ch
 actual lexical meaning: C:\outside\FC2-1234567.mp4 -- outside C:\library entirely
 ```
 
-The same hazard applied to `C:\library\FC2-1\..\..\outside\...` and to the
-POSIX equivalent `/library/../outside/file`.
+同样的风险也存在于 `C:\library\FC2-1\..\..\outside\...` 以及 POSIX 上等价的 `/library/../outside/file`。
 
-## R2.3 Exact changed files
+## R2.3 确切的变更文件
 
 ```text
 fc2-organizer/src/fc2_organizer/planning/paths.py                     (M)
@@ -777,58 +632,41 @@ fc2-organizer/tests/unit/planning/test_planning_models.py             (M)
 fc2-organizer/docs/review/P4_C2_HANDOFF.md                            (this section)
 ```
 
-`planner.py`, `models.py` (other than the test file), `policy.py`,
-`errors.py` were **not** touched -- the defect and its fix are entirely
-contained within `paths.is_contained_within`'s own segment-computation
-logic; nothing about the public API, error taxonomy, or default layout
-changed. `PHASE4_ORGANIZE_PLAN_CONTRACT.md` was **not** touched this round:
-its section 11 already promised pure-lexical containment and an
-independent model-layer re-check; neither promise changed, only the
-implementation's correctness in fulfilling it.
+`planner.py`、`models.py`（测试文件除外）、`policy.py`、`errors.py` 都**没有**被触碰 -- 缺陷及其修复完全局限在
+`paths.is_contained_within` 自己的路径段计算逻辑之内；公开 API、错误分类或默认布局都没有任何改变。
+`PHASE4_ORGANIZE_PLAN_CONTRACT.md` 本轮**没有**被触碰：它的第 11 节本来就承诺了纯词法的包含关系检查以及独立的模型层再检查；
+这两项承诺都没有改变，改变的只是实现履行它们的正确性。
 
-## R2.4 Normalize-then-split strategy
+## R2.4 先规范化再切分的策略
 
 ```python
 candidate_parts = Path(os.path.normpath(candidate)).parts
 root_parts = Path(os.path.normpath(root)).parts
 ```
 
-`os.path.normpath` is run on **both** strings *before* splitting into
-parts. This composes the fix for both hazards without reintroducing either:
+在切分为路径段*之前*，对**两个**字符串都运行 `os.path.normpath`。这样组合起来可以同时修复两种风险，而不会重新引入其中任何一种：
 
-* **R1-01's hazard** (un-collapsed `.`/`..`) is closed because `normpath`
-  lexically collapses `.`/`..` first -- still pure string manipulation, zero
-  filesystem access (no `stat`/`exists`/`resolve`/`realpath`).
-* **GOV-02's original hazard** (a bare anchor's trailing separator producing
-  a spurious empty `str.split(os.sep)` segment) is *not* reintroduced,
-  because the fix never returns to plain `str.split(os.sep)` -- `Path(...).parts`
-  is still used for the actual segmentation, and `normpath` never leaves a
-  bare root's trailing separator in a form that would trip `Path.parts`'s
-  anchor-collapsing (`os.path.normpath("C:\\\\")` is `"C:\\"`,
-  `Path("C:\\").parts` is `('C:\\',)`, unchanged from R1's behavior).
+* **R1-01 的风险**（未折叠的 `.`/`..`）被关闭，因为 `normpath` 会先在词法上折叠 `.`/`..` -- 仍然是纯字符串操作，零文件系统访问
+  （没有 `stat`/`exists`/`resolve`/`realpath`）。
+* **GOV-02 原来的风险**（裸锚点的结尾分隔符产生一个多余的空 `str.split(os.sep)` 段）*没有*被重新引入，因为修复从不回到普通的
+  `str.split(os.sep)` -- 实际的切分仍然使用 `Path(...).parts`，而 `normpath` 永远不会让裸根目录的结尾分隔符以一种会破坏
+  `Path.parts` 锚点合并的形式留下（`os.path.normpath("C:\\\\")` 是 `"C:\\"`，
+  `Path("C:\\").parts` 是 `('C:\\',)`，与 R1 的行为相同）。
 
-**Anchor clamping verified directly** (not assumed): `os.path.normpath`
-clamps a leading `..` at a drive or UNC-share anchor exactly the way real
-Windows path resolution does --
-`os.path.normpath(r"\\server\share\..\other\x")` yields
-`\\server\share\other\x` (stays **inside** the share), never
-`\\server\other\x` (which would be a different share). This mirrors the
-drive-root `..`-clamping precedent already established for this project by
-the P4-C1-R2-01/R3 rounds' independent `GetFullPathNameW` verification (R3.5
-of the P4-C1 handoff) -- `..` cannot cross a drive-letter or UNC-share
-boundary on Windows, by the OS's own lexical rules, not merely by this
-package's convention.
+**锚点钳制已直接验证**（而不是假定）：`os.path.normpath` 在盘符或 UNC 共享锚点处钳制前导 `..` 的方式，与真实的 Windows 路径解析
+完全相同 --
+`os.path.normpath(r"\\server\share\..\other\x")` 得到
+`\\server\share\other\x`（停留在该共享**之内**），而绝不是
+`\\server\other\x`（那会是另一个共享）。这与 P4-C1-R2-01/R3 轮次通过独立的 `GetFullPathNameW` 验证为本项目已经确立的
+盘符根目录 `..` 钳制先例一致（P4-C1 handoff 的 R3.5）-- 在 Windows 上，`..` 无法越过盘符或 UNC 共享的边界，这是由操作系统
+自身的词法规则决定的，而不仅仅是本 package 的约定。
 
-**Consequence for the "different share" test list item:** the brief's
-section 7 UNC example (`\\server\share\..\other\FC2-1234567`) is therefore
-*correctly* judged **contained** (its true lexical meaning stays inside
-`share`, it never actually reaches `other`) -- this is the right answer
-under genuine Windows lexical semantics, not an escape being wrongly
-accepted. A candidate that names a genuinely different share **from the
-start** (`\\server\other\FC2-1234567`, never reached via `..`) remains
-correctly rejected, unchanged from GOV-02 (`test_different_unc_share_from_the_start_is_still_not_contained`).
+**对“不同共享”这一测试列表项的影响：** 因此，简报第 7 节中的 UNC 示例（`\\server\share\..\other\FC2-1234567`）被*正确地*
+判定为**包含**（它真实的词法含义停留在 `share` 之内，实际上从未到达 `other`）-- 在真正的 Windows 词法语义下这是正确答案，
+而不是一次逃逸被错误地接受。一个**从一开始**就指向真正不同共享的候选路径（`\\server\other\FC2-1234567`，从未经由 `..` 到达）
+仍然被正确拒绝，与 GOV-02 相同（`test_different_unc_share_from_the_start_is_still_not_contained`）。
 
-## R2.5 Direct reproductions (outside pytest)
+## R2.5 直接复现（在 pytest 之外）
 
 ```text
 Repro A -- dot-dot escape correctly rejected:
@@ -867,71 +705,53 @@ Repro E -- POSIX /library/../outside:
   POSIX host), not a Windows-only helper.
 ```
 
-This host is Windows (win32, Python 3.12.10), so Repros A-D ran for real;
-Repro E's platform-specific runtime execution is honestly reported as
-NOT RUN with equivalent coverage in place, per the issuing instruction's
-explicit allowance.
+本主机是 Windows（win32，Python 3.12.10），因此 Repro A-D 都真实运行了；Repro E 的平台特定运行时执行如实报告为
+NOT RUN，并已有等价的覆盖，依照下发指示的明确许可。
 
-## R2.6 Targeted tests
+## R2.6 针对性测试
 
 ```text
 223 passed, 10 skipped
 ```
 
-Command: `python -m pytest tests/unit/planning tests/contract/test_planning_architecture.py -q`
-(212 prior tests + 11 new passing + 6 new POSIX-gated skips, all green;
-the 10 skips = 4 pre-existing POSIX-gated skips from R1 + 6 new
-POSIX-gated skips from R2, all correctly inert on this Windows host).
+命令：`python -m pytest tests/unit/planning tests/contract/test_planning_architecture.py -q`
+（212 个之前的测试 + 11 个新增通过的测试 + 6 个新增的 POSIX 门控跳过，全部通过；10 个跳过 = R1 中已有的 4 个 POSIX 门控跳过 +
+R2 新增的 6 个 POSIX 门控跳过，在这台 Windows 主机上都正确地不执行）。
 
-## R2.7 Full suite
+## R2.7 全量测试
 
 ```text
 2703 passed, 14 skipped
 ```
 
-Command: `python -m pytest -q`. `2692 (R1 full-suite baseline) + 11 (new
-R2 tests, passing on this host) = 2703`; `8 (R1 baseline skips) + 6 (new
-R2 POSIX-gated skips) = 14`. No pre-existing test was modified, newly
-failing, or newly skipped for a different reason than before.
+命令：`python -m pytest -q`。`2692 (R1 full-suite baseline) + 11 (new
+R2 tests, passing on this host) = 2703`；`8 (R1 baseline skips) + 6 (new
+R2 POSIX-gated skips) = 14`。没有任何原有测试被修改、新出现失败，或因不同于以往的原因被新跳过。
 
-## R2.8 GOV-01/02/03 reverified unchanged
+## R2.8 重新验证 GOV-01/02/03 未变
 
-* **GOV-01 (network guard):** untouched this round --
-  `test_planning_synthetic_gate.py` was not in the R2 changed-files list
-  (section R2.3). Full-suite pass count confirms
-  `test_synthetic_gate_no_network_import_reachable` and its planted-import
-  proof tests are still green.
-* **GOV-02 (drive/UNC containment):** re-verified directly, R2.5 Repro B/C
-  -- the exact GOV-02 reproductions (`C:\` contains `C:\FC2-1234567`;
-  `\\server\share\` contains its child; a different drive/share is
-  excluded) still pass, now composed with the R1-01 dot-collapsing fix
-  rather than superseded by it.
-* **GOV-03 (fully-qualified library_root boundary):** untouched this round
-  -- `is_fully_qualified_absolute_root` was not modified; its own test
-  class (`TestIsFullyQualifiedAbsoluteRoot`) and the planner-level tests
-  are unchanged and still green in the full-suite run.
+* **GOV-01（网络守卫）：** 本轮没有触碰 --
+  `test_planning_synthetic_gate.py` 不在 R2 的变更文件列表中（第 R2.3 节）。全量测试的通过数确认
+  `test_synthetic_gate_no_network_import_reachable` 及其植入 import 的证明测试仍然通过。
+* **GOV-02（盘符 / UNC 包含关系）：** 已直接重新验证，R2.5 Repro B/C
+  -- GOV-02 的确切复现（`C:\` 包含 `C:\FC2-1234567`；`\\server\share\` 包含其子路径；不同的盘符 / 共享被排除）仍然通过，
+  现在与 R1-01 的点段折叠修复组合在一起，而不是被它取代。
+* **GOV-03（完全限定的 library_root 边界）：** 本轮没有触碰
+  -- `is_fully_qualified_absolute_root` 没有被修改；它自己的测试类（`TestIsFullyQualifiedAbsoluteRoot`）以及 planner 层面的测试
+  都没有改变，并在全量运行中仍然通过。
 
-## R2.9 Preserved behaviors (not regressed)
+## R2.9 保持不变的行为（没有回归）
 
-Same checklist as R1.9, reverified via the full-suite regression count:
-Deep Immutability, Canonical Number Boundary, Metadata minimum-success
-validation, Source Identity, Default Layout, Title Isolation, `OutputPolicy`
-artifact naming, Collision = FAIL CLOSED, Overwrite = NEVER (frozen, no
-field/parameter added), Windows component validation, no filesystem
-mutation, filesystem-state independence, architecture boundary, package
-import safety, determinism -- all unchanged. `build_organize_plan` itself
-was not modified this round (section R2.3); identical input continues to
-produce an identical plan, and every plan's targets continue to be
-contained (existing planner-level tests, unmodified, still pass) --
-the R1-01 defect was only reachable through a *hand-built* `OrganizePlan`
-or a direct `is_contained_within` call, never through the public
-`build_organize_plan` entry point, since every caller-controlled path
-component it builds from is already validated separator/`..`-free before
-being joined (`validate_path_component`). No new planner-level test was
-therefore needed to prove no regression there; the model-layer and
-helper-level tests are where this defect could actually manifest.
+与 R1.9 相同的检查清单，通过全量回归计数重新验证：深度不可变、规范番号边界、metadata 最低成功标准校验、来源身份、默认布局、
+标题隔离、`OutputPolicy` artifact 命名、Collision = FAIL CLOSED、Overwrite = NEVER（冻结，没有新增字段 / 参数）、Windows 组件校验、
+不修改文件系统、与文件系统状态无关、架构边界、package import 安全、确定性 -- 全部未改变。`build_organize_plan` 本身在本轮
+没有被修改（第 R2.3 节）；相同的输入继续产生相同的计划，每个计划的目标继续被包含（现有的 planner 层面测试未经修改仍然通过）
+-- R1-01 缺陷只能通过*手工构建的* `OrganizePlan` 或直接调用 `is_contained_within` 触发，从不能通过公开的
+`build_organize_plan` 入口触发，因为它用来构建路径的每一个调用方可控组件，在拼接之前都已经被校验为不含分隔符 / `..`
+（`validate_path_component`）。因此不需要新的 planner 层面测试来证明那里没有回归；这个缺陷实际可能出现的地方是模型层和
+helper 层的测试。
 
-## R2.10 Carried findings (explicitly not addressed this round)
+## R2.10 延续的 finding（本轮明确不处理）
 
 ```text
 P4-C2-R1-02
@@ -971,12 +791,10 @@ clean (no output)
 
 ## R2.12 `git status --porcelain`
 
-Clean after the R2 code commit; clean again after this R2 docs commit
-(verify with `git status --porcelain`). No stray files (`_tmp_probe_r2.py`,
-`_tmp_repro_r2.py` used during development were deleted before either
-commit and never staged).
+R2 代码提交之后是干净的；本次 R2 docs 提交之后再次是干净的（用 `git status --porcelain` 验证）。没有残留文件
+（开发期间使用的 `_tmp_probe_r2.py`、`_tmp_repro_r2.py` 在两次提交之前都已删除，从未被暂存）。
 
-## R2.13 Independent R2 Closure Review
+## R2.13 独立 R2 关闭复查
 
 ```text
 REQUIRED
@@ -996,12 +814,10 @@ NOT CLOSED
 
 ---
 
-# Final Closure -- P4-C2
+# 最终关闭 -- P4-C2
 
-The sections above (original P4-C2, R1, R2) are left unmodified for
-history. This section is a docs-only governance record of the final
-independent closure decision; it introduces no code or test change and
-freezes no new technical claim beyond what R1/R2 already established.
+上面的各部分（原始 P4-C2、R1、R2）为保留历史而不做修改。本节是对最终独立关闭决定的纯文档治理记录；它不引入任何代码或测试
+改动，除了 R1/R2 已经确立的内容之外，也不冻结任何新的技术声明。
 
 ```text
 Phase:                       4
@@ -1012,7 +828,7 @@ Final Reviewed Code Head:    f56bfeef9fac2bd6a2e11e6e9065d3aea1b05ee7
 Previous Docs Head:          fa2655408f6cff8e2376d90b953cb477b16c084d
 ```
 
-## Final findings disposition
+## 最终 finding 处置
 
 ```text
 P4-C2-GOV-01   CLOSED
@@ -1023,58 +839,41 @@ P4-C2-R1-01    CLOSED
 P4-C2-R1-02    CARRIED / LOW / non-blocking
 ```
 
-**All blocking P4-C2 findings are closed. Remaining findings are
-explicitly carried as non-blocking, or stand as entry-gates for a later
-package** -- they were not fixed, not downgraded, and not reopened by this
-closure; see R1.10/R1.11/R2.10 above and "Carried findings" and "Future
-entry gates" below for what each concerns and why none was addressed
-in-round.
+**所有阻塞性的 P4-C2 finding 均已关闭。其余 finding 被明确作为非阻塞项延续，或作为后续 package 的入口门槛保留** --
+本次关闭没有修复、降级或重新打开它们；每一项涉及什么、为什么没有在本轮处理，见上文 R1.10/R1.11/R2.10 以及下文的
+“Carried findings” 和 “Future entry gates”。
 
-## Independent closure evidence
+## 独立关闭证据
 
-Two independent Level 1 review outputs were obtained for this R2 round.
+本轮 R2 获得了两份独立的 Level 1 复查输出。
 
-**Reviewer A -- PASS.** Ran the suite directly and reported real numbers:
+**复查者 A -- PASS。** 直接运行了测试集并报告了真实数字：
 
 ```text
 Targeted: 223 passed / 10 skipped
 Full suite: 2703 passed / 14 skipped
 ```
 
-and independently, substantively verified: normal-root dot/dot-dot
-containment (the exact P4-C2-R1-01 defect class), drive-root containment,
-UNC-root containment, the Windows lexical `normpath` anchor-clamping
-semantics the fix depends on, hand-built-`OrganizePlan` escape rejection at
-the model layer, and that both the network guard (GOV-01) and the
-fully-qualified root boundary (GOV-03) remain closed and unregressed.
+并独立、实质性地验证了：普通根目录的点 / 点点包含关系（正是 P4-C2-R1-01 那一类缺陷）、盘符根目录的包含关系、UNC 根目录的
+包含关系、修复所依赖的 Windows 词法 `normpath` 锚点钳制语义、在模型层拒绝手工构建的 `OrganizePlan` 的逃逸，以及网络守卫
+（GOV-01）和完全限定根目录边界（GOV-03）仍然保持关闭且没有回归。
 
-**Reviewer B -- substantive result PASS, procedural verdict BLOCKED.**
-This review's own read of the code and diff reached the same substantive
-conclusion as Reviewer A: P4-C2-R1-01 closed, GOV-01/02/03 remain closed,
-no new blocking code finding. However, that reviewer's execution
-environment had no local repository checkout available to it, so it could
-not run the targeted pytest suite, could not run the full pytest suite,
-and could not run a literal local `git diff --check` -- and its own report
-accordingly surfaced a procedural `BLOCKED` verdict for those specific,
-environment-caused gaps.
+**复查者 B -- 实质结论 PASS，程序性结论 BLOCKED。**
+这份复查自己对代码和 diff 的阅读得出了与复查者 A 相同的实质性结论：P4-C2-R1-01 已关闭，GOV-01/02/03 仍然关闭，没有新的
+阻塞性代码 finding。然而，该复查者的执行环境中没有可用的本地仓库检出，因此它无法运行针对性的 pytest 测试集，无法运行完整的
+pytest 测试集，也无法运行一次真正的本地 `git diff --check` -- 因此它自己的报告针对这些具体的、由环境造成的缺口，给出了一个
+程序性的 `BLOCKED` 结论。
 
-**This `BLOCKED` verdict was caused by the reviewer's execution
-environment, not by a code or contract finding.** No blocking or
-closure-required defect was identified by Reviewer B; the substantive
-code-level conclusion from that review is the same PASS as Reviewer A's.
+**这个 `BLOCKED` 结论是由复查者的执行环境造成的，而不是由代码或合同 finding 造成的。** 复查者 B 没有发现任何阻塞性的或必须
+关闭的缺陷；该复查在代码层面的实质结论与复查者 A 相同，也是 PASS。
 
-Closure is therefore based on **one execution-capable independent Level 1
-PASS** (Reviewer A, with real targeted/full-suite numbers and direct
-verification of every R1-01-relevant semantic) **plus one additional
-independent substantive confirmation with no code blocker** (Reviewer B),
-consistent with this project's phase-gate governance for a round whose
-change is narrowly scoped (one function's containment-normalization logic
-plus its regression tests) and whose only prior-round carried procedural
-issue (a reviewer-instruction defect, see P4-C1's own R1.1 precedent for
-this exact class of non-implementation blocker) was again environmental,
-not substantive.
+因此，关闭依据的是**一份具备执行能力的独立 Level 1
+PASS**（复查者 A，带有真实的针对性 / 全量测试数字，并直接验证了与 R1-01 相关的每一项语义）**加上一份没有代码阻塞项的额外独立
+实质性确认**（复查者 B），这与本项目针对此类轮次的阶段门槛治理一致：本轮改动范围很窄（一个函数的包含关系规范化逻辑及其回归测试），
+而上一轮唯一延续下来的程序性问题（一个复查指令缺陷，关于这一类非实现性阻塞项，见 P4-C1 自己的 R1.1 先例）同样是环境性的，
+而不是实质性的。
 
-## Carried findings
+## 延续的 finding
 
 ```text
 P4-C2-R1-02 -- LOW / CARRIED / non-blocking
@@ -1088,12 +887,12 @@ overwrite executor semantics -- CARRIED / frozen NEVER
 extended Windows reserved-name edge cases -- CARRIED
 ```
 
-Plus all pre-existing project carried debts, unchanged:
-`P4-C1-R-02`, `P4-C1-R-03`, `P4-C1-R-04`, `P4-C1-R-05`, `C2-L2`, `P2-R-05`,
-`P2-R-06`, `P2-R-07`, `P2-R-10`, `C3-N1`, `C3-N2`, `C3-N3`, `C3-N4`,
-`C4-N1`, `C4-R1-N1`, `C4-R1-N2`, `C4-R1-N3`, `F3`, `F5`, `C5-R1-L1`.
+另外还有全部原有的项目延续债务，未改变：
+`P4-C1-R-02`、`P4-C1-R-03`、`P4-C1-R-04`、`P4-C1-R-05`、`C2-L2`、`P2-R-05`、
+`P2-R-06`、`P2-R-07`、`P2-R-10`、`C3-N1`、`C3-N2`、`C3-N3`、`C3-N4`、
+`C4-N1`、`C4-R1-N1`、`C4-R1-N2`、`C4-R1-N3`、`F3`、`F5`、`C5-R1-L1`。
 
-## Future entry gates (must be resolved before, not by, a later package)
+## 将来的入口门槛（必须在后续 package 之前解决，而不是由后续 package 解决）
 
 ```text
 metadata.number != canonical_number identity gap
@@ -1117,19 +916,16 @@ overwrite = NEVER
   codebase and is not claimed to.
 ```
 
-## Scope of this closure
+## 本次关闭的范围
 
-This closes **P4-C2** (immutable organize plan) only. It does not close
-Phase 4 as a whole, and does not authorize starting P4-C3 or any other
-later Phase 4 package -- each requires its own frozen contract and its own
-review cycle, per the project's phase-gate governance (the same boundary
-P4-C1's own final closure recorded).
+这只关闭 **P4-C2**（不可变整理计划）。它不关闭整个 Phase 4，也不授权开始 P4-C3 或任何其他后续的 Phase 4 package --
+按照项目的阶段门槛治理，每一个都需要自己的冻结合同和自己的复查周期（与 P4-C1 自己的最终关闭所记录的边界相同）。
 
 ```text
 Phase 4: NOT CLOSED
 ```
 
-## Final status
+## 最终状态
 
 ```text
 P4-C2: CLOSED
