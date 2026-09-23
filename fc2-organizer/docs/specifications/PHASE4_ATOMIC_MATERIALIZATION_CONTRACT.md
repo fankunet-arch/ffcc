@@ -7,6 +7,7 @@ Package: `fc2_organizer.materialization` (`__init__.py`, `errors.py`, `models.py
 `artifacts.py`, `mapping.py`).
 Frozen Base: `e44790f57004825957f2212921171667e7c576cf`
 Substep 1 Head: `b088db8acb2c4ae47037d58546000c41543b73b1`
+Substep 2 Head: `67fb857523c59b3cd19691caedf3316171f8e0ca` (substep 2A corrects the extrafanart naming boundary, section 21)
 Branch: `claude/phase4-c6-atomic-materialization`
 
 Sections 1-15 were frozen in substep 1 and are **unchanged in substep 2** except
@@ -199,7 +200,8 @@ MaterializationError(Exception)
 ```
 
 *(substep 2)* `MappingRejectionReason`: `NFO_EMPTY`, `NFO_NOT_UTF8_ENCODABLE`,
-`PLAN_PATH_INVALID`, `IMAGE_INVALID`, `EXTRAFANART_LIMIT`, `DUPLICATE_TARGET`.
+`PLAN_PATH_INVALID`, `IMAGE_INVALID`, `INVALID_EXTRAFANART_ORDINAL`, `DUPLICATE_TARGET`
+(substep 2A replaced the former `EXTRAFANART_LIMIT`; see section 21).
 `MaterializationModelError` also covers an invalid `ArtifactWriteRequest`;
 `MaterializationInputError` also covers a wrong-type mapping / wrapper input.
 
@@ -378,10 +380,18 @@ P4-C5 fix only the `extrafanart/` directory), so substep 2 freezes:
 * `ordinal` = 1-based position in `images.extrafanart`; name =
   `f"extrafanart-{ordinal:03d}.jpg"` (`extrafanart_filename(ordinal)`).
 * Never derived from a URL basename, title, hash, `candidate_index` or randomness.
-* Range `1..999` (`MAX_EXTRAFANART_ORDINAL`). The P4-C5 default cap is 12, but
-  `ImageAcquisitionPolicy.max_extrafanart` has no upper bound, so more than 999
-  entries -> `ArtifactMappingError(EXTRAFANART_LIMIT)` for the whole mapping --
-  **fail closed, never truncated**.
+* *(substep 2A)* `ordinal` is **any exact positive `int`** -- there is **no
+  maximum**. `03d` is a *minimum* width only: `1 -> extrafanart-001.jpg`,
+  `12 -> extrafanart-012.jpg`, `999 -> extrafanart-999.jpg`,
+  `1000 -> extrafanart-1000.jpg`, `10000 -> extrafanart-10000.jpg`. Every
+  entry of `images.extrafanart` yields a request; nothing is truncated, wrapped
+  (modulo) or dropped, and names stay unique. The P4-C5
+  `ImageAcquisitionPolicy.max_extrafanart` default of 12 is only a default of
+  that policy (which is itself unbounded above), **not** a P4-C6 limit.
+* `extrafanart_filename` rejects `0`, negatives, `bool`, `float`, `str` and
+  `int` subclasses with `ArtifactMappingError(INVALID_EXTRAFANART_ORDINAL)`.
+  (Substep 2's `MAX_EXTRAFANART_ORDINAL = 999` cap and its `EXTRAFANART_LIMIT`
+  reason were removed in substep 2A: P4-C6 must not add a limit P4-C5 does not have.)
 * The directory is **not created** here; if it does not exist, the write of
   each extrafanart request fails with the primitive's `ParentDirectoryMissingError`.
 
@@ -435,7 +445,7 @@ runtime test proves `mapping` imports and works with `amane`, `httpx`,
 | requirement | test file |
 |---|---|
 | NFO-only / full manifest, missing optional images (7 combinations), no cross-role fallback, fixed order, exact targets, determinism | `tests/unit/materialization/test_materialization_mapping.py` |
-| extrafanart order (tuple, not `candidate_index`), `extrafanart-001..012.jpg`, no URL/title/hash, `1..999` bound, >999 fails closed | `test_materialization_mapping.py` |
+| extrafanart order (tuple, not `candidate_index`), `extrafanart-001..012.jpg`, no URL/title/hash; *(2A)* `03d` minimum width (1/12/999/1000/10000), no maximum, 1000 extrafanart mapped in memory (last `extrafanart-1000.jpg`, replay identical), 0 / negative / bool / float / int-subclass rejected | `test_materialization_mapping.py` |
 | exact UTF-8, Unicode / emoji, CRLF / whitespace / U+FEFF / decomposed form preserved, no BOM, empty NFO, unencodable NFO (unchained) | `test_materialization_mapping.py` |
 | image bytes identity (`is`), duplicate bytes not de-duplicated, request holds no foreign object | `test_materialization_mapping.py` |
 | hostile `str` NFO subclass, plan / images subclass (zero attribute access), wrong types, forged path / colliding paths / wrong-role image | `test_materialization_mapping.py` |

@@ -31,9 +31,8 @@ from fc2_organizer.materialization.errors import (
 from fc2_organizer.materialization.models import ArtifactKind, ArtifactWriteRequest
 from fc2_organizer.planning import OrganizePlan, PlannedPath
 
-__all__ = ["build_artifact_requests", "extrafanart_filename", "MAX_EXTRAFANART_ORDINAL"]
+__all__ = ["build_artifact_requests", "extrafanart_filename"]
 
-MAX_EXTRAFANART_ORDINAL = 999
 _EXTRAFANART_FORMAT = "extrafanart-{:03d}.jpg"
 
 _MAIN_IMAGES = (
@@ -45,9 +44,14 @@ _MAIN_IMAGES = (
 
 
 def extrafanart_filename(ordinal: int) -> str:
-    """``extrafanart-001.jpg`` ... ``extrafanart-999.jpg`` (1-based, 3 digits, frozen)."""
-    if type(ordinal) is not int or not 1 <= ordinal <= MAX_EXTRAFANART_ORDINAL:
-        raise ArtifactMappingError(MappingRejectionReason.EXTRAFANART_LIMIT)
+    """``extrafanart-{ordinal:03d}.jpg`` for any exact ``int >= 1`` (frozen).
+
+    ``03d`` is a *minimum* width: 1 -> ``extrafanart-001.jpg``, 1000 ->
+    ``extrafanart-1000.jpg``. There is no maximum (P4-C5 ``max_extrafanart`` is
+    unbounded); nothing is truncated, wrapped or dropped.
+    """
+    if type(ordinal) is not int or ordinal < 1:
+        raise ArtifactMappingError(MappingRejectionReason.INVALID_EXTRAFANART_ORDINAL)
     return _EXTRAFANART_FORMAT.format(ordinal)
 
 
@@ -76,8 +80,6 @@ def build_artifact_requests(
     extrafanart = images.extrafanart
     if type(extrafanart) is not tuple:
         raise ArtifactMappingError(MappingRejectionReason.IMAGE_INVALID)
-    if len(extrafanart) > MAX_EXTRAFANART_ORDINAL:
-        raise ArtifactMappingError(MappingRejectionReason.EXTRAFANART_LIMIT)
     directory = _plan_path(plan.extrafanart_directory)
     for ordinal, image in enumerate(extrafanart, start=1):
         requests.append(ArtifactWriteRequest(

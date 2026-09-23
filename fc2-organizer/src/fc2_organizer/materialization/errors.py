@@ -69,7 +69,7 @@ class MappingRejectionReason(Enum):
     NFO_NOT_UTF8_ENCODABLE = "nfo_not_utf8_encodable"
     PLAN_PATH_INVALID = "plan_path_invalid"
     IMAGE_INVALID = "image_invalid"
-    EXTRAFANART_LIMIT = "extrafanart_limit"
+    INVALID_EXTRAFANART_ORDINAL = "invalid_extrafanart_ordinal"
     DUPLICATE_TARGET = "duplicate_target"
 
 

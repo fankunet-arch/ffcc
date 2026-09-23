@@ -18,11 +18,7 @@ from fc2_organizer.materialization import (
     MaterializationInputError,
     MaterializationModelError,
 )
-from fc2_organizer.materialization.mapping import (
-    MAX_EXTRAFANART_ORDINAL,
-    build_artifact_requests,
-    extrafanart_filename,
-)
+from fc2_organizer.materialization.mapping import build_artifact_requests, extrafanart_filename
 from fc2_organizer.planning import OrganizePlan
 
 from ._builders import NFO_TEXT, full_images, image, jpeg, make_plan
@@ -110,23 +106,45 @@ def test_extrafanart_name_never_uses_url_title_hash_or_randomness(plan):
         assert all(img.sha256[:8] not in name for img in images.extrafanart)
 
 
-def test_extrafanart_filename_bounds():
-    assert extrafanart_filename(1) == "extrafanart-001.jpg"
-    assert extrafanart_filename(999) == "extrafanart-999.jpg"
-    for bad in (0, -1, 1000, True, 1.0, "1"):
-        with pytest.raises(ArtifactMappingError) as info:
-            extrafanart_filename(bad)
-        assert info.value.reason is R.EXTRAFANART_LIMIT
+@pytest.mark.parametrize(("ordinal", "name"), [
+    (1, "extrafanart-001.jpg"),
+    (12, "extrafanart-012.jpg"),
+    (99, "extrafanart-099.jpg"),
+    (999, "extrafanart-999.jpg"),
+    (1000, "extrafanart-1000.jpg"),
+    (10000, "extrafanart-10000.jpg"),
+    (123456789, "extrafanart-123456789.jpg"),
+])
+def test_extrafanart_filename_03d_is_minimum_width_with_no_maximum(ordinal, name):
+    assert extrafanart_filename(ordinal) == name
 
 
-def test_more_than_999_extrafanart_fails_closed_never_truncates(plan):
-    one = image(ImageRole.EXTRAFANART, jpeg(b"x"))
-    images = ImageAcquisitionResult(extrafanart=(one,) * (MAX_EXTRAFANART_ORDINAL + 1))
+class _Int(int):
+    pass
+
+
+@pytest.mark.parametrize("bad", [0, -1, -1000, True, False, 1.0, "1", None, _Int(1)],
+                         ids=["zero", "neg", "neg-large", "True", "False", "float", "str", "None", "int-subclass"])
+def test_extrafanart_filename_rejects_non_positive_or_non_exact_int(bad):
     with pytest.raises(ArtifactMappingError) as info:
-        build_artifact_requests(plan, NFO_TEXT, images)
-    assert info.value.reason is R.EXTRAFANART_LIMIT
-    assert len(build_artifact_requests(plan, NFO_TEXT,
-                                       ImageAcquisitionResult(extrafanart=(one,) * MAX_EXTRAFANART_ORDINAL))) == 1000
+        extrafanart_filename(bad)
+    assert info.value.reason is R.INVALID_EXTRAFANART_ORDINAL
+
+
+def test_1000_extrafanart_map_completely_in_memory(plan):
+    extras = tuple(image(ImageRole.EXTRAFANART, jpeg(b"%d" % (i % 7)), candidate_index=i) for i in range(1000))
+    images = ImageAcquisitionResult(extrafanart=extras)
+    requests = build_artifact_requests(plan, NFO_TEXT, images)
+    extra_reqs = requests[1:]
+    assert len(requests) == 1001 and len(extra_reqs) == 1000
+    assert all(r.kind is ArtifactKind.EXTRAFANART for r in extra_reqs)
+    assert [r.ordinal for r in extra_reqs] == list(range(1, 1001))
+    names = [os.path.basename(r.target_path) for r in extra_reqs]
+    assert names[0] == "extrafanart-001.jpg" and names[998] == "extrafanart-999.jpg"
+    assert names[-1] == "extrafanart-1000.jpg"
+    assert len(set(names)) == 1000  # no truncation / modulo collision
+    assert all(r.content is e.content for r, e in zip(extra_reqs, extras, strict=True))  # order kept, no dedupe
+    assert build_artifact_requests(plan, NFO_TEXT, images) == requests  # deterministic replay
 
 
 def test_mapping_is_deterministic(plan):
