@@ -336,3 +336,172 @@ Phase 4            = NOT CLOSED
 ```
 
 The developer does not declare P4-C5 or Phase 4 closed.
+
+
+---
+
+# R1 Remediation -- P4-C5-R-01 (HIGH), P4-C5-R-02 (MEDIUM)
+
+Sections above are the unchanged original handoff. This section records R1 only:
+no new feature, no other package touched.
+
+```text
+Branch                       = claude/phase4-c5-image-acquisition
+R1 Base                      = d8831d255e7a509fe24544ef5e1652d6c2fdb513
+Previous Reviewed Code Head  = 3ef881b416439accf634ce792723b49d01db0d64
+R1 Code Review Candidate     = 65036e3857f87d821b5b282d7162ddbdabd42773
+R1 Docs Head                 = <this commit; see `git log -1 -- fc2-organizer/docs/review/P4_C5_HANDOFF.md`>
+Remote Head                  = <== R1 Docs Head after push>
+
+R1 Code Review Range: d8831d255e7a509fe24544ef5e1652d6c2fdb513..65036e3857f87d821b5b282d7162ddbdabd42773
+R1 Docs Review Range: 65036e3857f87d821b5b282d7162ddbdabd42773..<R1 Docs Head>
+```
+
+Verified before any change: `git fetch --all --tags`; HEAD ==
+`origin/claude/phase4-c5-image-acquisition` == `d8831d2`; working tree clean. No
+rebase / amend / squash / force push.
+
+## R1.1 Changed files (R1 Code Review Candidate, 3 files, +407 / -17)
+
+```text
+fc2-organizer/src/fc2_organizer/images/transport.py                  (fix)
+fc2-organizer/tests/unit/images/test_image_transport.py              (+47 regression tests, appended)
+fc2-organizer/docs/specifications/PHASE4_IMAGE_ACQUISITION_CONTRACT.md (12.7 note, new 12.9a)
+```
+
+Not touched: `errors.py` (no new error class needed), `urls.py`, `jpeg.py`,
+`acquisition.py`, `models.py`, `policy.py`, every other Phase 4 package.
+
+## R1.2 P4-C5-R-01 -- cleanup exception boundary: FIXED
+
+Root cause: `_follow` closed the response in a bare `finally: await
+response.aclose()`, and `_read_body` closed its byte iterator the same way. An
+ordinary exception raised by cleanup therefore (a) replaced an already-returned
+value (non-200 / `TOO_LARGE` path), and so escaped `_map_exception` as a raw
+httpx exception carrying the message, `httpx.Request` and URL/token; and (b)
+replaced a propagating `CancelledError`. After (b), `asyncio.timeout` never
+turned the deadline into `ImageTimeoutError`, and caller cancellation was lost.
+
+Fix (`transport.py`):
+
+* `_cleanup(close)` runs one cleanup step. An ordinary `Exception` becomes a
+  fresh error value through the existing type-based `_map_exception` (httpx
+  `NetworkError` incl. `CloseError` / `ProtocolError` / `ProxyError` ->
+  `ImageConnectionError`; timeout family -> `ImageTimeoutError`; anything else ->
+  `ImageTransportError`). It is created, never raised, so it has no cause,
+  context or traceback. A `BaseException` raised by the cleanup itself
+  propagates.
+* The response-handling body moved into `_response_outcome`, which returns every
+  ordinary failure as a value. `_follow` then either (a) closes normally, or (b)
+  on `BaseException` closes via `_cleanup` and re-raises the **original object**
+  (bare `raise`).
+* Precedence: an existing error value wins over a cleanup error. A cleanup
+  error replaces only a successful `ImageHttpResponse` (fail closed). A
+  propagating cancellation / fatal always wins over an ordinary cleanup error.
+* `_read_body` uses the same pattern for the byte iterator (`too_large` flag
+  instead of returning from inside the `try`).
+
+## R1.3 Cancellation / fatal preservation
+
+* Primary `CancelledError`, custom `BaseException`, `KeyboardInterrupt`,
+  `SystemExit` and `GeneratorExit` combined with a failing cleanup (httpx
+  `CloseError` or `RuntimeError`): the raised object `is` the primary. That is
+  10 parametrized cases, captured in the same task for identity.
+* Real caller `task.cancel()` during the body plus a failing cleanup:
+  `CancelledError` propagates.
+* Deadline expiry during the body plus a failing cleanup (httpx or ordinary):
+  `ImageTimeoutError`.
+* Cancellation / fatal raised *by cleanup itself* (`_R1Fatal`,
+  `KeyboardInterrupt`, `CancelledError`) propagates as the same object: never
+  swallowed, never mapped.
+
+## R1.4 P4-C5-R-02 -- huge deadline: FIXED
+
+The accepted domain is unchanged: `ImageAcquisitionPolicy(request_deadline_seconds=10**400)`
+is still valid, and `get()` still accepts any exact positive `int`.
+`_deadline_delay` converts the deadline to a float once, by exception type
+(`OverflowError` of the conversion, no message sniffing). If it cannot be
+represented (`10**400`, `10**309`, `2**1024`), `get()` sends **nothing** and
+raises a fresh fixed-message `ImageTransportError` (`TRANSPORT_ERROR`) with cause
+and context `None`. Before R1 these cases leaked `OverflowError` from
+`asyncio.timeout`. The acquisition layer already records any `Exception` from
+`get()` as a per-candidate failure, so it now records `TRANSPORT_ERROR` for
+such a policy. Representable deadlines are unchanged: `15.0`, `1`, `5`, `3600`,
+`10**300`, `10**308`, `1e300` and `sys.float_info.max` all succeed with exactly
+one request.
+
+## R1.5 New regression tests (`test_image_transport.py`, 47 cases)
+
+Secrets used: the exception message `SECRET_EXCEPTION_TEXT`, plus
+`https://example.com/x.jpg?token=SUPERSECRET` as both the message URL and the
+exception's `httpx.Request`. `assert_r1_clean` checks:
+* `str` / `repr` / `args` contain no secret, token, host, httpx name or
+  `<Request` / `<Response`;
+* `__cause__` and `__context__` are `None`;
+* an object-graph walk (args, cause, context, `__dict__`, notes, reason) holds no
+  `httpx.Request` / `httpx.Response` / `httpx.HTTPError` and no exception other
+  than itself;
+* the traceback holds no worker / cleanup frame and no frame local of those
+  types.
+
+| # | scenario | expected |
+|---|---|---|
+| 1 | non-200 (404/500/204) + httpx `CloseError` on close | `ImageConnectionError`, 0 body chunks read |
+| 1b | non-200 + `RuntimeError` on close | `ImageTransportError` |
+| 2 | 200 success + `CloseError` / `ValueError` on close | `ImageConnectionError` / `ImageTransportError` |
+| 3 | `TOO_LARGE` (streamed and declared) + `CloseError` | `ImageResponseTooLargeError` (primary kept) |
+| 3b | mid-stream `ReadError` + cleanup `RuntimeError` | `ImageConnectionError` (primary kept) |
+| 4 | deadline during body + `CloseError` / `RuntimeError` | `ImageTimeoutError` |
+| 5 | caller cancel + `CloseError`; primary `CancelledError` + cleanup error | `CancelledError`, same object |
+| 6 | primary custom fatal / `KeyboardInterrupt` / `SystemExit` / `GeneratorExit` + cleanup error | same object |
+| 7 | cleanup itself raises fatal / `KeyboardInterrupt` / `CancelledError` | same object, not mapped |
+| 8 | `_cleanup` maps by type (misleading messages) and returns values with no cause / context / traceback | type decides |
+| 9 | successful cleanup | response unchanged |
+| R2 | `10**400`, `10**309`, `2**1024` | `ImageTransportError`, no request, no `OverflowError` |
+| R2 | policy still accepts `10**400`; `_deadline_delay` is type-based | domain unchanged |
+| R2 | `15.0`, `1`, `5`, `3600`, `10**300`, `10**308`, `1e300`, `float max` | success, one request |
+
+Mutation check: the 47 cases were run against the `d8831d2` `transport.py`.
+**26 fail** with a raw `httpx.CloseError` (secret message), `RuntimeError`,
+`OverflowError` or a missing helper. The 21 that pass there are the expected
+controls: 200-path close (httpx closes inside iteration and was already
+mapped), fatal-from-cleanup, representable deadlines, policy domain and
+successful cleanup.
+
+## R1.6 Tests
+
+```text
+New regression only : python -m pytest tests/unit/images/test_image_transport.py -k "r1 or r2" -q
+                      47 passed
+Targeted            : python -m pytest tests/unit/images tests/contract/test_images_architecture.py -q
+                      632 passed, 0 failed, 0 skipped
+Full suite          : python -m pytest -q
+                      3852 passed, 14 skipped, 0 failed
+```
+
+All runs were from `fc2-organizer/` with `-p no:cacheprovider
+--basetemp=<job-owned tmp>` (known local pytest temp-permission quirk). The 14
+skips are the same count as before R1: the pre-existing Windows-symlink-privilege
+and POSIX-only path-form skips. No images test is skipped.
+
+## R1.7 Carried / unchanged
+
+No finding other than P4-C5-R-01 / R-02 was addressed. Every carried debt listed
+above is unchanged, and so is the un-numbered fc2db_net release observation.
+
+## R1.8 Hygiene
+
+```text
+git diff --check (R1 code range, R1 docs range) -> clean
+git status --porcelain after push             -> clean
+```
+
+## R1.9 Status
+
+```text
+P4-C5-R-01          = FIXED (pending independent re-review)
+P4-C5-R-02          = FIXED (pending independent re-review)
+Independent Re-review = REQUIRED
+P4-C5               = NOT CLOSED
+Phase 4             = NOT CLOSED
+```
