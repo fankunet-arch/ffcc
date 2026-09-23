@@ -1,18 +1,22 @@
 # FC2 Organizer -- Phase 4 / P4-C6 Atomic Artifact Materialization Contract
 
-Status: **substeps 1-2 frozen candidate** (atomic single-artifact primitive; artifact
-mapping + single-artifact materializer). Anything still open is marked **PENDING IN
-LATER P4-C6 SUBSTEP** (section 25). Independent review REQUIRED.
+Status: **P4-C6 implementation complete** (substeps 1, 2, 2A, 3). **Independent review
+REQUIRED. P4-C6 NOT CLOSED.** Nothing is pending inside P4-C6 (section 25).
 Package: `fc2_organizer.materialization` (`__init__.py`, `errors.py`, `models.py`, `atomic.py`,
 `artifacts.py`, `mapping.py`).
 Frozen Base: `e44790f57004825957f2212921171667e7c576cf`
 Substep 1 Head: `b088db8acb2c4ae47037d58546000c41543b73b1`
-Substep 2 Head: `67fb857523c59b3cd19691caedf3316171f8e0ca` (substep 2A corrects the extrafanart naming boundary, section 21)
+Substep 2 Head: `67fb857523c59b3cd19691caedf3316171f8e0ca`
+Substep 2A Head: `2016107bd33fc4de546698790acb84f3d28cc8a9` (extrafanart naming boundary correction, section 21)
+Final Code Review Candidate: the substep-3 commit that introduced this line (gate + contract
+finalization; no production change). Its SHA is recorded in `docs/review/P4_C6_HANDOFF.md`
+(a commit cannot contain its own hash).
 Branch: `claude/phase4-c6-atomic-materialization`
 
 Sections 1-15 were frozen in substep 1 and are **unchanged in substep 2** except
 for the additive notes marked *(substep 2)*. Sections 16-24 are **IMPLEMENTED IN
-SUBSTEP 2**.
+SUBSTEP 2** (section 21 corrected in 2A). Sections 25-27 were added in substep 3,
+which changed **no production source**.
 
 ## 1. Scope
 
@@ -457,6 +461,62 @@ runtime test proves `mapping` imports and works with `amane`, `httpx`,
 | no rollback of an earlier success; wrapper only delegates; non-request / subclass rejected | `test_materialization_artifacts.py` |
 | mapping / wrapper architecture, `__init__` never loads mapping | `tests/contract/test_materialization_architecture.py` |
 
-## 25. PENDING IN LATER P4-C6 SUBSTEP
+## 25. Implementation status
 
-* final P4-C6 handoff.
+**P4-C6 implementation complete.** Nothing is pending inside P4-C6; the former
+"PENDING IN LATER P4-C6 SUBSTEP" items (artifact mapping, NFO / image /
+extrafanart materialization, final handoff) are delivered by substeps 2, 2A and 3;
+the handoff is `docs/review/P4_C6_HANDOFF.md`. Independent review is
+**REQUIRED**; P4-C6 is **NOT CLOSED**.
+
+## 26. Integrated synthetic gate (substep 3)
+
+`tests/unit/materialization/test_materialization_synthetic_gate.py` -- test-layer
+orchestration only (it creates its own temporary directories, standing in for
+P4-C7, and calls `materialize_artifact` once per request). The production
+package gains no multi-artifact function.
+
+* **300 deterministic synthetic films** under pytest `tmp_path`, no network,
+  no user files: 100 NFO-only; 100 NFO + each of the 7 non-empty
+  poster/fanart/thumb combinations; 100 NFO + all 8 main-art combinations +
+  1..13 extrafanart. Titles cover CJK, half-width kana, emoji, XML-special
+  characters, decomposed Unicode, tabs; every 11th NFO uses CRLF; duplicate
+  bytes across poster/fanart and repeated extrafanart bytes are included.
+* Per film, expectations come from the case definition (not the production
+  result): request order / kind / target path / ordinal / exact bytes; image
+  content identity; replay equality; then after one `materialize_artifact`
+  per request: file bytes, `size_bytes`, `sha256`, NFO = exact UTF-8 without
+  BOM, exact directory listing (no extra file, no temp residue).
+* Extrafanart boundary: 1 / 12 / 999 / 1000 names; a 1000-item mapping in
+  memory (last `extrafanart-1000.jpg`, nothing written); no maximum.
+* Overwrite NEVER for each of the five kinds: original bytes, inode and mtime
+  unchanged, directory listing unchanged (no suffix, no temp).
+* Partial success: NFO written, later poster `TargetExistsError`, NFO intact.
+* Failure injection through `materialize_artifact` (write / flush / close /
+  publish, both publish strategies) and cleanup failure: no final file, exact
+  owned temp removed (or, for cleanup failure, only the own temp remains),
+  planted unrelated temps intact.
+* Same-target race through `materialize_artifact`: barrier-forced (2 writers)
+  and unsynchronised (8 writers x 5 rounds), both strategies: exactly one
+  winner, complete winner bytes, losers `TargetExistsError`, no residue.
+* Architecture regression scan and direct reproductions A-H (see the handoff).
+* Non-vacuity: temporarily mutating `mapping.py` (prefixing a BOM; `03d` ->
+  `02d`) made the gate fail (5 and 4 failures respectively); the mutation was
+  reverted and is not committed.
+
+## 27. Not P4-C6 responsibilities (frozen) and evidence notes
+
+P4-C6 does **not**: create the target directory; create `extrafanart/`;
+`MOVE_MEDIA`; verify source media; move media across volumes; run a whole-plan
+preflight; execute the operation graph; provide a rollback / transaction; CLI /
+UI; persistence; Amane integration. These belong to later packages, in
+particular P4-C7.
+
+Evidence notes for independent review (not defects, not PASS claims):
+
+* Real POSIX-host publish (`os.link` + unlink on a native POSIX filesystem):
+  **NOT YET OBSERVED.** The hard-link strategy was exercised only through the
+  private strategy seam on NTFS.
+* Windows real symlink cases: **SKIPPED** on the development host (no symlink
+  privilege). Junction cases and the host-independent `lstat` simulation were
+  executed.
