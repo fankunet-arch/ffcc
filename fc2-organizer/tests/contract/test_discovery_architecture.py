@@ -172,4 +172,4 @@ def test_organizer_package_has_no_other_stray_top_level_modules_yet():
     P4-C2-side guard and ``docs/review/P4_C2_HANDOFF.md`` for why this one
     line in an otherwise-frozen P4-C1 file was touched."""
     top_level_dirs = {p.name for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"}
-    assert top_level_dirs == {"discovery", "planning", "publication", "nfo", "images"}  # P4-C3 publication, P4-C4 nfo
+    assert top_level_dirs == {"discovery", "planning", "publication", "nfo", "images", "materialization"}  # P4-C3 publication, P4-C4 nfo

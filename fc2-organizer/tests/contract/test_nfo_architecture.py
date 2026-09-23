@@ -203,4 +203,4 @@ def test_nfo_public_api_is_exactly_the_renderer_and_the_error_classes():
 def test_organizer_package_now_has_exactly_discovery_planning_publication_and_nfo():
     """P4-C4 scope guard: no fifth package (writer, executor, downloader, ...) was started early."""
     top_level_dirs = {p.name for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"}
-    assert top_level_dirs == {"discovery", "planning", "publication", "nfo", "images"}
+    assert top_level_dirs == {"discovery", "planning", "publication", "nfo", "images", "materialization"}
