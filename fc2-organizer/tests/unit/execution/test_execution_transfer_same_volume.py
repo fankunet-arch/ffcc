@@ -667,3 +667,96 @@ def test_transfer_outcome_is_immutable_and_strict():
             TransferOutcome(**values)
     with pytest.raises(ExecutionModelError):
         TransferOutcome((), failure, SAME, None, 3, ())                           # size without a publish
+
+
+# --------------------------------------------------------------------------- R2: atomic-rename outcome invariant
+
+
+def _mismatch(stage=TransferStage.PUBLISH_VERIFY, kind=F.PUBLISHED_MEDIA_MISMATCH):
+    return ExecutionFailure(step=ExecutionStep.MOVE_MEDIA, kind=kind, stage=stage)
+
+
+@pytest.mark.parametrize("case", [
+    "A_cross_volume",
+    "B_wrong_stage",
+    "B_no_stage",
+    "C_source_unlink_failed",
+    "D_source_removed_only",
+    "E_same_volume_link_semantics",
+    "E_with_leftover",
+])
+def test_public_constructor_never_builds_failed_outcome_with_source_removed(case):
+    both = (_media_effect(), _removed_effect())
+    args = {
+        "A_cross_volume": (both, _mismatch(), CROSS, None, 3, ()),
+        "B_wrong_stage": (both, _mismatch(stage=TransferStage.SAME_VOLUME_PRIMITIVE), SAME, None, 3, ()),
+        "B_no_stage": (both, _mismatch(stage=None), SAME, None, 3, ()),
+        "C_source_unlink_failed": (both, _mismatch(stage=TransferStage.SOURCE_UNLINK,
+                                                   kind=F.SOURCE_UNLINK_FAILED), SAME, None, 3, ()),
+        "D_source_removed_only": ((_removed_effect(),), _mismatch(), SAME, None, None, ()),
+        # Exactly the atomic-rename shape, but built by the public constructor (e.g. POSIX link semantics):
+        # without the rename path's private witness it is refused.
+        "E_same_volume_link_semantics": (both, _mismatch(), SAME, None, 3, ()),
+        "E_with_leftover": (both, _mismatch(), SAME, None, 3,
+                            (LeftoverTemporary(PathRole.TARGET_DIRECTORY, ".fc2tmp-" + "1" * 32 + ".part"),)),
+    }[case]
+    with pytest.raises(ExecutionModelError):
+        TransferOutcome(*args)
+    assert callable(assert_source_not_lost)
+
+
+def _context(ts, strategy):
+    return transfer._Context(ts.plan, ts.source_identity, ts.target_identity, strategy)
+
+
+def test_atomic_rename_factory_checks_its_provenance(tmp_path):
+    ts = transfer_scene(tmp_path, content=CONTENT, plant=False)
+    media = CompletedEffect(EffectKind.MEDIA_PUBLISHED, PathRole.TARGET_MEDIA, ts.final, ts.source_identity,
+                            ts.size, None, None, None)
+    built = transfer._atomic_rename_mismatch_outcome(_context(ts, "rename"), media, _mismatch())
+    assert [e.kind for e in built.effects] == [EffectKind.MEDIA_PUBLISHED, EffectKind.SOURCE_REMOVED]
+    assert built.failure == _mismatch() and built.transfer_mode is SAME and built.media_sha256 is None
+    assert built.media_size == ts.size and built.leftover_temporaries == ()
+    other = EntryIdentity(ts.source_identity.device, ts.source_identity.inode + 1, EntryType.FILE,
+                          ts.size, ts.source_identity.mtime_ns)
+    refused = [
+        (_context(ts, "link"), media, _mismatch()),                                  # POSIX link path
+        (object(), media, _mismatch()),                                              # no real context
+        (_context(ts, "rename"), media, _mismatch(stage=TransferStage.PUBLISH)),     # wrong stage
+        (_context(ts, "rename"), media, _mismatch(kind=F.SOURCE_UNLINK_FAILED)),     # wrong kind
+        (_context(ts, "rename"), CompletedEffect(EffectKind.MEDIA_PUBLISHED, PathRole.TARGET_MEDIA, ts.final,
+                                                 other, ts.size, None, None, None), _mismatch()),
+        (_context(ts, "rename"), CompletedEffect(EffectKind.MEDIA_PUBLISHED, PathRole.TARGET_MEDIA, ts.final,
+                                                 ts.source_identity, ts.size, "a" * 64, None, None), _mismatch()),
+    ]
+    for args in refused:
+        with pytest.raises(ExecutionModelError):
+            transfer._atomic_rename_mismatch_outcome(*args)
+    assert os.path.exists(ts.source) and not os.path.lexists(ts.final)
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+def test_atomic_rename_witness_is_reachable_only_from_the_rename_mismatch_path():
+    import ast
+
+    tree = ast.parse(Path(transfer.__file__).read_text(encoding="utf-8"))
+    witness_users, factory_callers = set(), []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Name) and node.id == "_ATOMIC_RENAME_WITNESS":
+                witness_users.add(fn.name)
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "_atomic_rename_mismatch_outcome"):
+                factory_callers.append(fn.name)
+    assert witness_users == {"_init_outcome", "_atomic_rename_mismatch_outcome"}
+    assert factory_callers == ["_same_volume"]
+    same_volume = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_same_volume")
+    guarded = [n for n in ast.walk(same_volume) if isinstance(n, ast.If)
+               and ast.unparse(n.test) == "ctx.strategy == 'rename'"
+               and any(isinstance(c, ast.Call) and getattr(c.func, "id", None) == "_atomic_rename_mismatch_outcome"
+                       for c in ast.walk(n))]
+    assert len(guarded) == 1
+    assert "_ATOMIC_RENAME_WITNESS" not in transfer.__all__ and "_atomic_rename_mismatch_outcome" not in transfer.__all__
+    assert callable(assert_source_not_lost)

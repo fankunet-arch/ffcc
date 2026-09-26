@@ -129,38 +129,10 @@ class TransferOutcome:
     def __init__(self, effects: tuple[CompletedEffect, ...], failure: ExecutionFailure | None,
                  transfer_mode: TransferMode, media_sha256: str | None, media_size: int | None,
                  leftover_temporaries: tuple[LeftoverTemporary, ...]) -> None:
-        if type(effects) is not tuple or any(type(e) is not CompletedEffect or e.kind not in _MEDIA_KINDS
-                                             for e in effects):
-            raise ExecutionModelError("TransferOutcome.effects must be a tuple of media CompletedEffects")
-        kinds = tuple(e.kind for e in effects)
-        if kinds not in ((), (EffectKind.MEDIA_PUBLISHED,), (EffectKind.SOURCE_REMOVED,), _MEDIA_KINDS):
-            raise ExecutionModelError("TransferOutcome.effects must follow MEDIA_PUBLISHED -> SOURCE_REMOVED")
-        if failure is not None and (type(failure) is not ExecutionFailure or failure.step is not _STEP):
-            raise ExecutionModelError("TransferOutcome.failure must be a MOVE_MEDIA ExecutionFailure or None")
-        if failure is None and kinds[-1:] != (EffectKind.SOURCE_REMOVED,):
-            raise ExecutionModelError("a TransferOutcome without failure ends with SOURCE_REMOVED")
-        if failure is not None and kinds[-1:] == (EffectKind.SOURCE_REMOVED,) and not (
-                kinds == _MEDIA_KINDS and failure.kind is ExecutionFailureKind.PUBLISHED_MEDIA_MISMATCH):
-            # The only failure after SOURCE_REMOVED: a Windows same-volume rename that already published the
-            # final and removed the source in one atomic step, then failed its post-publish verification.
-            raise ExecutionModelError("a failed TransferOutcome ends with SOURCE_REMOVED only after an atomic "
-                                      "rename whose verification failed")
-        if type(transfer_mode) is not TransferMode:
-            raise ExecutionModelError("TransferOutcome.transfer_mode must be a TransferMode")
-        published = EffectKind.MEDIA_PUBLISHED in kinds
-        if media_sha256 is not None and not (_is_sha256_hex(media_sha256) and published
-                                             and transfer_mode is TransferMode.CROSS_VOLUME):
-            raise ExecutionModelError("TransferOutcome.media_sha256 is set only for a published cross-volume copy")
-        if media_size is not None and not (type(media_size) is int and media_size >= 0 and published):
-            raise ExecutionModelError("TransferOutcome.media_size is an exact int >= 0 set only when published")
-        if published and media_size is None:
-            raise ExecutionModelError("a published TransferOutcome records media_size")
-        if type(leftover_temporaries) is not tuple or any(type(item) is not LeftoverTemporary
-                                                          for item in leftover_temporaries):
-            raise ExecutionModelError("TransferOutcome.leftover_temporaries must be a tuple[LeftoverTemporary]")
-        for name, value in zip(_OUTCOME_FIELDS, (effects, failure, transfer_mode, media_sha256, media_size,
-                                                 leftover_temporaries)):
-            object.__setattr__(self, name, value)
+        # The public constructor never carries the atomic-rename witness, so it refuses every failed outcome
+        # that contains SOURCE_REMOVED; only _atomic_rename_mismatch_outcome can build that single state.
+        _init_outcome(self, effects, failure, transfer_mode, media_sha256, media_size, leftover_temporaries,
+                      None)
 
     def __setattr__(self, name: str, value: object) -> None:
         raise ExecutionModelError("TransferOutcome is immutable")
@@ -182,6 +154,67 @@ class TransferOutcome:
     def __repr__(self) -> str:
         body = ", ".join(f"{name}={getattr(self, name)!r}" for name in _OUTCOME_FIELDS)
         return f"TransferOutcome({body})"
+
+
+# Module-private witness (identity-compared, never exported): only _atomic_rename_mismatch_outcome hands it to
+# _init_outcome, so no argument combination of the public constructor can produce "failed + SOURCE_REMOVED".
+_ATOMIC_RENAME_WITNESS = object()
+
+
+def _init_outcome(outcome: TransferOutcome, effects, failure, transfer_mode, media_sha256, media_size,
+                  leftover_temporaries, witness) -> None:
+    """Validate (strict exact types, legal effect order) and set every TransferOutcome field."""
+    if type(effects) is not tuple or any(type(e) is not CompletedEffect or e.kind not in _MEDIA_KINDS
+                                         for e in effects):
+        raise ExecutionModelError("TransferOutcome.effects must be a tuple of media CompletedEffects")
+    kinds = tuple(e.kind for e in effects)
+    if kinds not in ((), (EffectKind.MEDIA_PUBLISHED,), (EffectKind.SOURCE_REMOVED,), _MEDIA_KINDS):
+        raise ExecutionModelError("TransferOutcome.effects must follow MEDIA_PUBLISHED -> SOURCE_REMOVED")
+    if failure is not None and (type(failure) is not ExecutionFailure or failure.step is not _STEP):
+        raise ExecutionModelError("TransferOutcome.failure must be a MOVE_MEDIA ExecutionFailure or None")
+    if failure is None and kinds[-1:] != (EffectKind.SOURCE_REMOVED,):
+        raise ExecutionModelError("a TransferOutcome without failure ends with SOURCE_REMOVED")
+    if failure is not None and EffectKind.SOURCE_REMOVED in kinds and not (
+            witness is _ATOMIC_RENAME_WITNESS and kinds == _MEDIA_KINDS
+            and failure.kind is ExecutionFailureKind.PUBLISHED_MEDIA_MISMATCH
+            and failure.stage is TransferStage.PUBLISH_VERIFY and transfer_mode is TransferMode.SAME_VOLUME
+            and media_sha256 is None and leftover_temporaries == ()):
+        # The only failure after SOURCE_REMOVED (Frozen 18.2): the atomic same-volume rename already published
+        # the final and removed the source name, then its post-publish verification failed.
+        raise ExecutionModelError("a failed TransferOutcome contains SOURCE_REMOVED only after an atomic "
+                                  "rename whose post-publish verification failed")
+    if type(transfer_mode) is not TransferMode:
+        raise ExecutionModelError("TransferOutcome.transfer_mode must be a TransferMode")
+    published = EffectKind.MEDIA_PUBLISHED in kinds
+    if media_sha256 is not None and not (_is_sha256_hex(media_sha256) and published
+                                         and transfer_mode is TransferMode.CROSS_VOLUME):
+        raise ExecutionModelError("TransferOutcome.media_sha256 is set only for a published cross-volume copy")
+    if media_size is not None and not (type(media_size) is int and media_size >= 0 and published):
+        raise ExecutionModelError("TransferOutcome.media_size is an exact int >= 0 set only when published")
+    if published and media_size is None:
+        raise ExecutionModelError("a published TransferOutcome records media_size")
+    if type(leftover_temporaries) is not tuple or any(type(item) is not LeftoverTemporary
+                                                      for item in leftover_temporaries):
+        raise ExecutionModelError("TransferOutcome.leftover_temporaries must be a tuple[LeftoverTemporary]")
+    for name, value in zip(_OUTCOME_FIELDS, (effects, failure, transfer_mode, media_sha256, media_size,
+                                             leftover_temporaries)):
+        object.__setattr__(outcome, name, value)
+
+
+def _atomic_rename_mismatch_outcome(ctx: _Context, media: CompletedEffect,
+                                    failure: ExecutionFailure) -> TransferOutcome:
+    """The single producer of a failed outcome that contains SOURCE_REMOVED: the ``rename`` strategy's atomic
+    same-volume move succeeded (final published AND source name removed), then the post-publish verification
+    failed. Checks its own provenance, then hands the witness to the validator."""
+    if type(ctx) is not _Context or ctx.strategy != "rename":
+        raise ExecutionModelError("only the atomic rename path may record SOURCE_REMOVED with a failure")
+    if (type(media) is not CompletedEffect or media.kind is not EffectKind.MEDIA_PUBLISHED
+            or media.path != ctx.final or media.identity != ctx.source_identity or media.sha256 is not None):
+        raise ExecutionModelError("the atomic rename records the source snapshot as the published media")
+    outcome = object.__new__(TransferOutcome)
+    _init_outcome(outcome, (media, _source_removed(ctx)), failure, TransferMode.SAME_VOLUME, None, media.size,
+                  (), _ATOMIC_RENAME_WITNESS)
+    return outcome
 
 
 # --------------------------------------------------------------------------- seam helpers
@@ -422,7 +455,7 @@ def _same_volume(ctx: _Context) -> TransferOutcome:
         failure = _failure(ExecutionFailureKind.PUBLISHED_MEDIA_MISMATCH, TransferStage.PUBLISH_VERIFY)
         media = _media_published(ctx, ctx.source_identity, None)
         if ctx.strategy == "rename":
-            return TransferOutcome((media, _source_removed(ctx)), failure, mode, None, media.size, ())
+            return _atomic_rename_mismatch_outcome(ctx, media, failure)
         return TransferOutcome((media,), failure, mode, None, media.size, ())  # the source is kept
     media = _media_published(ctx, published, None)
 
