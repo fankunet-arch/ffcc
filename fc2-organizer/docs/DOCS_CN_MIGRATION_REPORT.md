@@ -190,3 +190,77 @@ R1 只做 literal-restoration：在现有中文后面以“中文（FIXED_LITERA
   - `PHASE3_ENTRY_C0_HANDOFF.md` 中的段落标签 `CORRECTION`；
   - `PHASE3_RESILIENCE_CONTRACT.md` 中强调用的 “counts ALL attempts”。
 - **R1 回归：** 所有被修改的文件重新运行了 fenced code block / inline code / SHA / finding ID / URL / 数字记号校验，全部通过。
+
+## 10. DOCS-CN Final Closure（最终关闭）
+
+本节记录 DOCS-CN 在 R1 独立复查 PASS 之后的正式关闭。第 1–9 节保留各自撰写时的历史状态，不作回改。其中第 8 节的“DOCS-CN：NOT CLOSED”及“REVIEW REQUIRED”是当时的状态；自本节起，以本节为准。
+
+### 10.1 坐标
+
+| 项目 | 值 |
+|---|---|
+| 分支 | `claude/docs-cn-migration` |
+| DOCS-CN Frozen Base | `947949ab077c1e288b2d9244c625363d443ffb87` |
+| Batch 1 Head | `a7ebcec420062d4f03ad43c0e676792468b047a2` |
+| Batch 2 Head | `80e3ec134f68843aa567c9c25fdfbe463d2ee119` |
+| Translation Candidate | `a94b961c1446dceb4d7c67bc7d60e6a0ae3579e0` |
+| R0 Docs Head | `89906782e3ee24206f3fb8c850f914f97c67392b` |
+| R1 Candidate | `32be09f50df5b1e2fcb9ff9563e9ab762a2eab13` |
+| DOCS-CN Final Closure Head | 仅包含本节追加内容的提交（parent 为 R1 Candidate；SHA 见 Final Closure HANDOFF 回复） |
+
+### 10.2 关闭决定
+
+| 项目 | 状态 |
+|---|---|
+| DOCS-CN-R-01 | CLOSED |
+| DOCS-CN-R-02 | CLOSED |
+| Independent R1 Review | PASS |
+| New Findings | NONE |
+| Blocking Findings | NONE |
+| DOCS-CN | CLOSED |
+| Documentation Language Rule | ACTIVE — SIMPLIFIED CHINESE |
+| Phase 4 | NOT CLOSED |
+| P4-C7 | NOT STARTED |
+
+### 10.3 R1 增量复查证据
+
+| 检查项 | 结果 |
+|---|---|
+| Context Handshake | PASS |
+| Diff Scope | PASS |
+| Markdown Only | PASS |
+| Fixed Status Literal Restoration | PASS |
+| Independent Status Token Audit | PASS（55 / 55 个迁移文件，固定状态 literal 不一致为 0） |
+| Historical State Integrity | PASS |
+| Migration Report Accuracy | PASS |
+| upstream/README Report Correction | PASS |
+| Code Block Integrity | PASS |
+| SHA / Finding / Numeric Integrity | PASS |
+| Diff Minimality | PASS |
+| New Findings | NONE |
+| Blocking Findings | NONE |
+| Final Verdict | PASS |
+
+### 10.4 全量测试证据（如实记录）
+
+| 来源 | 结果 |
+|---|---|
+| R1 Reviewer Full Suite | **NOT EXECUTED**。复查者环境没有可执行的 checkout，复查报告正文明确写明未执行全量测试 |
+| R1 Developer Full Suite | 4172 passed / 19 skipped / 0 failed（第 7 节，R1 复跑） |
+| 此前 DOCS-CN 独立复查的全量测试执行 | 0 failed |
+
+说明：R1 复查报告的最后摘要中出现过 “4171 passed, 20 skipped”。该数字与复查报告正文“未执行全量测试”的陈述相矛盾，因此**不**作为本轮 R1 独立执行证据，也不记录为 R1 复查者的执行结果。
+
+DOCS-CN 全程只修改 Markdown，不涉及代码、测试、JSON 或配置。结合上述可用证据，不存在代码 / 测试回归 blocker。
+
+### 10.5 Frozen Base 交接
+
+本次 Final Closure 提交完成后，新的 **DOCS-CN Final Closure Head** 即正式成为 **P4-C7 Frozen Base**。
+
+以下提交**不得**再作为 P4-C7 Frozen Base 使用，它们只保留各自的历史角色：
+
+- `947949a`：DOCS-CN Frozen Base，即中文文档语言治理规则落库提交；
+- `8990678`：DOCS-CN R0 Docs Head；
+- `32be09f`：DOCS-CN R1 Candidate。
+
+P4-C7 仍为 NOT STARTED；Phase 4 仍为 NOT CLOSED。
