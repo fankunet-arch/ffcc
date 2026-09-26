@@ -171,13 +171,32 @@ def test_temp_open_is_exclusive_create():
     assert not atomic._TEMP_FLAGS & getattr(os, "O_TRUNC", 0)
 
 
+# P4-C7 (contract section 3, construction plan S1): fc2_organizer.execution is the single authorised
+# consumer of this package, and only of the *bare* public package -- never of any submodule.
+EXECUTION_SRC_ROOT = ORGANIZER_SRC_ROOT / "execution"
+
+
 def test_no_reverse_dependency_on_materialization():
-    for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p != MAT_SRC_ROOT)):
+    for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir()
+                                  if p.is_dir() and p not in (MAT_SRC_ROOT, EXECUTION_SRC_ROOT))):
         for path in _source_files(root):
             for module in _imported_modules(_tree(path)):
                 assert "materialization" not in module, f"{path}: imports {module!r}"
     for module in _imported_modules(_tree(ORGANIZER_SRC_ROOT / "__init__.py")):
         assert "materialization" not in module
+
+
+def test_execution_consumes_only_the_bare_materialization_package():
+    assert EXECUTION_SRC_ROOT.is_dir() and _source_files(EXECUTION_SRC_ROOT)
+    modules = set()
+    for path in _source_files(EXECUTION_SRC_ROOT):
+        modules |= {m for m in _imported_modules(_tree(path)) if "materialization" in m}
+    assert modules <= {"fc2_organizer.materialization"}, modules
+    for path in _source_files(EXECUTION_SRC_ROOT):
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
+                    and node.value.id == "materialization":
+                raise AssertionError(f"{path}: reaches into materialization.{node.attr}")
 
 
 _BLOCKED_ROOTS = {
