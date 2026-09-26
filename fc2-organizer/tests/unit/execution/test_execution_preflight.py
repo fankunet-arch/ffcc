@@ -6,9 +6,11 @@ import dataclasses
 import errno
 import os
 import secrets
+import stat
 
 import pytest
 
+from fc2_organizer.execution import _fs
 from fc2_organizer.execution import (
     ArtifactManifestError,
     CheckpointError,
@@ -426,3 +428,156 @@ def test_preflight_never_consumes_anything(tmp_path):
     second = preflight_execution(s.plan, s.artifacts)
     assert first.ready and second.ready
     assert register_consumption((first.preflight_id,))  # not registered by preflight_execution
+
+
+# --------------------------------------------------------------------------- P4-C7-S1-R-02: frozen snapshot(path)
+
+
+def test_snapshot_regular_file(tmp_path):
+    path = tmp_path / "media.mp4"
+    path.write_bytes(b"12345")
+    st = os.lstat(path)
+    assert _fs.snapshot(str(path)) == EntryIdentity(st.st_dev, st.st_ino, EntryType.FILE, 5, st.st_mtime_ns)
+
+
+def test_snapshot_directory(tmp_path):
+    st = os.lstat(tmp_path)
+    assert _fs.snapshot(str(tmp_path)) == EntryIdentity(st.st_dev, st.st_ino, EntryType.DIRECTORY, None, None)
+
+
+def test_snapshot_missing_and_through_a_file_are_returned_not_raised(tmp_path):
+    missing = _fs.snapshot(str(tmp_path / "missing"))
+    assert type(missing) is FileNotFoundError
+    (tmp_path / "file").write_bytes(b"x")
+    through = _fs.snapshot(str(tmp_path / "file" / "child"))
+    assert isinstance(through, (FileNotFoundError, NotADirectoryError))
+    assert not isinstance(through, _fs.SnapshotRefused)
+
+
+def test_snapshot_access_failure_is_the_same_oserror_value(tmp_path, monkeypatch):
+    failure = PermissionError(errno.EACCES, "denied")
+    inject(monkeypatch, lstat=lambda path: (_ for _ in ()).throw(failure))
+    assert _fs.snapshot(str(tmp_path)) is failure
+
+
+def test_snapshot_inode_zero_is_identity_unavailable_with_type_and_size(tmp_path, monkeypatch):
+    path = tmp_path / "media.mp4"
+    path.write_bytes(b"123")
+    inject(monkeypatch, lstat=lstat_rewriting(str(path), st_ino=0))
+    refused = _fs.snapshot(str(path))
+    assert isinstance(refused, _fs.SnapshotRefused) and isinstance(refused, OSError)
+    assert (refused.reason, refused.entry_type, refused.size) == (_fs.REFUSED_IDENTITY_UNAVAILABLE,
+                                                                 EntryType.FILE, 3)
+    monkeypatch.undo()
+    inject(monkeypatch, lstat=lstat_rewriting(str(tmp_path), st_ino=0))
+    refused = _fs.snapshot(str(tmp_path))
+    assert (refused.reason, refused.entry_type, refused.size) == (_fs.REFUSED_IDENTITY_UNAVAILABLE,
+                                                                 EntryType.DIRECTORY, None)
+
+
+def test_snapshot_never_treats_a_link_or_reparse_point_as_an_owned_entry(tmp_path, monkeypatch):
+    path = tmp_path / "entry"
+    path.write_bytes(b"x")
+    inject(monkeypatch, lstat=lstat_rewriting(str(path), st_mode=stat.S_IFLNK | 0o777))
+    assert _fs.snapshot(str(path)).reason == _fs.REFUSED_LINK
+    monkeypatch.undo()
+    # A regular file / directory carrying the Windows reparse attribute (host-independent simulation).
+    for target in (path, tmp_path):
+        inject(monkeypatch, lstat=lstat_rewriting(str(target), st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT))
+        refused = _fs.snapshot(str(target))
+        assert isinstance(refused, _fs.SnapshotRefused) and refused.reason == _fs.REFUSED_LINK
+        assert refused.errno == errno.ELOOP and refused.entry_type is None
+        monkeypatch.undo()
+
+
+def test_snapshot_refuses_real_junctions(tmp_path):
+    target = tmp_path / "real"
+    target.mkdir()
+    try_junction(tmp_path / "junction", target)
+    assert _fs.snapshot(str(tmp_path / "junction")).reason == _fs.REFUSED_LINK
+
+
+def test_snapshot_refuses_real_symlinks(tmp_path):
+    (tmp_path / "real").write_bytes(b"x")
+    try_symlink(tmp_path / "link", tmp_path / "real")
+    assert _fs.snapshot(str(tmp_path / "link")).reason == _fs.REFUSED_LINK
+
+
+def test_snapshot_refuses_special_files(tmp_path, monkeypatch):
+    path = tmp_path / "fifo"
+    path.write_bytes(b"")
+    inject(monkeypatch, lstat=lstat_rewriting(str(path), st_mode=stat.S_IFIFO | 0o644))
+    refused = _fs.snapshot(str(path))
+    assert refused.reason == _fs.REFUSED_SPECIAL and refused.entry_type is None
+
+
+def test_snapshot_is_one_read_only_lstat(tmp_path, monkeypatch):
+    (tmp_path / "f").write_bytes(b"x")
+    counter = CallCounter(monkeypatch)
+    trap = trap_mutations(monkeypatch)
+    _fs.snapshot(str(tmp_path / "f"))
+    _fs.snapshot(str(tmp_path / "missing"))
+    monkeypatch.undo()
+    assert trap.calls == [] and counter.paths == [str(tmp_path / "f"), str(tmp_path / "missing")]
+
+
+def test_frozen_seam_interface_exists_and_legacy_names_are_gone():
+    for name in ("snapshot", "is_link", "list_names"):
+        assert name in _fs.__all__ and callable(getattr(_fs, name))
+    for legacy in ("lstat_entry", "identity_of"):
+        assert not hasattr(_fs, legacy)
+
+
+def test_list_names_returns_sorted_names_or_the_oserror(tmp_path):
+    (tmp_path / "b").write_bytes(b"")
+    (tmp_path / "a").mkdir()
+    assert _fs.list_names(str(tmp_path)) == ["a", "b"]
+    assert type(_fs.list_names(str(tmp_path / "missing"))) is FileNotFoundError
+
+
+# Blocker semantics are unchanged by routing preflight through snapshot (classification order preserved).
+
+
+def test_blocker_order_source_size_mismatch_wins_over_identity_unavailable(tmp_path, monkeypatch):
+    s = scene(tmp_path)
+    with open(s.source_path, "ab") as handle:
+        handle.write(b"+")
+    inject(monkeypatch, lstat=lstat_rewriting(s.source_path, st_ino=0))
+    assert _reasons(preflight_execution(s.plan, s.artifacts)) == [(B.SOURCE_SIZE_MISMATCH, PathRole.SOURCE)]
+
+
+def test_blocker_order_not_a_directory_wins_over_identity_unavailable(tmp_path, monkeypatch):
+    s = scene(tmp_path, make_library=False)
+    open(s.library_root, "wb").close()
+    inject(monkeypatch, lstat=lstat_rewriting(s.library_root, st_ino=0))
+    assert _reasons(preflight_execution(s.plan, s.artifacts)) == [
+        (B.LIBRARY_ROOT_NOT_DIRECTORY, PathRole.LIBRARY_ROOT)]
+
+
+def test_blocker_order_source_directory_with_inode_zero_is_not_regular(tmp_path, monkeypatch):
+    s = scene(tmp_path, make_source=False)
+    os.mkdir(s.source_path)
+    inject(monkeypatch, lstat=lstat_rewriting(s.source_path, st_ino=0))
+    assert _reasons(preflight_execution(s.plan, s.artifacts)) == [(B.SOURCE_NOT_REGULAR_FILE, PathRole.SOURCE)]
+
+
+def test_special_entries_classify_as_before(tmp_path, monkeypatch):
+    s = scene(tmp_path)
+    inject(monkeypatch, lstat=lstat_rewriting(s.source_path, st_mode=stat.S_IFIFO | 0o644))
+    assert _reasons(preflight_execution(s.plan, s.artifacts)) == [(B.SOURCE_NOT_REGULAR_FILE, PathRole.SOURCE)]
+    monkeypatch.undo()
+    inject(monkeypatch, lstat=lstat_rewriting(s.library_root, st_mode=stat.S_IFIFO | 0o644))
+    assert _reasons(preflight_execution(s.plan, s.artifacts)) == [
+        (B.LIBRARY_ROOT_NOT_DIRECTORY, PathRole.LIBRARY_ROOT)]
+
+
+def test_target_directory_occupied_by_unidentifiable_or_special_entry_still_blocks(tmp_path, monkeypatch):
+    s = scene(tmp_path)
+    target = s.plan.target_directory.absolute_path
+    os.mkdir(target)
+    for overrides in ({"st_ino": 0}, {"st_mode": stat.S_IFIFO | 0o644},
+                      {"st_file_attributes": stat.FILE_ATTRIBUTE_REPARSE_POINT}):
+        inject(monkeypatch, lstat=lstat_rewriting(target, **overrides))
+        assert _reasons(preflight_execution(s.plan, s.artifacts)) == [
+            (B.TARGET_DIRECTORY_EXISTS, PathRole.TARGET_DIRECTORY)], overrides
+        monkeypatch.undo()

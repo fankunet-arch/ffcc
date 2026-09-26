@@ -5,7 +5,8 @@ Every syscall the execution package makes goes through the module-level ``_FS``
 of the package calls ``os.<syscall>`` directly (architecture test). Callers must
 reference ``_fs._FS`` at call time (never capture it), so a patched seam is honoured.
 
-S1 uses only the read-only part (``lstat``, ``device_of``, ``token``). The mutating
+S1 uses only the read-only part (``lstat``, ``device_of``, ``token``) through the
+frozen ``snapshot(path)`` interface. The mutating
 entries (``mkdir``, ``rename``, ``link``, ``unlink``, ``write``, ...) are defined
 for S2-S5 and are not reached by any S1 code path (zero-mutation tests trap them).
 
@@ -15,6 +16,7 @@ raises its typed error outside any ``except`` block (no ``OSError`` is ever chai
 
 from __future__ import annotations
 
+import errno as _errno
 import os
 import secrets
 import stat as _stat
@@ -24,8 +26,8 @@ from typing import Callable
 from fc2_organizer.execution.models import EntryIdentity, EntryType
 
 __all__ = [
-    "lstat_entry", "is_link", "is_directory", "is_regular_file", "identity_of", "list_names", "new_token",
-    "os_errno",
+    "snapshot", "SnapshotRefused", "REFUSED_LINK", "REFUSED_SPECIAL", "REFUSED_IDENTITY_UNAVAILABLE",
+    "is_link", "is_directory", "is_regular_file", "list_names", "new_token", "os_errno",
 ]
 
 
@@ -71,7 +73,7 @@ _FS = _FsOps(
 )
 
 
-def lstat_entry(path: str) -> os.stat_result | OSError:
+def _lstat_entry(path: str) -> os.stat_result | OSError:
     """``lstat`` (never follows a link); the ``OSError`` is returned, not raised."""
     box: list[os.stat_result] = []
     try:
@@ -97,7 +99,7 @@ def is_regular_file(st: os.stat_result) -> bool:
     return _stat.S_ISREG(st.st_mode)
 
 
-def identity_of(st: os.stat_result, entry_type: EntryType) -> EntryIdentity | None:
+def _identity_of(st: os.stat_result, entry_type: EntryType) -> EntryIdentity | None:
     """The ``EntryIdentity`` of a non-link entry, or ``None`` if the OS reports no usable
     identity (``st_ino == 0``: contract sections 10-11, ``IDENTITY_UNAVAILABLE``)."""
     inode = st.st_ino
@@ -107,6 +109,55 @@ def identity_of(st: os.stat_result, entry_type: EntryType) -> EntryIdentity | No
     if entry_type is EntryType.FILE:
         return EntryIdentity(device, inode, EntryType.FILE, st.st_size, st.st_mtime_ns)
     return EntryIdentity(device, inode, EntryType.DIRECTORY, None, None)
+
+
+# Why ``snapshot`` refused an *existing* entry (SnapshotRefused.reason).
+REFUSED_LINK = "link"                                   # symlink / junction / any reparse point
+REFUSED_SPECIAL = "special"                             # neither a regular file nor a directory
+REFUSED_IDENTITY_UNAVAILABLE = "identity_unavailable"   # st_ino == 0 (contract sections 10-11)
+
+_REFUSAL_ERRNO = {REFUSED_LINK: _errno.ELOOP, REFUSED_SPECIAL: _errno.EINVAL,
+                  REFUSED_IDENTITY_UNAVAILABLE: _errno.EINVAL}
+
+
+class SnapshotRefused(OSError):
+    """``snapshot`` found an entry that yields no ownable identity. Returned, never raised.
+
+    A link (like ``O_NOFOLLOW``: ``ELOOP``) is never snapshotted as a file or directory.
+    ``entry_type`` / ``size`` are only set for ``REFUSED_IDENTITY_UNAVAILABLE`` (a regular file or a
+    directory whose identity the OS cannot report), so callers keep their classification order.
+    """
+
+    def __init__(self, reason: str, *, entry_type: EntryType | None = None, size: int | None = None) -> None:
+        super().__init__(_REFUSAL_ERRNO[reason], "entry yields no usable identity")
+        self.reason = reason
+        self.entry_type = entry_type
+        self.size = size
+
+
+def snapshot(path: str) -> EntryIdentity | OSError:
+    """Frozen S1 interface (construction plan S1 item 6): one ``lstat`` snapshot, never following links.
+
+    * regular file / directory with a usable identity -> its ``EntryIdentity``;
+    * missing / inaccessible -> the ``OSError`` itself (returned, not raised);
+    * link / reparse point, special file, or ``st_ino == 0`` -> a :class:`SnapshotRefused` value.
+    """
+    st = _lstat_entry(path)
+    if isinstance(st, OSError):
+        return st
+    if is_link(st):
+        return SnapshotRefused(REFUSED_LINK)
+    if is_regular_file(st):
+        entry_type = EntryType.FILE
+    elif is_directory(st):
+        entry_type = EntryType.DIRECTORY
+    else:
+        return SnapshotRefused(REFUSED_SPECIAL)
+    identity = _identity_of(st, entry_type)
+    if identity is None:
+        size = st.st_size if entry_type is EntryType.FILE else None
+        return SnapshotRefused(REFUSED_IDENTITY_UNAVAILABLE, entry_type=entry_type, size=size)
+    return identity
 
 
 def list_names(directory: str) -> list[str] | OSError:

@@ -18,8 +18,8 @@ import posixpath
 from fc2_organizer.execution.errors import PathRejectionReason
 
 __all__ = [
-    "check_absolute_path",
-    "check_created_component",
+    "validate_absolute_path",
+    "validate_created_component",
     "same_entry_name",
     "is_under",
     "path_components",
@@ -82,7 +82,7 @@ def path_components(path: str, *, windows: bool | None = None) -> tuple[str, lis
     return "/", [c for c in path.split("/") if c]
 
 
-def check_absolute_path(path: str, *, directory_root: bool = False,
+def validate_absolute_path(path: str, *, directory_root: bool = False,
                         windows: bool | None = None) -> PathRejectionReason | None:
     """Lexically validate an explicit, fully-qualified path; ``None`` means acceptable.
 
@@ -129,7 +129,7 @@ def check_absolute_path(path: str, *, directory_root: bool = False,
     return None
 
 
-def check_created_component(name: str) -> PathRejectionReason | None:
+def validate_created_component(name: str) -> PathRejectionReason | None:
     """Validate one component P4-C7 will create, on every platform (contract section 26.3)."""
     if type(name) is not str or not name:
         return PathRejectionReason.EMPTY

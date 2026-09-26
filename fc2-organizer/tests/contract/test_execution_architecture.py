@@ -65,8 +65,7 @@ _FORBIDDEN_NAMES = {"is_valid_fc2_number", "normalize_fc2_number", "extrafanart_
 _LEXICAL_OS_PATH = {"join", "basename", "splitext", "dirname"}
 _MUTATING_ATTRS = {"mkdir", "rename", "link", "unlink", "write", "fsync", "listdir", "open", "read", "close",
                    "fstat"}
-_PREFLIGHT_FS_API = {"lstat_entry", "is_link", "is_directory", "is_regular_file", "identity_of", "new_token",
-                     "os_errno"}
+_PREFLIGHT_FS_API = {"snapshot", "SnapshotRefused", "REFUSED_LINK", "REFUSED_SPECIAL", "new_token", "os_errno"}
 _FROZEN_PUBLIC_API = {
     "preflight_execution", "execute_filesystem", "ExecutionPreflight", "ExecutionResult", "ExecutionCheckpoint",
     "ExecutionStatus", "ExecutionStep", "ExecutionUnit", "PreflightMode", "TransferMode", "EntryIdentity",
@@ -180,8 +179,9 @@ def test_seam_functions_reach_only_read_only_ops_in_s1():
             reached[fn.name] = {node.attr for node in ast.walk(fn)
                                 if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
                                 and node.value.id == "_FS"}
-    used_by_preflight = {"lstat_entry", "is_link", "is_directory", "is_regular_file", "identity_of",
-                         "new_token", "os_errno"}
+    used_by_preflight = {"snapshot", "_lstat_entry", "is_link", "is_directory", "is_regular_file",
+                         "_identity_of", "new_token", "os_errno"}
+    assert used_by_preflight <= set(reached), used_by_preflight - set(reached)
     for name in used_by_preflight:
         assert reached.get(name, set()) <= {"lstat", "device_of", "token"}, (name, reached.get(name))
 

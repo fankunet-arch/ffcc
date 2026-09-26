@@ -37,8 +37,8 @@ from fc2_organizer.execution.models import (
     PathRole,
 )
 from fc2_organizer.execution.paths import (
-    check_absolute_path,
-    check_created_component,
+    validate_absolute_path,
+    validate_created_component,
     is_under,
     same_entry_name,
 )
@@ -180,10 +180,10 @@ def _check_graph(plan: OrganizePlan) -> None:
 
 
 def _check_target_paths(plan: OrganizePlan) -> None:
-    if check_absolute_path(plan.library_root, directory_root=True) is not None:
+    if validate_absolute_path(plan.library_root, directory_root=True) is not None:
         raise _plan_error(PlanGraphRejectionReason.LIBRARY_ROOT_REJECTED)
     for name in _PATH_FIELDS:
-        if check_absolute_path(getattr(plan, name).absolute_path) is not None:
+        if validate_absolute_path(getattr(plan, name).absolute_path) is not None:
             raise _plan_error(PlanGraphRejectionReason.TARGET_PATH_REJECTED)
 
 
@@ -216,7 +216,7 @@ def _check_layout(plan: OrganizePlan) -> None:
             raise _plan_error(PlanGraphRejectionReason.ARTIFACT_LAYOUT)
         names.append(child)
     for component in (number, *names):
-        if check_created_component(component) is not None:
+        if validate_created_component(component) is not None:
             raise _plan_error(PlanGraphRejectionReason.UNSAFE_COMPONENT)
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
@@ -226,7 +226,7 @@ def _check_layout(plan: OrganizePlan) -> None:
 
 def _check_source(plan: OrganizePlan) -> None:
     source = plan.source_path
-    if check_absolute_path(source) is not None:
+    if validate_absolute_path(source) is not None:
         raise _plan_error(PlanGraphRejectionReason.SOURCE_PATH_REJECTED)
     if os.path.splitext(source)[1].lower() != plan.source_extension.lower():
         raise _plan_error(PlanGraphRejectionReason.SOURCE_EXTENSION_MISMATCH)

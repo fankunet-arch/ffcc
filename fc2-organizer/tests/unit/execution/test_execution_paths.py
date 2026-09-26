@@ -6,8 +6,8 @@ import pytest
 
 from fc2_organizer.execution.errors import PathRejectionReason as R
 from fc2_organizer.execution.paths import (
-    check_absolute_path,
-    check_created_component,
+    validate_absolute_path,
+    validate_created_component,
     is_under,
     path_components,
     same_entry_name,
@@ -23,7 +23,7 @@ from fc2_organizer.materialization.atomic import _validate_target_path
     r"D:\ライブラリ\FC2-1\FC2-1.mp4", r"C:\a b\c.d\e",
 ])
 def test_windows_accepts_fully_qualified_files(path):
-    assert check_absolute_path(path, windows=True) is None
+    assert validate_absolute_path(path, windows=True) is None
 
 
 @pytest.mark.parametrize(("path", "reason"), [
@@ -52,7 +52,7 @@ def test_windows_accepts_fully_qualified_files(path):
     (r"C:\COM1\x", R.RESERVED_NAME),
 ])
 def test_windows_rejections(path, reason):
-    assert check_absolute_path(path, windows=True) is reason
+    assert validate_absolute_path(path, windows=True) is reason
 
 
 @pytest.mark.parametrize(("root", "ok"), [
@@ -61,13 +61,13 @@ def test_windows_rejections(path, reason):
     ("C:", False), (r"C:lib", False),
 ])
 def test_windows_library_root_forms(root, ok):
-    assert (check_absolute_path(root, directory_root=True, windows=True) is None) is ok
+    assert (validate_absolute_path(root, directory_root=True, windows=True) is None) is ok
 
 
 def test_bare_server_without_share_is_always_rejected():
     # P4-C2-R1-02 neutralised at the execution boundary.
-    assert check_absolute_path(r"\\server", directory_root=True, windows=True) is R.NOT_ABSOLUTE
-    assert check_absolute_path("//server", directory_root=True, windows=True) is R.NOT_ABSOLUTE
+    assert validate_absolute_path(r"\\server", directory_root=True, windows=True) is R.NOT_ABSOLUTE
+    assert validate_absolute_path("//server", directory_root=True, windows=True) is R.NOT_ABSOLUTE
 
 
 # --------------------------------------------------------------------------- POSIX rules
@@ -85,13 +85,13 @@ def test_bare_server_without_share_is_always_rejected():
     ("/lib/a\x00", R.NUL_CHARACTER),
 ])
 def test_posix_rules(path, reason):
-    assert check_absolute_path(path, windows=False) is reason
+    assert validate_absolute_path(path, windows=False) is reason
 
 
 def test_posix_library_root_forms():
-    assert check_absolute_path("/", directory_root=True, windows=False) is None
-    assert check_absolute_path("/lib/", directory_root=True, windows=False) is None
-    assert check_absolute_path("lib", directory_root=True, windows=False) is R.NOT_ABSOLUTE
+    assert validate_absolute_path("/", directory_root=True, windows=False) is None
+    assert validate_absolute_path("/lib/", directory_root=True, windows=False) is None
+    assert validate_absolute_path("lib", directory_root=True, windows=False) is R.NOT_ABSOLUTE
 
 
 # --------------------------------------------------------------------------- created components
@@ -100,7 +100,7 @@ def test_posix_library_root_forms():
 @pytest.mark.parametrize("name", ["FC2-1234567", "FC2-1234567.mp4", "poster.jpg", "extrafanart", "CONFIG.txt",
                                   "COM10.jpg", "ポスター.jpg"])
 def test_created_component_accepts(name):
-    assert check_created_component(name) is None
+    assert validate_created_component(name) is None
 
 
 @pytest.mark.parametrize(("name", "reason"), [
@@ -112,13 +112,13 @@ def test_created_component_accepts(name):
     ("CONIN$", R.RESERVED_NAME), ("conout$.jpg", R.RESERVED_NAME),
 ])
 def test_created_component_rejects_including_extended_reserved_names(name, reason):
-    assert check_created_component(name) is reason
+    assert validate_created_component(name) is reason
 
 
 def test_extended_reserved_names_are_not_rejected_inside_full_paths_that_p4c7_does_not_create():
     # Base reserved set applies to full paths; the extended set only to created components.
-    assert check_absolute_path("C:\\lib\\CONIN$\\x.mp4", windows=True) is None
-    assert check_absolute_path(r"C:\lib\CON\x.mp4", windows=True) is R.RESERVED_NAME
+    assert validate_absolute_path("C:\\lib\\CONIN$\\x.mp4", windows=True) is None
+    assert validate_absolute_path(r"C:\lib\CON\x.mp4", windows=True) is R.RESERVED_NAME
 
 
 # --------------------------------------------------------------------------- comparisons
@@ -137,6 +137,18 @@ def test_same_entry_name_and_is_under():
     assert not is_under("relative/x", "/lib", windows=False)
     assert path_components("relative", windows=False) is None
     assert path_components(r"C:\a\\b", windows=True) == ("C:", ["a", "b"])
+
+
+# --------------------------------------------------------------------------- frozen interface (P4-C7-S1-R-02)
+
+
+def test_frozen_path_helpers_are_the_canonical_interface():
+    from fc2_organizer.execution import paths
+
+    for name in ("validate_absolute_path", "validate_created_component", "same_entry_name", "is_under"):
+        assert name in paths.__all__ and callable(getattr(paths, name))
+    for legacy in ("check_absolute_path", "check_created_component"):
+        assert not hasattr(paths, legacy)  # never frozen, removed rather than kept as a parallel API
 
 
 # --------------------------------------------------------------------------- consistency with P4-C6
@@ -160,4 +172,4 @@ def test_p4c7_rejects_everything_p4c6_rejects(path, windows):
     except InvalidTargetPathError:
         p4c6_rejects = True
     if p4c6_rejects:
-        assert check_absolute_path(path, windows=windows) is not None
+        assert validate_absolute_path(path, windows=windows) is not None

@@ -8,9 +8,13 @@
   domain-separated encoding of an *already validated* plan / manifest.
 * A 32-byte key is generated once per process at import (``secrets.token_bytes``);
   it is never exported, logged or stored in any model or message. :func:`seal_of`
-  is an HMAC-SHA256 over every sealed field; :func:`verify_seal` compares with
-  ``hmac.compare_digest``. A forged model, a field rewritten with
-  ``object.__setattr__`` or a model from another process never verifies.
+  is an HMAC-SHA256 over the canonical encoding of *every* field except ``seal`` --
+  including the *current* content of ``ExecutionPreflight.plan`` / ``.artifacts``,
+  encoded structurally through the closed ``models.SEALED_VALUE_TYPES`` set (the
+  stored fingerprints are a second, independent layer, contract section 15.5).
+  :func:`verify_seal` compares with ``hmac.compare_digest``. A forged model, a field
+  rewritten with ``object.__setattr__`` (also to an unencodable value) or a model
+  from another process never verifies.
 * :func:`register_consumption` -- process-local, lock-protected one-shot registry.
 
 Standard library (``hashlib``, ``hmac``, ``secrets``, ``threading``) and this package only.
@@ -26,6 +30,7 @@ import threading
 from fc2_organizer.execution.errors import ExecutionModelError
 from fc2_organizer.execution.models import (
     ENCODABLE_ENUMS,
+    SEALED_VALUE_TYPES,
     CompletedEffect,
     EntryIdentity,
     ExecutionCheckpoint,
@@ -55,9 +60,12 @@ _ZERO_SEAL = "0" * 64
 # Execution value models that may appear inside a sealed model (encoded field by field).
 _NESTED_MODELS = (EntryIdentity, CompletedEffect, LeftoverTemporary, PreflightBlocker, ExecutionUnit)
 _SEALED_MODELS = (ExecutionCheckpoint, ExecutionPreflight)
-# Fields of a sealed model that are *not* covered directly: the seal itself, and the
-# preflight's caller-held plan / artifacts, which are covered through their fingerprints.
-_UNSEALED_FIELDS = frozenset({"seal", "plan", "artifacts"})
+# Every value type the encoder frames as a dataclass, field by field: the execution models plus the
+# closed set of caller-held plan / manifest value types (``models.SEALED_VALUE_TYPES``).
+_STRUCTURED = _NESTED_MODELS + _SEALED_MODELS + SEALED_VALUE_TYPES
+# The only field a seal does not cover is the seal itself (contract section 15.3): the preflight's
+# ``plan`` and ``artifacts`` are encoded with their *current* content, not only via fingerprints.
+_UNSEALED_FIELDS = frozenset({"seal"})
 
 _CONSUMED: set[str] = set()
 _CONSUMED_LOCK = threading.Lock()
@@ -88,12 +96,13 @@ def encode(value: object) -> bytes:
         return _frame(b"E", f"{kind.__qualname__}.{value.value}".encode("utf-8"))
     if kind is tuple:
         return b"T" + len(value).to_bytes(8, "big") + b"".join(encode(item) for item in value)
-    if kind in _NESTED_MODELS or kind in _SEALED_MODELS:
+    if kind in _STRUCTURED:
         return _frame(b"M", kind.__qualname__.encode("ascii")) + encode(_model_values(value))
     raise ExecutionModelError("value cannot be canonically encoded")
 
 
 def _model_values(model: object) -> tuple[object, ...]:
+    # Exact-type dataclasses only (checked by the caller): field order is the declaration order.
     names = [name for name in type(model).__dataclass_fields__ if name not in _UNSEALED_FIELDS]
     return tuple(getattr(model, name) for name in names)
 
@@ -150,7 +159,17 @@ def verify_seal(model: object) -> bool:
     claimed = model.seal
     if type(claimed) is not str:
         return False
-    return hmac.compare_digest(seal_of(model), claimed)
+    expected = _seal_or_none(model)
+    if expected is None:
+        return False  # a field was rewritten to a value outside the closed encodable set
+    return hmac.compare_digest(expected, claimed)
+
+
+def _seal_or_none(model: object) -> str | None:
+    try:
+        return seal_of(model)
+    except ExecutionModelError:
+        return None
 
 
 def sealed(model_type: type, **fields: object) -> object:

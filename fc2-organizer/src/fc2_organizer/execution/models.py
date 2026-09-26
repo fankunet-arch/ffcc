@@ -20,7 +20,7 @@ from enum import Enum
 
 from fc2_organizer.execution.errors import ExecutionModelError
 from fc2_organizer.materialization import ArtifactKind, ArtifactWriteRequest
-from fc2_organizer.planning import OrganizePlan
+from fc2_organizer.planning import OrganizePlan, PlannedOperation, PlannedOperationKind, PlannedPath
 
 __all__ = [
     "ExecutionStatus",
@@ -179,8 +179,13 @@ class ExecutionFailureKind(Enum):
 # The closed set of enum types the canonical encoding (``seal.encode``) accepts.
 ENCODABLE_ENUMS: tuple[type[Enum], ...] = (
     ExecutionStatus, ExecutionStep, EffectKind, EntryType, PathRole, PreflightMode, TransferMode,
-    TransferStage, PreflightBlockReason, ExecutionFailureKind, ArtifactKind,
+    TransferStage, PreflightBlockReason, ExecutionFailureKind, ArtifactKind, PlannedOperationKind,
 )
+
+# The closed set of caller-held value types (from the two authorised bare public packages) that the
+# canonical encoding encodes structurally, field by field, so that a seal covers the *current*
+# content of ``ExecutionPreflight.plan`` / ``.artifacts`` (contract section 15.3; P4-C7-S1-R-01).
+SEALED_VALUE_TYPES: tuple[type, ...] = (OrganizePlan, PlannedPath, PlannedOperation, ArtifactWriteRequest)
 
 
 # --------------------------------------------------------------------------- strict helpers

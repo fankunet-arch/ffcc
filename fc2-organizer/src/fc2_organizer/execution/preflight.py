@@ -128,59 +128,68 @@ def _blocker(reason: PreflightBlockReason, role: PathRole, errno: int | None = N
 
 
 def _snapshot_library_root(path: str, blockers: list[PreflightBlocker]) -> EntryIdentity | None:
+    # Classification order is unchanged: link -> not a directory -> identity unavailable.
     role = PathRole.LIBRARY_ROOT
-    st = _fs.lstat_entry(path)
-    if isinstance(st, OSError):
-        if isinstance(st, _MISSING):
+    result = _fs.snapshot(path)
+    if isinstance(result, _fs.SnapshotRefused):
+        if result.reason == _fs.REFUSED_LINK:
+            blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_IS_LINK, role))
+        elif result.reason == _fs.REFUSED_SPECIAL or result.entry_type is not EntryType.DIRECTORY:
+            blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_NOT_DIRECTORY, role))
+        else:
+            blockers.append(_blocker(PreflightBlockReason.IDENTITY_UNAVAILABLE, role))
+        return None
+    if isinstance(result, OSError):
+        if isinstance(result, _MISSING):
             blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_MISSING, role))
         else:
-            blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_INACCESSIBLE, role, _fs.os_errno(st)))
+            blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_INACCESSIBLE, role, _fs.os_errno(result)))
         return None
-    if _fs.is_link(st):
-        blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_IS_LINK, role))
-        return None
-    if not _fs.is_directory(st):
+    if result.entry_type is not EntryType.DIRECTORY:
         blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_NOT_DIRECTORY, role))
         return None
-    identity = _fs.identity_of(st, EntryType.DIRECTORY)
-    if identity is None:
-        blockers.append(_blocker(PreflightBlockReason.IDENTITY_UNAVAILABLE, role))
-    return identity
+    return result
 
 
 def _snapshot_source(path: str, expected_size: int, blockers: list[PreflightBlocker]) -> EntryIdentity | None:
+    # Classification order is unchanged: link -> not a regular file -> size mismatch -> identity unavailable.
     role = PathRole.SOURCE
-    st = _fs.lstat_entry(path)
-    if isinstance(st, OSError):
-        if isinstance(st, _MISSING):
+    result = _fs.snapshot(path)
+    if isinstance(result, _fs.SnapshotRefused):
+        if result.reason == _fs.REFUSED_LINK:
+            blockers.append(_blocker(PreflightBlockReason.SOURCE_IS_LINK, role))
+        elif result.reason == _fs.REFUSED_SPECIAL or result.entry_type is not EntryType.FILE:
+            blockers.append(_blocker(PreflightBlockReason.SOURCE_NOT_REGULAR_FILE, role))
+        elif result.size != expected_size:
+            blockers.append(_blocker(PreflightBlockReason.SOURCE_SIZE_MISMATCH, role))
+        else:
+            blockers.append(_blocker(PreflightBlockReason.IDENTITY_UNAVAILABLE, role))
+        return None
+    if isinstance(result, OSError):
+        if isinstance(result, _MISSING):
             blockers.append(_blocker(PreflightBlockReason.SOURCE_MISSING, role))
         else:
-            blockers.append(_blocker(PreflightBlockReason.SOURCE_INACCESSIBLE, role, _fs.os_errno(st)))
+            blockers.append(_blocker(PreflightBlockReason.SOURCE_INACCESSIBLE, role, _fs.os_errno(result)))
         return None
-    if _fs.is_link(st):
-        blockers.append(_blocker(PreflightBlockReason.SOURCE_IS_LINK, role))
-        return None
-    if not _fs.is_regular_file(st):
+    if result.entry_type is not EntryType.FILE:
         blockers.append(_blocker(PreflightBlockReason.SOURCE_NOT_REGULAR_FILE, role))
         return None
-    if st.st_size != expected_size:
+    if result.size != expected_size:
         blockers.append(_blocker(PreflightBlockReason.SOURCE_SIZE_MISMATCH, role))
         return None
-    identity = _fs.identity_of(st, EntryType.FILE)
-    if identity is None:
-        blockers.append(_blocker(PreflightBlockReason.IDENTITY_UNAVAILABLE, role))
-    return identity
+    return result
 
 
 def _require_target_directory_absent(path: str, blockers: list[PreflightBlocker]) -> None:
-    # Contract section 13: any existing entry (even an empty directory) blocks; nothing is adopted.
+    # Contract section 13: any existing entry (even an empty directory, a link, a special file or one
+    # without a usable identity) blocks; nothing is adopted.
     role = PathRole.TARGET_DIRECTORY
-    st = _fs.lstat_entry(path)
-    if not isinstance(st, OSError):
+    result = _fs.snapshot(path)
+    if isinstance(result, _fs.SnapshotRefused) or not isinstance(result, OSError):
         blockers.append(_blocker(PreflightBlockReason.TARGET_DIRECTORY_EXISTS, role))
-    elif isinstance(st, FileNotFoundError):
+    elif isinstance(result, FileNotFoundError):
         return
-    elif isinstance(st, NotADirectoryError):
+    elif isinstance(result, NotADirectoryError):
         blockers.append(_blocker(PreflightBlockReason.LIBRARY_ROOT_NOT_DIRECTORY, PathRole.LIBRARY_ROOT))
     else:
-        blockers.append(_blocker(PreflightBlockReason.TARGET_DIRECTORY_INACCESSIBLE, role, _fs.os_errno(st)))
+        blockers.append(_blocker(PreflightBlockReason.TARGET_DIRECTORY_INACCESSIBLE, role, _fs.os_errno(result)))
