@@ -30,7 +30,8 @@ CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 _S1_MODULES = {"__init__.py", "errors.py", "models.py", "paths.py", "validation.py", "seal.py", "_fs.py",
                "preflight.py"}
 _S2_MODULES = _S1_MODULES | {"directories.py"}
-_NOT_YET = ("transfer.py", "executor.py", "rollback.py", "orchestrator.py")
+_S3_MODULES = _S2_MODULES | {"transfer.py"}
+_NOT_YET = ("executor.py", "rollback.py", "orchestrator.py")
 
 _PKG = "fc2_organizer.execution"
 _BARE = {"fc2_organizer.planning", "fc2_organizer.materialization"}
@@ -49,6 +50,9 @@ _ALLOWED = {
                      f"{_PKG}.seal", f"{_PKG}.validation"} | _BARE,
     # S2 (contract section 3 table: this package + errno / os / stat); never planning / materialization.
     "directories.py": {"__future__", "os", _PKG, f"{_PKG}.errors", f"{_PKG}.models"},
+    # S3 (contract section 3 table: this package + errno / hashlib / os / stat); never planning / materialization.
+    "transfer.py": {"__future__", "errno", "hashlib", "os", _PKG, f"{_PKG}.directories", f"{_PKG}.errors",
+                    f"{_PKG}.models"},
 }
 _FORBIDDEN_PREFIXES = (
     "fc2_metadata_core", "amane", "httpx", "requests", "socket", "ssl", "http", "urllib", "shutil", "tempfile",
@@ -112,9 +116,9 @@ def _calls(tree: ast.AST):
 # --------------------------------------------------------------------------- static
 
 
-def test_package_has_exactly_the_s2_modules():
+def test_package_has_exactly_the_s3_modules():
     names = {p.name for p in _files(EXEC_SRC_ROOT)}
-    assert names == _S2_MODULES
+    assert names == _S3_MODULES
     for later in _NOT_YET:
         assert later not in names
 
@@ -165,11 +169,12 @@ def test_os_syscalls_only_inside_the_private_seam():
 
 
 def test_mutating_seam_is_reached_only_by_the_exclusive_mkdir_helper():
-    # Outside _fs.py the only mutating seam attribute allowed anywhere is `.mkdir`, and only inside
-    # directories._mkdir_exclusive (S2). preflight.py references no mutating attribute at all.
+    # Outside _fs.py and transfer.py (S3; its frozen sites are asserted below) the only mutating seam
+    # attribute allowed anywhere is `.mkdir`, and only inside directories._mkdir_exclusive (S2).
+    # preflight.py references no mutating attribute at all.
     mkdir_sites = []
     for path in _files(EXEC_SRC_ROOT):
-        if path.name == "_fs.py":
+        if path.name in {"_fs.py", "transfer.py"}:
             continue
         tree = _tree(path)
         for fn in ast.walk(tree):
@@ -200,9 +205,13 @@ def test_mkdir_is_exclusive_single_call_without_makedirs_or_exist_ok():
     assert len(calls) == 1 and len(calls[0].args) == 2 and not calls[0].keywords
 
 
-def test_no_deletion_call_anywhere_in_production():
+def test_no_deletion_call_in_production_outside_the_frozen_transfer_sites():
+    # S3: `unlink` exists only in transfer._remove_owned_temp / transfer._unlink_verified_source
+    # (asserted exactly by test_transfer_mutation_sites_are_frozen); nothing else deletes anything.
     for path in _files(EXEC_SRC_ROOT):
         for lineno, name, _ in _calls(_tree(path)):
+            if path.name == "transfer.py" and name == "unlink":
+                continue
             assert name not in _DELETION_CALLS, f"{path.name}:{lineno}: deletion call {name!r}"
 
 
@@ -326,3 +335,127 @@ def test_execution_imports_and_preflights_with_forbidden_modules_blocked(tmp_pat
         sys.meta_path.remove(blocker)
         _purge()
         sys.modules.update(saved)
+
+
+# --------------------------------------------------------------------------- S3: transfer.py
+
+
+def _attribute_sites(path: Path, attrs: set[str]) -> dict[str, set[str]]:
+    """attr -> names of the innermost functions in which ``<x>.<attr>`` appears (module level: "<module>")."""
+    sites: dict[str, set[str]] = {attr: set() for attr in attrs}
+
+    def visit(node: ast.AST, owner: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if isinstance(child, ast.Attribute) and child.attr in attrs:
+                sites[child.attr].add(owner)
+            visit(child, owner)
+
+    visit(_tree(path), "<module>")
+    return sites
+
+
+def _function(tree: ast.AST, name: str) -> ast.FunctionDef:
+    return next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
+
+
+def test_transfer_mutation_sites_are_frozen():
+    # Construction plan S3 item 4: unlink only in the two private helpers; rename / link only in the two
+    # no-replace primitives; no mkdir / replace in transfer.py; no rename / link / unlink anywhere else.
+    sites = _attribute_sites(EXEC_SRC_ROOT / "transfer.py", {"unlink", "rename", "link", "mkdir", "replace"})
+    assert sites["unlink"] == {"_remove_owned_temp", "_unlink_verified_source"}, sites["unlink"]
+    assert sites["rename"] == {"_same_volume_primitive", "_publish_no_replace"}, sites["rename"]
+    assert sites["link"] == {"_same_volume_primitive", "_publish_no_replace"}, sites["link"]
+    assert sites["mkdir"] == set() and sites["replace"] == set()
+    for other in _files(EXEC_SRC_ROOT):
+        if other.name in {"_fs.py", "transfer.py"}:
+            continue
+        found = _attribute_sites(other, {"unlink", "rename", "link"})
+        assert found == {"unlink": set(), "rename": set(), "link": set()}, (other.name, found)
+    tree = _tree(EXEC_SRC_ROOT / "transfer.py")
+    for name in ("_remove_owned_temp", "_unlink_verified_source"):
+        calls = [n for n in ast.walk(_function(tree, name)) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Attribute) and n.func.attr == "unlink"]
+        assert len(calls) == 1 and len(calls[0].args) == 1 and not calls[0].keywords, name
+
+
+def test_unlink_verified_source_revalidates_before_unlinking():
+    fn = _function(_tree(EXEC_SRC_ROOT / "transfer.py"), "_unlink_verified_source")
+    body = fn.body[1:] if isinstance(fn.body[0], ast.Expr) else fn.body  # skip the docstring
+    assert isinstance(body[0], ast.Assign) and isinstance(body[0].value, ast.Call)
+    assert getattr(body[0].value.func, "id", None) == "_source_state"
+    assert isinstance(body[1], ast.If) and isinstance(body[1].body[0], ast.Return)
+    assert isinstance(body[2], ast.Try)  # the unlink comes only after the early return
+
+
+def test_transfer_uses_no_replace_truncate_shutil_or_directory_walks():
+    path = EXEC_SRC_ROOT / "transfer.py"
+    tree = _tree(path)
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    for forbidden in ("replace", "O_TRUNC", "renameat", "renameat2", "rmtree", "rmdir", "makedirs", "walk",
+                      "glob", "iglob", "scandir", "listdir", "list_names", "shutil", "copyfile", "sendfile",
+                      "copy_file_range", "remove"):
+        assert forbidden not in names and forbidden not in attrs, forbidden
+    text = path.read_text(encoding="utf-8")
+    assert "O_TRUNC" not in text.replace("never ``O_TRUNC``", "") and "shutil" not in text
+
+
+def test_temp_flags_are_exclusive_create_without_truncate_and_source_flags_are_read_only():
+    _purge()
+    try:
+        _fs = importlib.import_module(f"{_PKG}._fs")
+        transfer = importlib.import_module(f"{_PKG}.transfer")
+        _check_transfer_flags(_fs, transfer)
+    finally:
+        _purge()
+
+
+def _check_transfer_flags(_fs, transfer) -> None:
+    flags = transfer._TEMP_FLAGS
+    assert flags & os.O_CREAT and flags & os.O_EXCL and flags & os.O_WRONLY
+    for bad in ("O_TRUNC", "O_APPEND", "O_RDWR"):
+        assert not flags & getattr(os, bad, 0), bad
+    assert transfer._CHUNK == 1 << 20 and transfer._MAX_TEMP_ATTEMPTS == 8 and transfer._TEMP_MODE == 0o666
+    for write_flag in ("O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND", "O_EXCL"):
+        assert not _fs._READ_ONLY_FLAGS & getattr(os, write_flag, 0), write_flag
+        assert not transfer._DIRECTORY_FLAGS & getattr(os, write_flag, 0), write_flag
+    assert _fs._READ_ONLY_FLAGS & getattr(os, "O_NOFOLLOW", 0) == getattr(os, "O_NOFOLLOW", 0)
+    assert transfer._SAME_VOLUME_STRATEGY == ("rename" if os.name == "nt" else "link")
+    assert transfer._DIRECTORY_FSYNC is (os.name != "nt")
+
+
+def test_transfer_translates_only_oserror_and_reraises_fatal_exceptions():
+    # Contract section 29: only OSError becomes a typed failure. `except BaseException` appears only on the
+    # fatal cleanup paths, which either re-raise the same object (bare `raise`) or swallow cleanup noise.
+    tree = _tree(EXEC_SRC_ROOT / "transfer.py")
+    owners: dict[str, set[str]] = {}
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if isinstance(node, ast.ExceptHandler):
+                caught = node.type.id if isinstance(node.type, ast.Name) else ast.dump(node.type or ast.Pass())
+                owners.setdefault(caught, set()).add(fn.name)
+                if caught == "BaseException":
+                    reraises = any(isinstance(n, ast.Raise) and n.exc is None for n in node.body)
+                    swallows = all(isinstance(n, ast.Pass) for n in node.body)
+                    assert reraises or swallows, fn.name
+    assert set(owners) == {"OSError", "BaseException"}, owners
+    assert owners["BaseException"] == {"_close_quietly", "_fsync_directory", "_cross_volume", "_abandon"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Raise):
+            assert node.cause is None, node.lineno
+
+
+def test_transfer_is_private_to_the_package():
+    _purge()
+    try:
+        execution = importlib.import_module(_PKG)
+        importlib.import_module(f"{_PKG}.transfer")
+        for name in ("transfer_media", "TransferOutcome", "ResumePhase", "_SAME_VOLUME_STRATEGY"):
+            assert name not in execution.__all__ and not hasattr(execution, name), name
+    finally:
+        _purge()
