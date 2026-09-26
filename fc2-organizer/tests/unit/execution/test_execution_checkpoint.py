@@ -29,6 +29,7 @@ from fc2_organizer.execution import (
 )
 from fc2_organizer.execution import CheckpointRejectionReason as C
 from fc2_organizer.execution import PreflightBlockReason as B
+from fc2_organizer.execution import _fs
 from fc2_organizer.execution import seal as seal_module
 from fc2_organizer.execution.seal import is_consumed, issue_checkpoint, register_consumption, verify_seal
 from fc2_organizer.execution.validation import expected_effects, expected_units, skipped_steps
@@ -271,9 +272,122 @@ def test_library_root_replaced_on_disk(mid):
     os.rename(s.library_root, str(s.root / "old-library"))
     os.mkdir(s.library_root)
     reasons = _reasons(preflight_execution(s.plan, s.artifacts, cp))
-    assert reasons[0] == (B.LIBRARY_ROOT_CHANGED, PathRole.LIBRARY_ROOT)
-    assert (B.TARGET_DIRECTORY_CHANGED, PathRole.TARGET_DIRECTORY) in reasons
+    # Frozen section 16: an unusable library root suppresses every target-side probe (S2-R1).
+    assert reasons == [(B.LIBRARY_ROOT_CHANGED, PathRole.LIBRARY_ROOT)]
     assert not os.path.exists(s.plan.target_directory.absolute_path)  # nothing recreated
+
+
+# --------------------------------------------------------------------------- S2-R1: frozen blocker ordering
+
+
+class Trace:
+    """Records every lstat / listdir / open path the seam receives (composes with earlier injections)."""
+
+    def __init__(self, monkeypatch):
+        self.lstat, self.listdir, self.open = [], [], []
+        real = _fs._FS
+
+        def lstat(path):
+            self.lstat.append(path)
+            return real.lstat(path)
+
+        def listdir(path):
+            self.listdir.append(path)
+            return real.listdir(path)
+
+        def open_(path, flags, *rest):
+            self.open.append(path)
+            return real.open(path, flags, *rest)
+
+        inject(monkeypatch, lstat=lstat, listdir=listdir, open=open_)
+
+    def under(self, directory):
+        prefix = directory + os.sep
+        return [p for p in self.lstat + self.listdir + self.open if p == directory or p.startswith(prefix)]
+
+
+def _invalidate_library(s, monkeypatch):
+    inject(monkeypatch, lstat=lstat_rewriting(s.library_root, st_ino=os.lstat(s.library_root).st_ino + 1))
+
+
+def _replace_target(s):
+    target = s.plan.target_directory.absolute_path
+    os.rename(target, str(s.root / "moved-target"))
+    os.mkdir(target)
+
+
+def test_r1_library_invalid_source_changed_target_changed(tmp_path, monkeypatch):
+    s = scene(tmp_path)
+    cp = advance(s, 1)
+    with open(s.source_path, "ab") as handle:
+        handle.write(b"+")
+    _replace_target(s)
+    _invalidate_library(s, monkeypatch)
+    trace = Trace(monkeypatch)
+    reasons = _reasons(preflight_execution(s.plan, s.artifacts, cp))
+    assert reasons == [(B.LIBRARY_ROOT_CHANGED, PathRole.LIBRARY_ROOT), (B.SOURCE_CHANGED, PathRole.SOURCE)]
+    assert trace.under(s.plan.target_directory.absolute_path) == []  # no target snapshot / listdir / read
+    assert trace.listdir == [] and trace.open == []
+    assert trace.lstat == [s.library_root, s.source_path]  # source still probed by progress
+
+
+def test_r1_library_valid_source_changed_target_changed(tmp_path):
+    s = scene(tmp_path)
+    cp = advance(s, 1)
+    with open(s.source_path, "ab") as handle:
+        handle.write(b"+")
+    _replace_target(s)
+    assert _reasons(preflight_execution(s.plan, s.artifacts, cp)) == [
+        (B.SOURCE_CHANGED, PathRole.SOURCE), (B.TARGET_DIRECTORY_CHANGED, PathRole.TARGET_DIRECTORY)]
+
+
+def test_r1_library_invalid_source_missing_unexpected_target_entry(tmp_path, monkeypatch):
+    s = scene(tmp_path)
+    cp = advance(s, _after(s, EffectKind.MEDIA_PUBLISHED))
+    os.remove(s.source_path)
+    _file(os.path.join(s.plan.target_directory.absolute_path, "planted"))
+    _invalidate_library(s, monkeypatch)
+    trace = Trace(monkeypatch)
+    reasons = _reasons(preflight_execution(s.plan, s.artifacts, cp))
+    assert reasons == [(B.LIBRARY_ROOT_CHANGED, PathRole.LIBRARY_ROOT), (B.SOURCE_MISSING, PathRole.SOURCE)]
+    assert trace.listdir == [] and trace.open == []
+    assert trace.under(s.plan.target_directory.absolute_path) == []
+
+
+def test_r1_source_removed_library_invalid_target_changed(tmp_path, monkeypatch):
+    s = scene(tmp_path, extra=1)
+    cp = advance(s, _after(s, EffectKind.ARTIFACT_PUBLISHED, ArtifactKind.EXTRAFANART, 1) - 1)
+    _replace_target(s)
+    _invalidate_library(s, monkeypatch)
+    trace = Trace(monkeypatch)
+    reasons = _reasons(preflight_execution(s.plan, s.artifacts, cp))
+    assert reasons == [(B.LIBRARY_ROOT_CHANGED, PathRole.LIBRARY_ROOT)]
+    assert trace.lstat == [s.library_root]  # neither the source nor anything target-side was probed
+    assert trace.listdir == [] and trace.open == []  # no inventory, no artifact re-read
+
+
+def test_r1_source_blocker_precedes_completed_effect_blockers(tmp_path):
+    s = scene(tmp_path)
+    cp = advance(s, _after(s, EffectKind.MEDIA_PUBLISHED))
+    target_media = s.plan.target_media_path.absolute_path
+    st = os.stat(target_media)
+    os.utime(target_media, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))  # changes source too (hard link)
+    os.remove(s.source_path)
+    with open(s.source_path, "wb") as handle:
+        handle.write(s.content)
+    reasons = _reasons(preflight_execution(s.plan, s.artifacts, cp))
+    assert reasons == [(B.SOURCE_CHANGED, PathRole.SOURCE), (B.COMPLETED_EFFECT_CHANGED, PathRole.TARGET_MEDIA)]
+
+
+def test_r1_library_valid_still_runs_every_target_side_check(mid, monkeypatch):
+    s, cp = mid
+    trace = Trace(monkeypatch)
+    assert preflight_execution(s.plan, s.artifacts, cp).ready
+    target = s.plan.target_directory.absolute_path
+    assert trace.listdir == [target, s.plan.extrafanart_directory.absolute_path]
+    assert sorted(trace.open) == sorted(e.path for e in cp.completed_effects
+                                        if e.kind is EffectKind.ARTIFACT_PUBLISHED)
+    assert s.source_path not in trace.lstat  # SOURCE_REMOVED is complete in this state
 
 
 def test_target_directory_replaced_or_missing(mid):

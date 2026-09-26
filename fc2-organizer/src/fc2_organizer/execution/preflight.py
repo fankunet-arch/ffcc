@@ -189,6 +189,39 @@ def _resume_preflight(plan: OrganizePlan, artifacts: tuple[ArtifactWriteRequest,
     else:
         library_identity = library
 
+    # Frozen section 16 order: library root -> source -> target / checkpoint-owned state.
+    if EffectKind.SOURCE_REMOVED not in kinds:
+        _check_resume_source(plan.source_path, checkpoint.source_identity, blockers)
+
+    # With an unusable library root the target-side results are meaningless: none of those paths is probed.
+    if library_identity is not None:
+        _check_owned_state(plan, artifacts, checkpoint, blockers)
+
+    completed_units, pending_units = _split_units(plan, artifacts, len(done))
+    return sealed(
+        ExecutionPreflight,
+        preflight_id=_fs.new_token(),
+        mode=PreflightMode.RESUME,
+        plan=plan,
+        artifacts=artifacts,
+        checkpoint=checkpoint,
+        plan_fingerprint=plan_fp,
+        manifest_fingerprint=manifest_fp,
+        ready=not blockers,
+        blockers=tuple(blockers),
+        library_root_identity=library_identity,
+        source_identity=checkpoint.source_identity,
+        transfer_mode=checkpoint.transfer_mode,
+        completed_units=completed_units,
+        pending_units=pending_units,
+        skipped_steps=skipped_steps(artifacts),
+    )
+
+
+def _check_owned_state(plan: OrganizePlan, artifacts: tuple[ArtifactWriteRequest, ...],
+                       checkpoint: ExecutionCheckpoint, blockers: list[PreflightBlocker]) -> None:
+    """Target / checkpoint-owned state: owned directories, exact inventories, completed file effects."""
+    done = checkpoint.completed_effects
     present: list[CompletedEffect] = []
     target_directory = plan.target_directory.absolute_path
     if not revalidate_directory(target_directory, checkpoint.target_directory_identity):
@@ -212,29 +245,6 @@ def _resume_preflight(plan: OrganizePlan, artifacts: tuple[ArtifactWriteRequest,
     for effect in done:  # E order
         if effect.kind in _FILE_EFFECTS and any(effect is p for p in present):
             _check_file_effect(effect, requests, blockers)
-
-    if EffectKind.SOURCE_REMOVED not in kinds:
-        _check_resume_source(plan.source_path, checkpoint.source_identity, blockers)
-
-    completed_units, pending_units = _split_units(plan, artifacts, len(done))
-    return sealed(
-        ExecutionPreflight,
-        preflight_id=_fs.new_token(),
-        mode=PreflightMode.RESUME,
-        plan=plan,
-        artifacts=artifacts,
-        checkpoint=checkpoint,
-        plan_fingerprint=plan_fp,
-        manifest_fingerprint=manifest_fp,
-        ready=not blockers,
-        blockers=tuple(blockers),
-        library_root_identity=library_identity,
-        source_identity=checkpoint.source_identity,
-        transfer_mode=checkpoint.transfer_mode,
-        completed_units=completed_units,
-        pending_units=pending_units,
-        skipped_steps=skipped_steps(artifacts),
-    )
 
 
 def _check_inventory(directory: str, effects: list[CompletedEffect], checkpoint: ExecutionCheckpoint,
