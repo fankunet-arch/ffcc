@@ -27,15 +27,18 @@ from fc2_organizer.execution import (
     ExecutionStep,
     LeftoverTemporary,
     PathRole,
+    PreflightBlockReason,
     TransferMode,
     TransferStage,
 )
 from fc2_organizer.execution import _fs, transfer
 from fc2_organizer.execution.transfer import ResumePhase, TransferOutcome, transfer_media
 
+from ._builders import make_manifest
 from ._helpers import (
     FakeDirectoryFsync,
     SeamLog,
+    mismatch_resume_blockers,
     assert_planted_unchanged,
     assert_source_not_lost,
     failing,
@@ -350,22 +353,88 @@ def test_windows_native_sharing_violation_on_an_open_source(tmp_path, monkeypatc
 # --------------------------------------------------------------------------- after the primitive
 
 
-@pytest.mark.parametrize("strategy", STRATEGIES)
-def test_published_identity_mismatch_is_reported_and_nothing_deleted(tmp_path, monkeypatch, strategy):
-    use_strategy(monkeypatch, strategy)
+VERIFY_FAULTS = {
+    "identity_mismatch": lambda ts: lstat_rewriting(ts.final, st_ino=ts.source_identity.inode + 99),
+    "lstat_error": lambda ts: _lstat_failing_for_after_publish(ts),
+}
+
+
+def _lstat_failing_for_after_publish(ts):
+    # The early check needs lstat(final) -> FileNotFoundError; once the final exists, lstat fails with EIO.
+    real = _fs._FS.lstat
+
+    def lstat(candidate):
+        if candidate == ts.final and os.path.lexists(ts.final):
+            raise OSError(errno.EIO, "io")
+        return real(candidate)
+
+    return lstat
+
+
+@pytest.mark.parametrize("fault", sorted(VERIFY_FAULTS))
+def test_rename_post_publish_mismatch_records_both_real_effects(tmp_path, monkeypatch, fault):
+    # R-01 A (Frozen 18.2): the atomic rename already published the final AND removed the source name.
+    use_strategy(monkeypatch, "rename")
     ts = transfer_scene(tmp_path, content=CONTENT)
-    inject(monkeypatch, lstat=lstat_rewriting(ts.final, st_ino=ts.source_identity.inode + 99))
+    inject(monkeypatch, lstat=VERIFY_FAULTS[fault](ts))
     log = SeamLog(monkeypatch)
     outcome = _run(ts)
-    assert outcome.effects == () and outcome.leftover_temporaries == ()
     assert outcome.failure == ExecutionFailure(step=ExecutionStep.MOVE_MEDIA, kind=F.PUBLISHED_MEDIA_MISMATCH,
                                                stage=TransferStage.PUBLISH_VERIFY)
-    assert log.ops("unlink") == []  # no rollback, and the source is never deleted
-    assert sha256_of_file(ts.final) == ts.sha256
-    if strategy == "link":
-        assert sha256_of_file(ts.source) == ts.sha256
+    assert [e.kind for e in outcome.effects] == [EffectKind.MEDIA_PUBLISHED, EffectKind.SOURCE_REMOVED]
+    media, removed = outcome.effects
+    assert media.identity == ts.source_identity and media.size == ts.size and media.sha256 is None
+    assert media.path == ts.final and removed.path == ts.source
+    assert outcome.media_size == ts.size and outcome.media_sha256 is None and outcome.transfer_mode is SAME
+    assert log.ops("unlink", "link", "open") == [] and log.ops("rename") == [("rename", ts.source)]  # no rollback
+    assert not os.path.lexists(ts.source) and os.path.lexists(ts.final)
+    inject(monkeypatch, lstat=os.lstat)
+    assert sha256_of_file(ts.final) == ts.sha256  # the final is never deleted
     assert_planted_unchanged(ts)
     assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+@pytest.mark.parametrize("fault", sorted(VERIFY_FAULTS))
+def test_link_post_link_mismatch_records_media_published_and_keeps_source(tmp_path, monkeypatch, fault):
+    # R-01 B: link succeeded -> MEDIA_PUBLISHED happened; the source is kept and never unlinked.
+    use_strategy(monkeypatch, "link")
+    ts = transfer_scene(tmp_path, content=CONTENT)
+    fake = FakeDirectoryFsync(monkeypatch, ts.target_directory)
+    inject(monkeypatch, lstat=VERIFY_FAULTS[fault](ts))
+    log = SeamLog(monkeypatch)
+    outcome = _run(ts)
+    assert outcome.failure == ExecutionFailure(step=ExecutionStep.MOVE_MEDIA, kind=F.PUBLISHED_MEDIA_MISMATCH,
+                                               stage=TransferStage.PUBLISH_VERIFY)
+    assert [e.kind for e in outcome.effects] == [EffectKind.MEDIA_PUBLISHED]
+    assert outcome.effects[0].identity == ts.source_identity and outcome.media_size == ts.size
+    assert log.ops("unlink") == [] and fake.events == []  # no directory fsync / source unlink tail
+    inject(monkeypatch, lstat=os.lstat)
+    assert sha256_of_file(ts.source) == ts.sha256 and sha256_of_file(ts.final) == ts.sha256
+    assert_planted_unchanged(ts)
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+@pytest.mark.parametrize("strategy", STRATEGIES)
+def test_really_changed_final_after_mismatch_fails_closed_on_resume(tmp_path, monkeypatch, strategy):
+    # Mismatch resume safety: the recorded effect carries the trusted identity; the RESUME preflight
+    # re-snapshots the final and blocks with COMPLETED_EFFECT_CHANGED.
+    use_strategy(monkeypatch, strategy)
+    ts = transfer_scene(tmp_path, content=CONTENT, plant=False)
+    real = getattr(_fs._FS, strategy)
+
+    def primitive(source, final):
+        real(source, final)
+        with open(final, "ab") as handle:
+            handle.write(b"changed right after the publish")
+
+    inject(monkeypatch, **{strategy: primitive})
+    outcome = _run(ts)
+    assert outcome.failure.kind is F.PUBLISHED_MEDIA_MISMATCH
+    assert outcome.effects[0].identity == ts.source_identity
+    blockers = mismatch_resume_blockers(ts, outcome, make_manifest(ts.plan), SAME)
+    assert PreflightBlockReason.COMPLETED_EFFECT_CHANGED in blockers
+    assert_source_not_lost(ts.source, ts.final, hashlib.sha256(CONTENT + b"changed right after the publish")
+                           .hexdigest())
 
 
 def _replace_source_after(monkeypatch, ts, op_name, replacement: bytes | None):

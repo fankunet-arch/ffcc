@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from fc2_organizer.execution import _fs, transfer
+from fc2_organizer.execution import _fs, preflight_execution, transfer
+from fc2_organizer.execution.models import CompletedEffect, EffectKind, PathRole
+from fc2_organizer.execution.seal import issue_checkpoint, manifest_fingerprint, plan_fingerprint
 from fc2_organizer.execution.directories import create_target_directory
 
 from ._builders import make_plan, scene
@@ -411,3 +413,18 @@ def force_cross_volume_devices(monkeypatch: pytest.MonkeyPatch, offset: int = 7)
         return real(st) + offset if stat.S_ISREG(st.st_mode) else real(st)
 
     inject(monkeypatch, device_of=device_of)
+
+
+def mismatch_resume_blockers(ts: TransferScene, outcome, manifest, transfer_mode) -> tuple:
+    """TESTS-ONLY: issue a real sealed checkpoint whose effects are U1 + the transfer's recorded effects and
+    return the RESUME preflight's blocker reasons (proves a recorded-but-changed effect fails closed)."""
+    directory = CompletedEffect(EffectKind.TARGET_DIRECTORY_CREATED, PathRole.TARGET_DIRECTORY,
+                                ts.target_directory, ts.target_identity, None, None, None, None)
+    checkpoint = issue_checkpoint(
+        plan_fingerprint=plan_fingerprint(ts.plan), manifest_fingerprint=manifest_fingerprint(manifest),
+        library_root_identity=_fs.snapshot(ts.plan.library_root), source_identity=ts.source_identity,
+        transfer_mode=transfer_mode, target_directory_identity=ts.target_identity,
+        extrafanart_directory_identity=None, completed_effects=(directory, *outcome.effects),
+        leftover_temporaries=outcome.leftover_temporaries)
+    preflight = preflight_execution(ts.plan, manifest, checkpoint)
+    return tuple(blocker.reason for blocker in preflight.blockers)

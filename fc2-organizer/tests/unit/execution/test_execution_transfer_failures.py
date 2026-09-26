@@ -19,17 +19,20 @@ import pytest
 
 from fc2_organizer.execution import (
     EffectKind,
+    EntryType,
     ExecutionFailure,
     ExecutionFailureKind,
     ExecutionStep,
     LeftoverTemporary,
     PathRole,
+    PreflightBlockReason,
     TransferMode,
     TransferStage,
 )
 from fc2_organizer.execution import _fs, transfer
 from fc2_organizer.execution.transfer import ResumePhase, transfer_media
 
+from ._builders import make_manifest
 from ._helpers import (
     MIB,
     PLANTED_NAMES,
@@ -41,6 +44,7 @@ from ._helpers import (
     failing,
     inject,
     lstat_rewriting,
+    mismatch_resume_blockers,
     sha256_of_file,
     temp_names,
     transfer_scene,
@@ -635,18 +639,66 @@ def test_target_directory_replaced_before_publish(tmp_path, monkeypatch):
     assert_source_not_lost(ts.source, ts.final, ts.sha256)
 
 
+class TempIdentity:
+    """Captures the verified temp identity of step 5 (fstat of the temp fd after fsync)."""
+
+    def __init__(self, monkeypatch):
+        self.temp = TempFd(monkeypatch)
+        self.identity = None
+        real = _fs._FS.fstat
+
+        def fstat(fd):
+            st = real(fd)
+            if fd == self.temp.fd:
+                self.identity = _fs._identity_of(st, EntryType.FILE)
+            return st
+
+        inject(monkeypatch, fstat=fstat)
+
+
 @pytest.mark.parametrize("strategy", ["rename", "link"])
 @pytest.mark.parametrize("field,value", [("st_ino", 1), ("st_size", 2)])
-def test_publish_verification_failure_keeps_everything(tmp_path, monkeypatch, strategy, field, value):
+def test_publish_verification_failure_records_media_published_and_keeps_source(tmp_path, monkeypatch, strategy,
+                                                                                field, value):
+    # R-01 C: the no-replace publish succeeded -> MEDIA_PUBLISHED happened (verified temp identity, hash,
+    # size); PUBLISHED_MEDIA_MISMATCH stops before the directory fsync / source unlink tail.
     ts = _scene(tmp_path, monkeypatch, strategy)
+    captured = TempIdentity(monkeypatch)
+    fake = FakeDirectoryFsync(monkeypatch, ts.target_directory)
     inject(monkeypatch, lstat=lstat_rewriting(ts.final, **{field: value}))
     log = SeamLog(monkeypatch)
     outcome = _run(ts)
     assert outcome.failure == _failure(F.PUBLISHED_MEDIA_MISMATCH, T.PUBLISH_VERIFY)
-    assert outcome.effects == () and outcome.leftover_temporaries == ()
+    assert [e.kind for e in outcome.effects] == [EffectKind.MEDIA_PUBLISHED]
+    media = outcome.effects[0]
+    assert captured.identity is not None and media.identity == captured.identity
+    assert media.identity.inode != ts.source_identity.inode and media.size == ts.size
+    assert media.sha256 == ts.sha256 == outcome.media_sha256 and outcome.media_size == ts.size
+    assert outcome.leftover_temporaries == () and outcome.transfer_mode is CROSS
     assert all(c[1] != ts.source and c[1] != ts.final for c in log.ops("unlink"))  # no rollback, no source unlink
+    last_verify = max(i for i, call in enumerate(log.calls) if call == ("lstat", ts.final))
+    assert fake.events == [] and ("lstat", ts.source) not in log.calls[last_verify:]
+    inject(monkeypatch, lstat=os.lstat)
     assert sha256_of_file(ts.final) == ts.sha256 and _source_intact(ts)
     assert temp_names(ts.target_directory) == []
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+def test_really_changed_cross_volume_final_fails_closed_on_resume(tmp_path, monkeypatch):
+    ts = _scene(tmp_path, monkeypatch, "rename")
+    real = _fs._FS.rename
+
+    def publish(temp, final):
+        real(temp, final)
+        with open(final, "ab") as handle:
+            handle.write(b"changed")
+
+    inject(monkeypatch, rename=publish)
+    outcome = _run(ts)
+    assert outcome.failure.kind is F.PUBLISHED_MEDIA_MISMATCH
+    assert [e.kind for e in outcome.effects] == [EffectKind.MEDIA_PUBLISHED] and _source_intact(ts)
+    blockers = mismatch_resume_blockers(ts, outcome, make_manifest(ts.plan), CROSS)
+    assert PreflightBlockReason.COMPLETED_EFFECT_CHANGED in blockers
     assert_source_not_lost(ts.source, ts.final, ts.sha256)
 
 
@@ -934,3 +986,132 @@ def test_every_failure_test_asserts_the_core_invariant():
     for fn in tests:
         names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
         assert "assert_source_not_lost" in names, fn.name
+
+
+# --------------------------------------------------------------------------- R-02: foreign exception from close()
+
+
+def _close_raising_once(monkeypatch, fd_of, exc):
+    """``close(fd)`` raises ``exc`` the first time it is called for ``fd_of()`` WITHOUT releasing the
+    descriptor (an interrupted close); every other close is real. Returns the ordered close log."""
+    real = _fs._FS.close
+    log: list[tuple[int, str]] = []
+
+    def close(fd):
+        if fd == fd_of() and not any(entry[0] == fd for entry in log):
+            log.append((fd, "raised"))
+            raise exc
+        log.append((fd, "closed"))
+        return real(fd)
+
+    inject(monkeypatch, close=close)
+    return log
+
+
+def _assert_released(*fds):
+    for fd in fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+def test_foreign_exception_from_temp_fd_close_keeps_fd_ownership(tmp_path, monkeypatch):
+    # R-02 A: step 5 close(temp) raises; the temp fd is still owned, so the fatal cleanup closes it again.
+    ts = _scene(tmp_path, monkeypatch)
+    temp = TempFd(monkeypatch)
+    source = SourceFd(monkeypatch, ts.source)
+    exc = CustomFatal("temp close")
+    closes = _close_raising_once(monkeypatch, lambda: temp.fd, exc)
+    log = SeamLog(monkeypatch)
+    with pytest.raises(CustomFatal) as info:
+        _run(ts)
+    assert info.value is exc
+    assert closes == [(temp.fd, "raised"), (temp.fd, "closed"), (source.fd, "closed")]
+    _assert_released(temp.fd, source.fd)
+    assert [c for c in log.ops("unlink") if _is_temp(c[1])] == [("unlink", temp.path)]  # exactly once
+    assert log.ops("rename", "link") == [] and not os.path.lexists(ts.final)
+    assert temp_names(ts.target_directory) == [] and _source_intact(ts)
+    assert_planted_unchanged(ts)
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+@pytest.mark.parametrize("foreign", [RuntimeError, KeyboardInterrupt, GeneratorExit])
+def test_foreign_exception_from_source_fd_close_keeps_fd_ownership(tmp_path, monkeypatch, foreign):
+    # R-02 B: step 6 close(source) raises; the fatal cleanup closes the source fd again, the temp once.
+    ts = _scene(tmp_path, monkeypatch)
+    temp = TempFd(monkeypatch)
+    source = SourceFd(monkeypatch, ts.source)
+    exc = foreign("source close")
+    closes = _close_raising_once(monkeypatch, lambda: source.fd, exc)
+    log = SeamLog(monkeypatch)
+    with pytest.raises(foreign) as info:
+        _run(ts)
+    assert info.value is exc
+    assert closes == [(temp.fd, "closed"), (source.fd, "raised"), (source.fd, "closed")]
+    _assert_released(temp.fd, source.fd)
+    assert [c for c in log.ops("unlink") if _is_temp(c[1])] == [("unlink", temp.path)]
+    assert log.ops("rename", "link") == [] and not os.path.lexists(ts.final)  # not yet published
+    assert _source_intact(ts)
+    assert_planted_unchanged(ts)
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+@pytest.mark.parametrize("mode", [SAME, CROSS])
+def test_foreign_exception_from_directory_fd_close_gets_a_quiet_close(tmp_path, monkeypatch, mode):
+    # R-02 C: the directory fd close raises; one quiet close attempt, then the same object propagates.
+    ts = _scene(tmp_path, monkeypatch, "link")
+    exc = CustomFatal("directory close")
+    fake = FakeDirectoryFsync(monkeypatch, ts.target_directory, close_error=exc)
+    log = SeamLog(monkeypatch)
+    with pytest.raises(CustomFatal) as info:
+        _run(ts, mode=mode)
+    assert info.value is exc
+    assert fake.events == ["open", "fsync", "close", "close"]
+    closes = [c for c in log.ops("close") if c[1] == FakeDirectoryFsync.FD]
+    assert len(closes) == 2
+    assert ("unlink", ts.source) not in log.calls  # stopped before the source unlink; nothing rolled back
+    assert sha256_of_file(ts.final) == ts.sha256 and _source_intact(ts)
+    assert temp_names(ts.target_directory) == []
+    assert_planted_unchanged(ts)
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+def test_foreign_exception_from_typed_failure_cleanup_close_propagates(tmp_path, monkeypatch):
+    # R-02 D: a typed OSError (temp fsync) starts the typed cleanup; its close(temp) raises a foreign
+    # exception, which propagates as the same object (not swallowed into MEDIA_FSYNC_FAILED), and the
+    # remaining cleanup still happens: temp fd closed again, source fd closed, owned temp unlinked once.
+    ts = _scene(tmp_path, monkeypatch)
+    temp = TempFd(monkeypatch)
+    source = SourceFd(monkeypatch, ts.source)
+    inject(monkeypatch, fsync=failing(OSError(errno.EIO, "fsync")))
+    exc = KeyboardInterrupt("cleanup close")
+    closes = _close_raising_once(monkeypatch, lambda: temp.fd, exc)
+    log = SeamLog(monkeypatch)
+    with pytest.raises(KeyboardInterrupt) as info:
+        _run(ts)
+    assert info.value is exc
+    assert closes == [(temp.fd, "raised"), (temp.fd, "closed"), (source.fd, "closed")]
+    _assert_released(temp.fd, source.fd)
+    assert [c for c in log.ops("unlink") if _is_temp(c[1])] == [("unlink", temp.path)]
+    assert temp_names(ts.target_directory) == [] and not os.path.lexists(ts.final) and _source_intact(ts)
+    assert_planted_unchanged(ts)
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)
+
+
+def test_oserror_from_close_is_still_a_typed_failure_without_retry(tmp_path, monkeypatch):
+    # OSError close semantics are unchanged: MEDIA_CLOSE_FAILED, ownership ends, no second close.
+    ts = _scene(tmp_path, monkeypatch)
+    temp = TempFd(monkeypatch)
+    real = _fs._FS.close
+    temp_closes = []
+
+    def close(fd):
+        real(fd)  # released, but reported as failed
+        if fd == temp.fd:
+            temp_closes.append(fd)
+            raise OSError(errno.EIO, "close")
+
+    inject(monkeypatch, close=close)
+    outcome = _run(ts)
+    _assert_pre_publish_failure(ts, outcome, _failure(F.MEDIA_CLOSE_FAILED, T.CLOSE, errno.EIO))
+    assert temp_closes == [temp.fd]  # ownership ended with the OSError: no second close of that fd
+    assert_source_not_lost(ts.source, ts.final, ts.sha256)

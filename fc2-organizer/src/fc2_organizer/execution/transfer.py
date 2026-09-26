@@ -116,7 +116,8 @@ class TransferOutcome:
     """Immutable result of :func:`transfer_media` (internal value model; strict exact types).
 
     * ``effects`` -- the NEW final effects of this call, in order (``MEDIA_PUBLISHED`` then ``SOURCE_REMOVED``);
-    * ``failure`` -- the typed failure that stopped the unit, or ``None`` iff the source was removed;
+    * ``failure`` -- the typed failure that stopped the unit, or ``None`` when U2 completed (then the last
+      effect is ``SOURCE_REMOVED``); effects that really happened are kept even when a later check failed;
     * ``transfer_mode`` -- the mode actually used (``CROSS_VOLUME`` after an ``EXDEV`` fallback);
     * ``media_sha256`` -- SHA-256 of the copied bytes, only for a published cross-volume copy;
     * ``media_size`` -- size of the published final media, only when ``MEDIA_PUBLISHED`` happened here;
@@ -136,8 +137,14 @@ class TransferOutcome:
             raise ExecutionModelError("TransferOutcome.effects must follow MEDIA_PUBLISHED -> SOURCE_REMOVED")
         if failure is not None and (type(failure) is not ExecutionFailure or failure.step is not _STEP):
             raise ExecutionModelError("TransferOutcome.failure must be a MOVE_MEDIA ExecutionFailure or None")
-        if (failure is None) != (kinds[-1:] == (EffectKind.SOURCE_REMOVED,)):
-            raise ExecutionModelError("TransferOutcome.failure is None iff the source was removed")
+        if failure is None and kinds[-1:] != (EffectKind.SOURCE_REMOVED,):
+            raise ExecutionModelError("a TransferOutcome without failure ends with SOURCE_REMOVED")
+        if failure is not None and kinds[-1:] == (EffectKind.SOURCE_REMOVED,) and not (
+                kinds == _MEDIA_KINDS and failure.kind is ExecutionFailureKind.PUBLISHED_MEDIA_MISMATCH):
+            # The only failure after SOURCE_REMOVED: a Windows same-volume rename that already published the
+            # final and removed the source in one atomic step, then failed its post-publish verification.
+            raise ExecutionModelError("a failed TransferOutcome ends with SOURCE_REMOVED only after an atomic "
+                                      "rename whose verification failed")
         if type(transfer_mode) is not TransferMode:
             raise ExecutionModelError("TransferOutcome.transfer_mode must be a TransferMode")
         published = EffectKind.MEDIA_PUBLISHED in kinds
@@ -285,10 +292,10 @@ def _fsync_directory(path: str) -> OSError | None:
         return failure
     try:
         _, failure = _attempt(_fs._FS.fsync, fd)
+        _, close_failure = _attempt(_fs._FS.close, fd)
     except BaseException:
-        _close_quietly(fd)
+        _close_quietly(fd)  # a foreign exception from fsync OR close: one quiet close, then the same object
         raise
-    _, close_failure = _attempt(_fs._FS.close, fd)
     return failure if failure is not None else close_failure
 
 
@@ -409,9 +416,14 @@ def _same_volume(ctx: _Context) -> TransferOutcome:
 
     published = _fs.snapshot(ctx.final)
     if isinstance(published, OSError) or not same_identity(published, ctx.source_identity):
-        # Never rolled back and never recorded as an effect: the entry is not the verified source file.
+        # The primitive succeeded, so its effects happened and are recorded (never erased, never rolled back),
+        # with the identity the primitive preserves (the frozen source snapshot), not the untrusted observation.
+        # Resume re-snapshots the final: a changed final is COMPLETED_EFFECT_CHANGED (fail closed).
         failure = _failure(ExecutionFailureKind.PUBLISHED_MEDIA_MISMATCH, TransferStage.PUBLISH_VERIFY)
-        return TransferOutcome((), failure, mode, None, None, ())
+        media = _media_published(ctx, ctx.source_identity, None)
+        if ctx.strategy == "rename":
+            return TransferOutcome((media, _source_removed(ctx)), failure, mode, None, media.size, ())
+        return TransferOutcome((media,), failure, mode, None, media.size, ())  # the source is kept
     media = _media_published(ctx, published, None)
 
     if ctx.strategy == "rename":
@@ -438,12 +450,26 @@ class _CopyState:
         self.temp_path: str | None = None
         self.temp_name: str | None = None
 
-    def take_source_fd(self) -> int | None:
-        fd, self.source_fd = self.source_fd, None
-        return fd
+    def close_owned(self, slot: str) -> OSError | None:
+        """Close the tracked descriptor in ``slot`` ("source_fd" / "temp_fd"). Ownership ends only once
+        ``close`` returned or raised ``OSError`` (the descriptor is released either way: no retry). A foreign
+        exception / ``BaseException`` from ``close`` propagates with the descriptor STILL owned, so the fatal
+        cleanup sees it and makes its one quiet close attempt."""
+        fd = getattr(self, slot)
+        if fd is None:
+            return None
+        try:
+            _fs._FS.close(fd)
+        except OSError as exc:
+            setattr(self, slot, None)
+            return exc
+        setattr(self, slot, None)
+        return None
 
-    def take_temp_fd(self) -> int | None:
-        fd, self.temp_fd = self.temp_fd, None
+    def take_fd(self, slot: str) -> int | None:
+        """Fatal path only: release a descriptor that is closed quietly right away."""
+        fd = getattr(self, slot)
+        setattr(self, slot, None)
         return fd
 
     def take_temp(self) -> tuple[str | None, str | None]:
@@ -465,9 +491,10 @@ def _cross_volume(ctx: _Context) -> TransferOutcome:
 def _abandon(state: _CopyState) -> None:
     """Fatal path (contract section 29): close open descriptors, unlink the owned temporary once, and let
     nothing raised here replace the propagating exception."""
-    for fd in (state.take_temp_fd(), state.take_source_fd()):
+    for slot in ("temp_fd", "source_fd"):
+        fd = state.take_fd(slot)
         if fd is not None:
-            _close_quietly(fd)
+            _close_quietly(fd)  # one best-effort attempt; never raises
     path, _ = state.take_temp()
     if path is not None:
         try:
@@ -479,9 +506,8 @@ def _abandon(state: _CopyState) -> None:
 def _stop_before_publish(state: _CopyState, failure: ExecutionFailure) -> TransferOutcome:
     """Typed failure in steps 1-7 before a publish: close descriptors, clean the exact owned temporary once.
     A failed cleanup keeps the primary failure and records the leftover name."""
-    for fd in (state.take_temp_fd(), state.take_source_fd()):
-        if fd is not None:
-            _attempt(_fs._FS.close, fd)
+    for slot in ("temp_fd", "source_fd"):
+        state.close_owned(slot)  # an OSError here is secondary; a foreign exception propagates (fd still owned)
     leftovers = ()
     path, name = state.take_temp()
     if path is not None and _left_behind(_remove_owned_temp(path)):
@@ -554,8 +580,8 @@ def _copy_stream(state: _CopyState, expected_size: int) -> tuple[str | None, Exe
     return digest.hexdigest(), None
 
 
-def _finish_temp(state: _CopyState, expected_size: int) -> tuple[int | None, ExecutionFailure | None]:
-    """Step 5: fsync, fstat (record the inode) and close the temporary."""
+def _finish_temp(state: _CopyState, expected_size: int) -> tuple[EntryIdentity | None, ExecutionFailure | None]:
+    """Step 5: fsync, fstat (record the full identity) and close the temporary."""
     _, failure = _attempt(_fs._FS.fsync, state.temp_fd)
     if failure is not None:
         return None, _failure(ExecutionFailureKind.MEDIA_FSYNC_FAILED, TransferStage.FSYNC, failure)
@@ -566,10 +592,10 @@ def _finish_temp(state: _CopyState, expected_size: int) -> tuple[int | None, Exe
     if identity is None or identity.size != expected_size:
         return None, ExecutionFailure(step=_STEP, kind=ExecutionFailureKind.MEDIA_WRITE_FAILED,
                                       stage=TransferStage.FSYNC, errno=_errno.EIO)
-    _, failure = _attempt(_fs._FS.close, state.take_temp_fd())
+    failure = state.close_owned("temp_fd")
     if failure is not None:
         return None, _failure(ExecutionFailureKind.MEDIA_CLOSE_FAILED, TransferStage.CLOSE, failure)
-    return identity.inode, None
+    return identity, None
 
 
 def _cross_volume_steps(ctx: _Context, state: _CopyState) -> TransferOutcome:
@@ -601,7 +627,7 @@ def _cross_volume_steps(ctx: _Context, state: _CopyState) -> TransferOutcome:
     media_sha256, failure = _copy_stream(state, expected.size)
     if failure is not None:
         return _stop_before_publish(state, failure)
-    temp_inode, failure = _finish_temp(state, expected.size)
+    temp_identity, failure = _finish_temp(state, expected.size)
     if failure is not None:
         return _stop_before_publish(state, failure)
 
@@ -613,7 +639,7 @@ def _cross_volume_steps(ctx: _Context, state: _CopyState) -> TransferOutcome:
     if not same_identity(_file_identity(st), expected):
         return _stop_before_publish(state, _failure(ExecutionFailureKind.SOURCE_CHANGED_DURING_COPY,
                                                     TransferStage.SOURCE_FD_REVALIDATE))
-    _, failure = _attempt(_fs._FS.close, state.take_source_fd())
+    failure = state.close_owned("source_fd")
     if failure is not None:
         return _stop_before_publish(state, _failure(ExecutionFailureKind.MEDIA_CLOSE_FAILED,
                                                     TransferStage.CLOSE, failure))
@@ -642,9 +668,13 @@ def _cross_volume_steps(ctx: _Context, state: _CopyState) -> TransferOutcome:
 
     published = _fs.snapshot(ctx.final)
     if (isinstance(published, OSError) or published.entry_type is not EntryType.FILE
-            or published.size != expected.size or published.inode != temp_inode):
+            or published.size != expected.size or published.inode != temp_identity.inode):
+        # The no-replace publish succeeded: MEDIA_PUBLISHED happened and is recorded with the verified temp
+        # identity (fsync + fstat before publish) and the complete copy's hash / size. Stop: the source is kept,
+        # no directory fsync / source unlink tail.
         failure = _failure(ExecutionFailureKind.PUBLISHED_MEDIA_MISMATCH, TransferStage.PUBLISH_VERIFY)
-        return TransferOutcome((), failure, TransferMode.CROSS_VOLUME, None, None, leftovers)
+        media = _media_published(ctx, temp_identity, media_sha256)
+        return TransferOutcome((media,), failure, TransferMode.CROSS_VOLUME, media_sha256, media.size, leftovers)
     media = _media_published(ctx, published, media_sha256)
     if cleanup_failure is not None:
         failure = _failure(ExecutionFailureKind.MEDIA_TEMP_CLEANUP_FAILED, TransferStage.TEMP_CLEANUP,
