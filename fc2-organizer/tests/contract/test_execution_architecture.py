@@ -29,7 +29,8 @@ CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 
 _S1_MODULES = {"__init__.py", "errors.py", "models.py", "paths.py", "validation.py", "seal.py", "_fs.py",
                "preflight.py"}
-_NOT_YET = ("directories.py", "transfer.py", "executor.py", "rollback.py", "orchestrator.py")
+_S2_MODULES = _S1_MODULES | {"directories.py"}
+_NOT_YET = ("transfer.py", "executor.py", "rollback.py", "orchestrator.py")
 
 _PKG = "fc2_organizer.execution"
 _BARE = {"fc2_organizer.planning", "fc2_organizer.materialization"}
@@ -44,8 +45,10 @@ _ALLOWED = {
                       f"{_PKG}.paths"} | _BARE,
     "seal.py": {"__future__", "hashlib", "hmac", "secrets", "threading", f"{_PKG}.errors", f"{_PKG}.models"},
     "_fs.py": {"__future__", "dataclasses", "errno", "os", "secrets", "stat", "typing", f"{_PKG}.models"},
-    "preflight.py": {"__future__", _PKG, f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.seal",
-                     f"{_PKG}.validation"} | _BARE,
+    "preflight.py": {"__future__", _PKG, f"{_PKG}.directories", f"{_PKG}.errors", f"{_PKG}.models",
+                     f"{_PKG}.seal", f"{_PKG}.validation"} | _BARE,
+    # S2 (contract section 3 table: this package + errno / os / stat); never planning / materialization.
+    "directories.py": {"__future__", "os", _PKG, f"{_PKG}.errors", f"{_PKG}.models"},
 }
 _FORBIDDEN_PREFIXES = (
     "fc2_metadata_core", "amane", "httpx", "requests", "socket", "ssl", "http", "urllib", "shutil", "tempfile",
@@ -65,7 +68,10 @@ _FORBIDDEN_NAMES = {"is_valid_fc2_number", "normalize_fc2_number", "extrafanart_
 _LEXICAL_OS_PATH = {"join", "basename", "splitext", "dirname"}
 _MUTATING_ATTRS = {"mkdir", "rename", "link", "unlink", "write", "fsync", "listdir", "open", "read", "close",
                    "fstat"}
-_PREFLIGHT_FS_API = {"snapshot", "SnapshotRefused", "REFUSED_LINK", "REFUSED_SPECIAL", "new_token", "os_errno"}
+_PREFLIGHT_FS_API = {"snapshot", "SnapshotRefused", "REFUSED_LINK", "REFUSED_SPECIAL", "new_token", "os_errno",
+                     "read_bounded"}
+# S2: no deletion call anywhere in the production package (contract sections 20-22, 28).
+_DELETION_CALLS = {"unlink", "remove", "rmdir", "rmtree", "removedirs"}
 _FROZEN_PUBLIC_API = {
     "preflight_execution", "execute_filesystem", "ExecutionPreflight", "ExecutionResult", "ExecutionCheckpoint",
     "ExecutionStatus", "ExecutionStep", "ExecutionUnit", "PreflightMode", "TransferMode", "EntryIdentity",
@@ -106,9 +112,9 @@ def _calls(tree: ast.AST):
 # --------------------------------------------------------------------------- static
 
 
-def test_package_has_exactly_the_s1_modules():
+def test_package_has_exactly_the_s2_modules():
     names = {p.name for p in _files(EXEC_SRC_ROOT)}
-    assert names == _S1_MODULES
+    assert names == _S2_MODULES
     for later in _NOT_YET:
         assert later not in names
 
@@ -158,20 +164,69 @@ def test_os_syscalls_only_inside_the_private_seam():
                 assert name in _LEXICAL_OS_PATH, f"{path.name}:{lineno}: os.path.{name}()"
 
 
-def test_s1_production_code_never_references_the_mutating_seam():
+def test_mutating_seam_is_reached_only_by_the_exclusive_mkdir_helper():
+    # Outside _fs.py the only mutating seam attribute allowed anywhere is `.mkdir`, and only inside
+    # directories._mkdir_exclusive (S2). preflight.py references no mutating attribute at all.
+    mkdir_sites = []
     for path in _files(EXEC_SRC_ROOT):
         if path.name == "_fs.py":
             continue
-        for node in ast.walk(_tree(path)):
-            if isinstance(node, ast.Attribute):
-                assert node.attr not in _MUTATING_ATTRS, f"{path.name}:{node.lineno}: .{node.attr}"
+        tree = _tree(path)
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef):
+                for node in ast.walk(fn):
+                    if isinstance(node, ast.Attribute) and node.attr == "mkdir":
+                        mkdir_sites.append((path.name, fn.name))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr in _MUTATING_ATTRS - {"mkdir"}:
+                raise AssertionError(f"{path.name}:{node.lineno}: .{node.attr}")
+    assert mkdir_sites == [("directories.py", "_mkdir_exclusive")], mkdir_sites
     preflight_fs = {node.attr for node in ast.walk(_tree(EXEC_SRC_ROOT / "preflight.py"))
                     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
                     and node.value.id == "_fs"}
     assert preflight_fs <= _PREFLIGHT_FS_API, preflight_fs - _PREFLIGHT_FS_API
 
 
-def test_seam_functions_reach_only_read_only_ops_in_s1():
+def test_mkdir_is_exclusive_single_call_without_makedirs_or_exist_ok():
+    tree = _tree(EXEC_SRC_ROOT / "directories.py")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.keyword):
+            assert node.arg not in {"exist_ok", "parents"}, node.arg
+        if isinstance(node, ast.Name):
+            assert node.id not in {"makedirs"}, node.id
+    helper = next(fn for fn in ast.walk(tree) if isinstance(fn, ast.FunctionDef) and fn.name == "_mkdir_exclusive")
+    calls = [node for node in ast.walk(helper)
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "mkdir"]
+    assert len(calls) == 1 and len(calls[0].args) == 2 and not calls[0].keywords
+
+
+def test_no_deletion_call_anywhere_in_production():
+    for path in _files(EXEC_SRC_ROOT):
+        for lineno, name, _ in _calls(_tree(path)):
+            assert name not in _DELETION_CALLS, f"{path.name}:{lineno}: deletion call {name!r}"
+
+
+def test_listdir_only_through_list_names_and_reads_only_through_read_bounded():
+    tree = _tree(EXEC_SRC_ROOT / "_fs.py")
+    reached: dict[str, set[str]] = {}
+    for fn in ast.walk(tree):
+        if isinstance(fn, ast.FunctionDef):
+            reached[fn.name] = {node.attr for node in ast.walk(fn)
+                                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                                and node.value.id == "_FS"}
+    users = {name for name, ops in reached.items() if "listdir" in ops}
+    assert users == {"list_names"}, users
+    readers = {name for name, ops in reached.items() if ops & {"open", "read", "close"}}
+    assert readers == {"read_bounded"} and reached["read_bounded"] == {"open", "read", "close"}
+    from fc2_organizer.execution import _fs
+
+    import os as _os
+    flags = _fs._READ_ONLY_FLAGS
+    for write_flag in ("O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND", "O_EXCL"):
+        assert not flags & getattr(_os, write_flag, 0), write_flag
+
+
+def test_seam_functions_used_by_preflight_reach_only_read_only_ops():
     tree = _tree(EXEC_SRC_ROOT / "_fs.py")
     reached: dict[str, set[str]] = {}
     for fn in ast.walk(tree):
@@ -180,10 +235,11 @@ def test_seam_functions_reach_only_read_only_ops_in_s1():
                                 if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
                                 and node.value.id == "_FS"}
     used_by_preflight = {"snapshot", "_lstat_entry", "is_link", "is_directory", "is_regular_file",
-                         "_identity_of", "new_token", "os_errno"}
+                         "_identity_of", "new_token", "os_errno", "list_names", "read_bounded"}
     assert used_by_preflight <= set(reached), used_by_preflight - set(reached)
     for name in used_by_preflight:
-        assert reached.get(name, set()) <= {"lstat", "device_of", "token"}, (name, reached.get(name))
+        assert reached.get(name, set()) <= {"lstat", "device_of", "token", "listdir", "open", "read", "close"}, (
+            name, reached.get(name))
 
 
 def test_no_reverse_dependency_on_execution():

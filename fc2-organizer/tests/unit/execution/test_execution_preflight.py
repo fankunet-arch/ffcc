@@ -415,11 +415,27 @@ def test_consumed_checkpoint_is_refused_as_consumed(tmp_path, monkeypatch):
     _assert_checkpoint_refused(s, cp, CheckpointRejectionReason.CONSUMED, monkeypatch)
 
 
-def test_s1_refuses_even_a_correctly_sealed_checkpoint(tmp_path, monkeypatch):
-    # S1 cannot issue checkpoints, so no checkpoint was issued by an execution: fail closed (plan S1 item 7).
+def test_resume_plan_and_manifest_hardening_precede_checkpoint_checks(tmp_path, monkeypatch):
+    # S2 RESUME: steps 1-3 (input types, plan / manifest hardening, fingerprints) run before the
+    # checkpoint contract layer, with zero filesystem access.
+    s = scene(tmp_path)
+    forged = ExecutionCheckpoint(**_checkpoint(s), seal="f" * 64)
+    counter = CallCounter(monkeypatch)
+    with pytest.raises(PlanGraphError):
+        preflight_execution(tampered(s.plan, operations=s.plan.operations[:6]), s.artifacts, forged)
+    with pytest.raises(ArtifactManifestError):
+        preflight_execution(s.plan, s.artifacts[1:], forged)
+    with pytest.raises(CheckpointError) as info:
+        preflight_execution(s.plan, s.artifacts, forged)
+    assert info.value.reason is CheckpointRejectionReason.SEAL_INVALID and counter.paths == []
+
+
+def test_sealed_checkpoint_bound_to_another_plan_is_a_plan_mismatch(tmp_path, monkeypatch):
+    # S2 (contract section 14.3 check 4): past seal and consumption, the plan fingerprint must bind.
+    # (Replaces the S1-only "refuse every sealed checkpoint" placeholder, construction plan S1 item 7.)
     s = scene(tmp_path)
     cp = sealed(ExecutionCheckpoint, **_checkpoint(s))
-    _assert_checkpoint_refused(s, cp, CheckpointRejectionReason.SEAL_INVALID, monkeypatch)
+    _assert_checkpoint_refused(s, cp, CheckpointRejectionReason.PLAN_MISMATCH, monkeypatch)
 
 
 def test_preflight_never_consumes_anything(tmp_path):

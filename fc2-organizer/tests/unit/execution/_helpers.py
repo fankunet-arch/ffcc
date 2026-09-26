@@ -48,6 +48,48 @@ def trap_mutations(monkeypatch: pytest.MonkeyPatch) -> Trap:
     return trap
 
 
+# --------------------------------------------------------------------------- S2 helpers
+
+_WRITE_FLAGS = (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND | os.O_EXCL)
+ALL_SEAM_OPS = ("lstat", "fstat", "open", "read", "write", "fsync", "close", "mkdir", "rename", "link", "unlink",
+                "listdir")
+
+
+def _trap_os(monkeypatch: pytest.MonkeyPatch, trap: Trap) -> None:
+    for name in MUTATING_OS_FUNCS:
+        if hasattr(os, name):
+            monkeypatch.setattr(os, name, trap.make(f"os.{name}"))
+    monkeypatch.setattr(builtins, "open", trap.make("builtins.open"))
+
+
+def trap_mutations_allowing_reads(monkeypatch: pytest.MonkeyPatch) -> tuple[Trap, list[str]]:
+    """Like :func:`trap_mutations`, but the seam's ``open`` / ``read`` / ``close`` stay usable for READ-ONLY
+    opens (RESUME re-hash of published artifacts). Returns the trap and the list of paths opened."""
+    trap = Trap()
+    opened: list[str] = []
+    real_open = _fs._FS.open
+
+    def read_only_open(path, flags, *rest):
+        if flags & _WRITE_FLAGS:
+            trap.calls.append("_FS.open(write flags)")
+            raise AssertionError("write-capable open during read-only preflight")
+        opened.append(path)
+        return real_open(path, flags, *rest)
+
+    inject(monkeypatch, open=read_only_open,
+           **{name: trap.make(f"_FS.{name}") for name in ("mkdir", "rename", "link", "unlink", "write", "fsync")})
+    _trap_os(monkeypatch, trap)
+    return trap, opened
+
+
+def trap_all_io(monkeypatch: pytest.MonkeyPatch) -> Trap:
+    """Trap EVERY seam op (reads included) plus os / builtins: proves ZERO filesystem access."""
+    trap = Trap()
+    inject(monkeypatch, **{name: trap.make(f"_FS.{name}") for name in ALL_SEAM_OPS})
+    _trap_os(monkeypatch, trap)
+    return trap
+
+
 class CallCounter:
     """Wraps ``_FS.lstat`` to count filesystem probes."""
 

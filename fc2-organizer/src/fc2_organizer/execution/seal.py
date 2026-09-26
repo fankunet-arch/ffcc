@@ -180,6 +180,43 @@ def sealed(model_type: type, **fields: object) -> object:
     return model_type(**fields, seal=seal_of(draft))
 
 
+def issue_checkpoint(*, plan_fingerprint: str, manifest_fingerprint: str, library_root_identity: EntryIdentity,
+                     source_identity: EntryIdentity, transfer_mode: object,
+                     target_directory_identity: EntryIdentity,
+                     extrafanart_directory_identity: EntryIdentity | None,
+                     completed_effects: tuple[CompletedEffect, ...],
+                     leftover_temporaries: tuple[LeftoverTemporary, ...]) -> ExecutionCheckpoint:
+    """Issue a new sealed, immutable in-process checkpoint (contract sections 14.2, 14.5).
+
+    Private construction helper (not public API): a fresh ``checkpoint_id`` from ``secrets.token_hex(16)``
+    and the full-field seal. Only the S5 executor issues checkpoints in production; S2 tests use it to build
+    real partial states.
+    """
+    return sealed(
+        ExecutionCheckpoint,
+        checkpoint_id=secrets.token_hex(16),
+        plan_fingerprint=plan_fingerprint,
+        manifest_fingerprint=manifest_fingerprint,
+        library_root_identity=library_root_identity,
+        source_identity=source_identity,
+        transfer_mode=transfer_mode,
+        target_directory_identity=target_directory_identity,
+        extrafanart_directory_identity=extrafanart_directory_identity,
+        completed_effects=completed_effects,
+        leftover_temporaries=leftover_temporaries,
+    )
+
+
+def content_sha256(content: bytes) -> str:
+    """SHA-256 hex digest of exact bytes (RESUME re-hash of published artifacts, contract section 14.3).
+
+    Lives here because ``seal.py`` is the only module whose frozen import allow-list includes ``hashlib``.
+    """
+    if type(content) is not bytes:
+        raise ExecutionModelError("content must be exact bytes")
+    return hashlib.sha256(content).hexdigest()
+
+
 # --------------------------------------------------------------------------- consumption
 
 

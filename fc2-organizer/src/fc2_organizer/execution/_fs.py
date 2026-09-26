@@ -6,7 +6,9 @@ of the package calls ``os.<syscall>`` directly (architecture test). Callers must
 reference ``_fs._FS`` at call time (never capture it), so a patched seam is honoured.
 
 S1 uses only the read-only part (``lstat``, ``device_of``, ``token``) through the
-frozen ``snapshot(path)`` interface. The mutating
+frozen ``snapshot(path)`` interface. S2 adds ``list_names`` (``listdir``) and the
+read-only ``read_bounded`` (``open`` / ``read`` / ``close``) for RESUME preflight, and
+``directories._mkdir_exclusive`` as the single user of ``mkdir``. The mutating
 entries (``mkdir``, ``rename``, ``link``, ``unlink``, ``write``, ...) are defined
 for S2-S5 and are not reached by any S1 code path (zero-mutation tests trap them).
 
@@ -27,7 +29,7 @@ from fc2_organizer.execution.models import EntryIdentity, EntryType
 
 __all__ = [
     "snapshot", "SnapshotRefused", "REFUSED_LINK", "REFUSED_SPECIAL", "REFUSED_IDENTITY_UNAVAILABLE",
-    "is_link", "is_directory", "is_regular_file", "list_names", "new_token", "os_errno",
+    "is_link", "is_directory", "is_regular_file", "list_names", "read_bounded", "new_token", "os_errno",
 ]
 
 
@@ -168,6 +170,50 @@ def list_names(directory: str) -> list[str] | OSError:
     except OSError as exc:
         return exc
     return box[0]
+
+
+_READ_ONLY_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0) | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
+_READ_CHUNK = 1 << 20
+
+
+def read_bounded(path: str, limit: int) -> bytes | OSError:
+    """Read-only: the content of ``path``, stopping as soon as more than ``limit`` bytes were read.
+
+    Used only by RESUME preflight to re-hash already published artifacts (contract section 14.3).
+    Opened with read-only flags (never create / truncate / write); the descriptor is always closed.
+    """
+    box: list[int] = []
+    try:
+        box.append(_FS.open(path, _READ_ONLY_FLAGS))
+    except OSError as exc:
+        return exc
+    fd = box[0]
+    chunks: list[bytes] = []
+    total = 0
+    failure: OSError | None = None
+    try:
+        while total <= limit:
+            try:
+                chunk = _FS.read(fd, _READ_CHUNK)
+            except OSError as exc:
+                failure = exc
+                break
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+    finally:
+        try:
+            _FS.close(fd)
+        except OSError:
+            pass
+    if failure is not None:
+        return failure
+    return b"".join(chunks)
 
 
 def new_token() -> str:

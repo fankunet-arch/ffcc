@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import os
 from dataclasses import dataclass
@@ -10,8 +11,13 @@ from pathlib import Path
 
 from fc2_metadata_core.models import NormalizedMetadata
 from fc2_organizer.discovery import DiscoveredMediaItem
+from fc2_organizer.execution import _fs
+from fc2_organizer.execution.directories import create_extrafanart_directory, create_target_directory
+from fc2_organizer.execution.models import CompletedEffect, EffectKind, LeftoverTemporary, PathRole, TransferMode
+from fc2_organizer.execution.seal import issue_checkpoint, manifest_fingerprint, plan_fingerprint
+from fc2_organizer.execution.validation import expected_effects
 from fc2_organizer.images import AcquiredImage, ImageAcquisitionResult, ImageRole
-from fc2_organizer.materialization import ArtifactKind, ArtifactWriteRequest
+from fc2_organizer.materialization import ArtifactKind, ArtifactWriteRequest, materialize_artifact
 from fc2_organizer.materialization.mapping import build_artifact_requests
 from fc2_organizer.planning import OrganizePlan, OutputPolicy, PlannedOperation, PlannedPath, build_organize_plan
 
@@ -113,3 +119,66 @@ def scene(tmp_path: Path, *, content: bytes = b"media-bytes" * 7, number: str = 
     plan = make_plan(str(library_root), str(source), number=number, extension=os.path.splitext(source_name)[1],
                      size=len(content))
     return Scene(tmp_path, str(library_root), str(source), content, plan, make_manifest(plan, **manifest_options))
+
+
+# --------------------------------------------------------------------------- S2: tests-only partial states
+
+TEMP_NAME = ".fc2tmp-" + "ab" * 16 + ".part"
+
+
+def advance(s: Scene, count: int, *, leftovers=(), transfer_mode=None):
+    """TESTS-ONLY orchestration (construction plan S2 item 4): perform the first ``count`` effects of
+    E(plan, manifest) for real -- the production directory helpers, a hard-link "publish" of the media
+    (``os.link``) and ``os.unlink`` of the source standing in for S3, P4-C6 ``materialize_artifact`` for
+    artifacts -- then issue a real sealed checkpoint. ``leftovers`` = ``[(PathRole, name), ...]`` files
+    planted as recorded leftover temporaries. Not an executor: S5 owns production orchestration."""
+    plan, artifacts = s.plan, s.artifacts
+    slots = expected_effects(plan, artifacts)
+    assert 1 <= count <= len(slots)
+    library_identity = _fs.snapshot(s.library_root)
+    source_identity = _fs.snapshot(s.source_path)
+    requests = {(r.kind, r.ordinal): r for r in artifacts}
+    effects, target_identity, extrafanart_identity = [], None, None
+    for slot in slots[:count]:
+        kind = slot.kind
+        if kind is EffectKind.TARGET_DIRECTORY_CREATED:
+            target_identity, failure = create_target_directory(plan, library_identity)
+            assert failure is None
+            effects.append(CompletedEffect(kind, slot.role, slot.path, target_identity, None, None, None, None))
+        elif kind is EffectKind.MEDIA_PUBLISHED:
+            os.link(s.source_path, slot.path)
+            effects.append(CompletedEffect(kind, slot.role, slot.path, _fs.snapshot(slot.path), len(s.content),
+                                           None, None, None))
+        elif kind is EffectKind.SOURCE_REMOVED:
+            os.unlink(s.source_path)
+            effects.append(CompletedEffect(kind, slot.role, slot.path, None, None, None, None, None))
+        elif kind is EffectKind.EXTRAFANART_DIRECTORY_CREATED:
+            extrafanart_identity, failure = create_extrafanart_directory(plan, target_identity)
+            assert failure is None
+            effects.append(CompletedEffect(kind, slot.role, slot.path, extrafanart_identity, None, None, None,
+                                           None))
+        else:
+            request_ = requests[(slot.artifact_kind, slot.ordinal)]
+            materialize_artifact(request_)
+            effects.append(CompletedEffect(kind, slot.role, slot.path, _fs.snapshot(slot.path),
+                                           len(request_.content), hashlib.sha256(request_.content).hexdigest(),
+                                           slot.artifact_kind, slot.ordinal))
+    recorded = []
+    for role, name in leftovers:
+        directory = (plan.target_directory if role is PathRole.TARGET_DIRECTORY
+                     else plan.extrafanart_directory).absolute_path
+        with open(os.path.join(directory, name), "wb") as handle:
+            handle.write(b"leftover")
+        recorded.append(LeftoverTemporary(role, name))
+    return issue_checkpoint(
+        plan_fingerprint=plan_fingerprint(plan), manifest_fingerprint=manifest_fingerprint(artifacts),
+        library_root_identity=library_identity, source_identity=source_identity,
+        transfer_mode=transfer_mode or TransferMode.SAME_VOLUME, target_directory_identity=target_identity,
+        extrafanart_directory_identity=extrafanart_identity, completed_effects=tuple(effects),
+        leftover_temporaries=tuple(recorded),
+    )
+
+
+def checkpoint_fields(checkpoint) -> dict:
+    """All fields but ``seal`` (to re-issue a modified, properly sealed checkpoint in tests)."""
+    return {f.name: getattr(checkpoint, f.name) for f in dataclasses.fields(checkpoint) if f.name != "seal"}
