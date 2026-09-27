@@ -174,11 +174,15 @@ def test_temp_open_is_exclusive_create():
 # P4-C7 (contract section 3, construction plan S1): fc2_organizer.execution is the single authorised
 # consumer of this package, and only of the *bare* public package -- never of any submodule.
 EXECUTION_SRC_ROOT = ORGANIZER_SRC_ROOT / "execution"
+ORCHESTRATION_SRC_ROOT = ORGANIZER_SRC_ROOT / "orchestration"
 
 
 def test_no_reverse_dependency_on_materialization():
+    # P4-C8 (contract section 34.3): orchestration is exempted here and held to the stricter
+    # test_orchestration_consumes_only_bare_materialization_and_mapping below.
     for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir()
-                                  if p.is_dir() and p not in (MAT_SRC_ROOT, EXECUTION_SRC_ROOT))):
+                                  if p.is_dir() and p not in (MAT_SRC_ROOT, EXECUTION_SRC_ROOT,
+                                                              ORCHESTRATION_SRC_ROOT))):
         for path in _source_files(root):
             for module in _imported_modules(_tree(path)):
                 assert "materialization" not in module, f"{path}: imports {module!r}"
@@ -197,6 +201,31 @@ def test_execution_consumes_only_the_bare_materialization_package():
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
                     and node.value.id == "materialization":
                 raise AssertionError(f"{path}: reaches into materialization.{node.attr}")
+
+
+_ORCHESTRATION_BARE_NAMES = {"ArtifactKind", "ArtifactWriteRequest", "ArtifactMappingError",
+                              "MappingRejectionReason", "MaterializationError"}
+
+
+def test_orchestration_consumes_only_bare_materialization_and_mapping():
+    # P4-C8 contract sections 6 and 34.3: the bare package (its section 6 names only) and the frozen explicit
+    # `mapping` path (`build_artifact_requests` only); never a writer (`materialize_*`) or another submodule.
+    assert ORCHESTRATION_SRC_ROOT.is_dir() and _source_files(ORCHESTRATION_SRC_ROOT)
+    allowed = {"fc2_organizer.materialization": _ORCHESTRATION_BARE_NAMES,
+               "fc2_organizer.materialization.mapping": {"build_artifact_requests"}}
+    for path in _source_files(ORCHESTRATION_SRC_ROOT):
+        modules = {m for m in _imported_modules(_tree(path)) if "materialization" in m}
+        assert modules <= set(allowed), (path, modules)
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Import):
+                assert not any("materialization" in alias.name for alias in node.names), path
+            elif isinstance(node, ast.ImportFrom) and node.module in allowed:
+                names = {alias.name for alias in node.names}
+                assert names <= allowed[node.module], (path, names - allowed[node.module])
+            elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer":
+                assert "materialization" not in {alias.name for alias in node.names}, path  # no module object
+            name = node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else None
+            assert name not in {"materialize_artifact", "materialize_atomic_bytes", "_FS"}, (path, name)
 
 
 _BLOCKED_ROOTS = {

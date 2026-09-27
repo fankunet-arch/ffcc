@@ -259,12 +259,34 @@ def test_seam_functions_used_by_preflight_reach_only_read_only_ops():
 
 
 def test_no_reverse_dependency_on_execution():
-    for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p != EXEC_SRC_ROOT)):
+    # P4-C8 (contract section 34.3): the orchestration package is the one authorised consumer; it is held to
+    # the stricter test_orchestration_consumes_only_the_bare_execution_package below.
+    exempt = (EXEC_SRC_ROOT, ORGANIZER_SRC_ROOT / "orchestration")
+    for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p not in exempt)):
         for path in _files(root):
             for module in _imports(_tree(path)):
                 assert not module.startswith(_PKG), f"{path}: imports {module!r}"
     for module in _imports(_tree(ORGANIZER_SRC_ROOT / "__init__.py")):
         assert "execution" not in module
+
+
+def test_orchestration_consumes_only_the_bare_execution_package():
+    # P4-C8 contract sections 6 and 34.3: only `from fc2_organizer.execution import <public name>`; never a
+    # submodule (`_fs`, `seal`, `models`, `executor`, ...), never a private name, never the module object.
+    orchestration_root = ORGANIZER_SRC_ROOT / "orchestration"
+    assert orchestration_root.is_dir() and _files(orchestration_root)
+    for path in _files(orchestration_root):
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Import):
+                assert not any(alias.name.startswith(_PKG) for alias in node.names), path.name
+            elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith(_PKG):
+                assert node.module == _PKG, (path.name, node.module)
+                names = {alias.name for alias in node.names}
+                assert names <= _FROZEN_PUBLIC_API, (path.name, names - _FROZEN_PUBLIC_API)
+            elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer":
+                assert "execution" not in {alias.name for alias in node.names}, path.name  # no module object
+            elif isinstance(node, ast.Name):
+                assert node.id not in {"_fs", "_FS", "seal", "seal_of", "register_consumption"}, path.name
 
 
 # --------------------------------------------------------------------------- runtime

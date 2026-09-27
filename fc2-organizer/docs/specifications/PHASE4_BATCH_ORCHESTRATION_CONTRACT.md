@@ -1859,8 +1859,8 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 
 | 批次 | 内容 | 状态 |
 |---|---|---|
-| E0 | 本合同 + 施工计划（docs-only） | E0 原始候选 `0f2188f5444b0f7c6293607db0132dae0297ee34`：Independent Architecture / Contract Review FAIL（P4-C8-E0-R-01、R-02、R-03）；E0-R1 `fe12d1d1833b12925c13916bc477ea5e7424aec4`：closure review 关闭 R-01、R-03，R-02 仍 OPEN（新 finding P4-C8-E0-R1-01、R1-02）；E0-R2（本修订）：REMEDIATED — INDEPENDENT REVIEW REQUIRED；E0 NOT ACCEPTED |
-| S1 | Foundation：errors / models / config / cancellation / consumption / recognition / 架构守卫 | NOT STARTED |
+| E0 | 本合同 + 施工计划（docs-only） | E0 ACCEPTED / CLOSED — FINAL REVIEWED DOCS HEAD `9e118dea32361ec19b0a84f84b6e5da0fbd134bc` |
+| S1 | Foundation：errors / models / config / cancellation / consumption / recognition / 架构守卫 | S1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S2 | Preview composition：stages / preview / orchestrator.preview | NOT STARTED |
 | S3 | Execution orchestration：execute / selection / cancellation / fatal drain | NOT STARTED |
 | S4 | Retry：RetryKind / preview_retry / merge_retry | NOT STARTED |
@@ -1869,15 +1869,15 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 
 ```text
 P4-C8-E0-R-01        : CLOSED（批级 BatchOutcome，第 11.5 节；E0-R1 closure review）
-P4-C8-E0-R-02        : REMEDIATED — REVIEW REQUIRED（资源硬限制，第 19.6 节；经 E0-R2 修订）
+P4-C8-E0-R-02        : CLOSED（资源硬限制，第 19.6 节；经 E0-R2 修订，E0-R2 closure review）
 P4-C8-E0-R-03        : CLOSED（S1 治理特例，施工计划第 0.4 节；E0-R1 closure review）
-P4-C8-E0-R1-01       : REMEDIATED — REVIEW REQUIRED（快照之前的有界条目数门，第 19.6.1 节）
-P4-C8-E0-R1-02       : REMEDIATED — REVIEW REQUIRED（lineage 固定预算与多代保留不变量，第 19.6.7、19.6.10、26 节）
+P4-C8-E0-R1-01       : CLOSED（快照之前的有界条目数门，第 19.6.1 节；E0-R2 closure review）
+P4-C8-E0-R1-02       : CLOSED（lineage 固定预算与多代保留不变量，第 19.6.7、19.6.10、26 节；E0-R2 closure review）
 P4-C8 E0-R1          : REVIEWED — R-01 / R-03 CLOSED，R-02 OPEN
-P4-C8 E0-R2          : REMEDIATED — INDEPENDENT REVIEW REQUIRED
-P4-C8 E0             : NOT ACCEPTED（等待 E0-R1 closure review）
-P4-C8 S1 Input       : NOT ESTABLISHED
-P4-C8 Implementation : NOT STARTED
+P4-C8 E0-R2          : REVIEWED — PASS（R-02、R1-01、R1-02 CLOSED）
+P4-C8 E0             : ACCEPTED / CLOSED（FINAL REVIEWED DOCS HEAD 9e118dea32361ec19b0a84f84b6e5da0fbd134bc）
+P4-C8 S1 Input       : 9e118dea32361ec19b0a84f84b6e5da0fbd134bc
+P4-C8 Implementation : IN PROGRESS
 P4-C8                : NOT CLOSED
 P4-C9                : NOT STARTED
 Phase 4              : NOT CLOSED
