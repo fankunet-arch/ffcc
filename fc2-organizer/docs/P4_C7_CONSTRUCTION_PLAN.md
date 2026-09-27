@@ -7,7 +7,7 @@ Frozen Base    = a0a69c71a1451232ded2c8ae8ecd514cf48ba95b（DOCS-CN Final Closur
 Branch         = claude/phase4-c7-safe-filesystem-executor
 规范合同       = docs/specifications/PHASE4_SAFE_FILESYSTEM_EXECUTION_CONTRACT.md
 E0 建立时状态 = E0 ESTABLISHED；建立时 S1-S6 NOT STARTED（历史快照，非当前状态）
-当前状态       = 以合同第 32 节“实现状态”及各批次闭合记录（如本计划“S5 最终闭合记录”、合同第 32.1 节）为准
+当前状态       = 以合同第 32 节“实现状态”及各批次闭合记录（如本计划“S5 最终闭合记录”“P4-C7 最终闭合记录”、合同第 32.1、32.2 节）为准
 ```
 
 本计划在 E0 一次性冻结 P4-C7 的全部施工批次。之后的开发**只能执行本计划**：不得重新设计下一批，
@@ -532,6 +532,22 @@ tests/unit/execution/_helpers.py、_builders.py（追加）
 test(execution): add P4-C7 500-item integrated filesystem gate and platform semantics (P4-C7 S6)
 docs(review): add P4-C7 handoff
 ```
+
+### P4-C7 最终闭合记录（治理记录）
+
+```text
+S6 Final Reviewed Code Head : ae1ace96c86874b3f33ec59819e4aa065136e521
+S6 Final Review             : P4-C7 S6 FINAL INDEPENDENT CLOSURE REVIEW -- PASS
+S6                          : CLOSED
+P4-C7                       : CLOSED
+Phase 4                     : NOT CLOSED
+```
+
+以上 S6 冻结要求（实现要求、测试矩阵、commit 要求）不变。本计划中 “S5 最终闭合记录” 里的 `S6 : NOT STARTED`，以及本节中
+“实现完成；独立复查 REQUIRED”“P4-C7: NOT CLOSED” 等表述，都是计划时 / S6 执行前的状态，不是当前状态；当前状态以本记录与合同
+第 32、32.2 节为准。P4-C8 的输入**不是** `ae1ace96c86874b3f33ec59819e4aa065136e521`，**也不是**
+`4298e0eefc41bb7b7042175c2901fc26fbe0609e`，而是记录本节的 P4-C7 Final Closure Docs 提交在其独立 docs-only closure review
+PASS 之后形成的 Frozen Base。
 
 ---
 

@@ -2,7 +2,7 @@
 
 ```text
 E0 建立时状态 ：ESTABLISHED（E0，Docs-Only Establishment）-- 建立时 S1-S6 均尚未开始（历史快照，非当前状态）
-当前状态       ：以第 32 节“实现状态”及第 32.1 节闭合记录为准
+当前状态       ：以第 32 节“实现状态”及第 32.1、32.2 节闭合记录为准
 Package        ：fc2_organizer.execution（新顶层 package，S1 起创建）
 Frozen Base    ：a0a69c71a1451232ded2c8ae8ecd514cf48ba95b（DOCS-CN Final Closure Head）
 Branch         ：claude/phase4-c7-safe-filesystem-executor
@@ -1180,7 +1180,7 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | S3 | same-volume + cross-volume media transfer | S3 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD b0b79e0cbba6507dca8f06c06678b22a0f051f0b（S3-R2） |
 | S4 | artifact execution + retry verification | S4 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD aef025450217521707916c59dbaa121d665512b7（S4-R1） |
 | S5 | integrated single-item executor | S5 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD 3a2d737286723ecc399813bb4da8dfb40ffbe104 |
-| S6 | synthetic/fault/concurrency gate + final handoff | S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
+| S6 | synthetic/fault/concurrency gate + final handoff | S6 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD ae1ace96c86874b3f33ec59819e4aa065136e521 |
 
 ### 32.1 S5 闭合记录（治理记录，不改变第 1-31、33、34 节语义）
 
@@ -1214,6 +1214,38 @@ S5 闭合文档的复查记录：首个闭合文档提交 e6cc011d68b0ae2238dfa8
 （REVIEWED-FAILED：当前治理状态不一致——合同 / 施工计划头部的 E0 建立时状态未标明为历史快照、第 32 节 S1-S4
 状态过期），不成为 S6 Frozen Base；其后的治理一致性清理 docs-only 提交（S5 final closure R1）是新的 S6 Frozen Base
 候选，仍须独立 docs-only 复查通过。S5 代码闭合链与上表不变。
+
+### 32.2 P4-C7 最终闭合记录（治理记录，不是规范修订；不改变第 1-31、33、34 节语义）
+
+```text
+P4-C7 E0 Frozen Base           : a0a69c71a1451232ded2c8ae8ecd514cf48ba95b
+E0 Establishment Head          : 8f18ec67a4da830831a1ce2ed020eb36c256afe5
+S1 Final Reviewed Code Head    : 416d69ae1af5b5d374a70a9d483ceb14e73ab50d
+S2 Final Reviewed Code Head    : edac3b675c50ca3cd20ca81543fc7728ca44b69f
+S3 Final Reviewed Code Head    : b0b79e0cbba6507dca8f06c06678b22a0f051f0b
+S4 Final Reviewed Code Head    : aef025450217521707916c59dbaa121d665512b7
+S5 Final Reviewed Code Head    : 3a2d737286723ecc399813bb4da8dfb40ffbe104
+S6 Frozen Base                 : f0ffb942da63a65562027ec2b5cf162b11f161a9
+S6 Final Reviewed Code Head    : ae1ace96c86874b3f33ec59819e4aa065136e521
+S6 Implementation Docs Head    : 4298e0eefc41bb7b7042175c2901fc26fbe0609e
+Final Review                   : P4-C7 S6 FINAL INDEPENDENT CLOSURE REVIEW -- PASS
+New / Blocking Findings        : NONE / NONE
+S6                             : ACCEPTED / CLOSED
+P4-C7 implementation           : REVIEWED COMPLETE
+P4-C7                          : CLOSED
+Phase 4                        : NOT CLOSED
+```
+
+* 第 32.1 节末段所述的 S5 final closure R1 候选即 `f0ffb942da63a65562027ec2b5cf162b11f161a9`，已作为 S6 Frozen Base 使用；
+  该段“仍须独立 docs-only 复查”的表述是当时的历史快照。
+* S6 没有修复链（没有 S6-R1）：S6 Final Reviewed Code Head 即 S6 Code Review Candidate；S6 未修改任何生产代码。
+* 证据缺口（Windows native symlink、POSIX native、kernel-native `O_NOFOLLOW`、native cross-volume）经最终复查接受，不阻断闭合，
+  仍记录为缺口（见 `docs/review/P4_C7_HANDOFF.md` 第 10、15 节）；第 25 节剩余风险、进程内源所有权占用的跨进程边界、第 34 节
+  范围之外项保持不变。
+* 第 33 节延续项保持原样，不因 P4-C7 闭合而关闭。
+* P4-C8 Frozen Base Candidate：记录本节的 P4-C7 Final Closure Docs 提交（父提交 = S6 Implementation Docs Head `4298e0e`）。
+  它只有在其后的独立 P4-C7 Final Docs-Only Closure Review PASS 之后才正式成为 P4-C8 Frozen Base；`ae1ace9` 与 `4298e0e`
+  都不是 P4-C8 Frozen Base。P4-C8 尚未开始。
 
 ## 33. 延续项处理
 

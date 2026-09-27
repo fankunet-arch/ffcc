@@ -9,8 +9,13 @@ Branch       = claude/phase4-c7-safe-filesystem-executor
 施工计划     = docs/P4_C7_CONSTRUCTION_PLAN.md
 ```
 
-本文件是 reviewer 证据文档，不是验收结论。S6 与 P4-C7 均须经过独立 S6 closure review；
-本文件不宣布 S6 ACCEPTED、P4-C7 CLOSED 或 Phase 4 CLOSED。
+**当前状态（以第 15 节“P4-C7 最终闭合”为准）**：P4-C7 S6 FINAL INDEPENDENT CLOSURE REVIEW = PASS；
+S6 ACCEPTED / CLOSED；P4-C7 implementation REVIEWED COMPLETE；P4-C7 CLOSED；Phase 4 NOT CLOSED；
+P4-C7 Final Closure Docs 仍须独立 docs-only closure review；P4-C8 Frozen Base 尚未正式建立。
+
+第 1-14 节是 S6 实现阶段（S6 Implementation Docs Head `4298e0e`）的 reviewer 证据文档，作为历史证据原样保留；
+其中的状态表述是**实现时快照（implementation-time snapshot）**。实现时原文：“本文件是 reviewer 证据文档，不是验收结论。
+S6 与 P4-C7 均须经过独立 S6 closure review；本文件不宣布 S6 ACCEPTED、P4-C7 CLOSED 或 Phase 4 CLOSED。”
 
 ## 1. 坐标
 
@@ -24,12 +29,16 @@ S4 Final Reviewed Code Head       = aef025450217521707916c59dbaa121d665512b7   S
 S5 Final Reviewed Code Head       = 3a2d737286723ecc399813bb4da8dfb40ffbe104   S5-R2
 S6 Frozen Base                    = f0ffb942da63a65562027ec2b5cf162b11f161a9   S5 Final Governance Docs（S5 final closure R1）
 S6 Code Review Candidate          = ae1ace96c86874b3f33ec59819e4aa065136e521   只含 S6 测试
-S6 Docs Head                      = 本提交（`git log -1 --format=%H -- fc2-organizer/docs/review/P4_C7_HANDOFF.md`）
-Remote Head                       = S6 Docs Head（本提交 push 之后）
+S6 Docs Head                      = 4298e0eefc41bb7b7042175c2901fc26fbe0609e   S6 Implementation Docs Head（HANDOFF 首版 + 合同第 32 节 S6 状态行）
+Remote Head（实现时）             = 4298e0eefc41bb7b7042175c2901fc26fbe0609e
 
 S6 Code Review Range : f0ffb942da63a65562027ec2b5cf162b11f161a9..ae1ace96c86874b3f33ec59819e4aa065136e521
-S6 Docs Review Range : ae1ace96c86874b3f33ec59819e4aa065136e521..<S6 Docs Head>
+S6 Docs Review Range : ae1ace96c86874b3f33ec59819e4aa065136e521..4298e0eefc41bb7b7042175c2901fc26fbe0609e
 ```
+
+（实现时原文把 S6 Docs Head 写作“本提交（`git log -1 --format=%H -- fc2-organizer/docs/review/P4_C7_HANDOFF.md`）”；
+本文件在最终闭合提交中再次修改后，该命令会返回最终闭合提交，因此此处改写为其真实 SHA `4298e0e`，坐标本身不变。
+最终闭合坐标见第 15 节。）
 
 关系：`S6 Code Review Candidate^ == f0ffb942da63a65562027ec2b5cf162b11f161a9`；`S6 Docs Head^ == ae1ace96c86874b3f33ec59819e4aa065136e521`。
 开始前已验证 `HEAD == origin/claude/phase4-c7-safe-filesystem-executor == f0ffb94` 且工作区干净。没有 rebase、amend、
@@ -52,14 +61,15 @@ A fc2-organizer/tests/unit/execution/test_execution_platform_semantics.py  （71
 * 未触碰：施工计划、合同第 1-31 / 33 / 34 节、S1-S5 任何生产或测试文件、P4-C1..P4-C6 文档、DOCS-CN、CLI / UI / JSON /
   持久化 / 数据库 / Amane、任何 P4-C8 文件。
 
-### 2.2 S6 Docs Head（本提交，2 个文件）
+### 2.2 S6 Docs Head（`4298e0e`，2 个文件）
 
 ```text
 A fc2-organizer/docs/review/P4_C7_HANDOFF.md
 M fc2-organizer/docs/specifications/PHASE4_SAFE_FILESYSTEM_EXECUTION_CONTRACT.md   仅第 32 节 S6 状态行
 ```
 
-S6 状态行：`NOT STARTED` -> `S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`。S1-S5 行不变。
+S6 状态行（实现时）：`NOT STARTED` -> `S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`。S1-S5 行不变。
+（最终闭合时该行已更新为 `S6 ACCEPTED / CLOSED`，见第 15 节。）
 
 ### 2.3 S6 期间的生产缺陷
 
@@ -355,12 +365,67 @@ S6 不宣称修复任何 carried 项；不重新开放任何已 CLOSED 的 S1-S5
 阻塞性已知问题       : NONE
 ```
 
-## 14. 状态
+## 14. 实现时状态快照（implementation-time snapshot，已被第 15 节取代）
+
+以下是 S6 Implementation Docs Head `4298e0e` 提交时的状态，仅作历史记录，**不是当前状态**：
 
 ```text
-S6 implementation     : COMPLETE — INDEPENDENT REVIEW REQUIRED
-P4-C7 implementation  : COMPLETE — INDEPENDENT REVIEW REQUIRED
-合同第 32 节 S6       : S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
-P4-C7                 : NOT CLOSED
+S6 implementation     : COMPLETE — INDEPENDENT REVIEW REQUIRED        （实现时）
+P4-C7 implementation  : COMPLETE — INDEPENDENT REVIEW REQUIRED        （实现时）
+合同第 32 节 S6       : S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED  （实现时）
+P4-C7                 : NOT CLOSED                                   （实现时）
 Phase 4               : NOT CLOSED
 ```
+
+## 15. P4-C7 最终闭合（Final Independent Closure Review）
+
+### 15.1 复查结论
+
+```text
+Review                          : P4-C7 S6 FINAL INDEPENDENT CLOSURE REVIEW
+Verdict                         : PASS
+New Findings                    : NONE
+Blocking Findings               : NONE
+S6 Frozen Base                  : f0ffb942da63a65562027ec2b5cf162b11f161a9
+S6 Final Reviewed Code Head     : ae1ace96c86874b3f33ec59819e4aa065136e521
+S6 Implementation Docs Head     : 4298e0eefc41bb7b7042175c2901fc26fbe0609e
+```
+
+S6 没有修复链：没有 S6-R1 或其他修复提交；S6 Final Reviewed Code Head 即 S6 Code Review Candidate `ae1ace9`。
+
+### 15.2 当前状态
+
+```text
+S1-S5                           : ACCEPTED / CLOSED（不变）
+S6                              : ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD ae1ace96c86874b3f33ec59819e4aa065136e521
+P4-C7 implementation            : REVIEWED COMPLETE
+P4-C7                           : CLOSED
+Phase 4                         : NOT CLOSED（P4-C8、P4-C9、P4-C10 尚未完成）
+P4-C7 Final Closure Docs        : INDEPENDENT REVIEW REQUIRED
+P4-C8 Frozen Base               : NOT ESTABLISHED
+P4-C8                           : NOT STARTED
+```
+
+### 15.3 四个 Head 的区分
+
+```text
+A. S6 Frozen Base                   = f0ffb942da63a65562027ec2b5cf162b11f161a9
+B. S6 Final Reviewed Code Head      = ae1ace96c86874b3f33ec59819e4aa065136e521
+C. S6 Implementation Docs Head      = 4298e0eefc41bb7b7042175c2901fc26fbe0609e
+D. P4-C7 Final Closure Docs Head    = 本 P4-C7 Final Closure Docs 提交（父提交 = C；
+                                      验证：git log -1 --format=%H -- fc2-organizer/docs/review/P4_C7_HANDOFF.md，
+                                      在其后没有再修改本文件的前提下）
+```
+
+P4-C8 Frozen Base Candidate = D。只有 D 在其后的独立 **P4-C7 Final Docs-Only Closure Review** PASS 之后，才正式成为
+P4-C8 Frozen Base。B（`ae1ace9`）与 C（`4298e0e`）都**不是** P4-C8 Frozen Base。
+
+### 15.4 保持不变的证据与边界
+
+* 第 1-13 节的实现时证据（测试数字、变异结果、坐标、Code Candidate / Docs Head 区分、第 3 节合同映射、第 4 节审计）原样保留。
+* 证据缺口（第 10 节）经最终复查接受，**不阻断闭合**，仍如实记录为缺口：Windows native symlink：EVIDENCE GAP；
+  POSIX native：EVIDENCE GAP；kernel-native `O_NOFOLLOW`：EVIDENCE GAP；Native cross-volume：EVIDENCE GAP。
+* 已知局限（第 12 节）保持：进程内源所有权占用不提供跨进程同源唯一性；checkpoint 仅在进程内有效；字符串路径 API 的 TOCTOU
+  边界；合同第 34 节范围之外项。它们不是闭合阻塞项。
+* 延续项（第 11 节，合同第 33 节）保持原样，**不**因 P4-C7 闭合而标为 CLOSED，继续交给后续 package / phase。
+* 本次闭合为 docs-only：不修改 `src/**`、`tests/**`，不修改合同第 1-31、33、34 节语义，不开始 P4-C8。
