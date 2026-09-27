@@ -403,7 +403,7 @@ S4 Head；合同第 4、8、9、14.5、15.4、15.5、27-30 节。
 ```text
 src/fc2_organizer/execution/executor.py        新增 execute_filesystem
 src/fc2_organizer/execution/__init__.py        导出集合 == 合同第 4 节冻结集合
-src/fc2_organizer/execution/seal.py            （仅在必要时）消费登记的调用点
+src/fc2_organizer/execution/seal.py            （仅在必要时）消费登记的调用点；S5-A2：进程内源传输占用登记表（合同第 15.6 节）
 src/fc2_organizer/execution/models.py          （仅在必要时）ExecutionResult 不变量补充
 tests/contract/test_execution_architecture.py（追加公开 API 精确集合）
 tests/unit/execution/_helpers.py（追加）
@@ -439,7 +439,7 @@ tests/unit/execution/test_execution_race.py
 |---|---|
 | `test_execution_executor.py` | 完整 `SUCCESS`：8 种可选主图组合 × extrafanart {0, 1, 13} × {native, hardlink, cross-volume}，最终目录精确列举、字节、源不存在、无临时文件；`FAILED`（U1 之前的每种失败，零 effect，checkpoint `None`）；`PARTIAL`（U1 之后每种失败）；`PreflightNotReadyError`（零文件系统访问、不消费）；封印伪造 / 字段改写 / manifest 对象在 preflight 后被改写 -> `PreflightIntegrityError`，零文件系统访问；同一 preflight 执行两次 -> 第二次 `CONSUMED`；`KeyboardInterrupt` 在每个单元边界 -> 同一对象、无 checkpoint、`assert_source_not_lost`；zero-byte media；Unicode 路径；library root 为 UNC（仅 Windows、可用时，否则 skip） |
 | `test_execution_resume.py` | **resume after each partial point**：对每种 manifest 形态（仅 NFO；全主图 + 3 extrafanart），对 `E` 的每个前缀长度 p，在第 p+1 个 effect 注入失败 -> `PARTIAL` -> resume -> `SUCCESS`，最终布局与一次成功完全相同、已完成 artifact 零重写；连续两次失败再成功（checkpoint 链）；旧 checkpoint 重用 -> `CONSUMED`；resume 时换 manifest（单字节）-> `MANIFEST_MISMATCH`；resume 前改写已完成 artifact / 删除 / 植入条目 -> 对应阻断；`SOURCE_UNLINK_FAILED` 后 resume 只删源；`TARGET_DIRECTORY_FSYNC_FAILED` 后 resume；leftover 临时文件跨多次 resume 保持并被报告 |
-| `test_execution_race.py` | 同目标：barrier 强制两个 preflight 都 `ready` 后并发执行 -> 恰好一个 `SUCCESS`、另一个 `FAILED(TARGET_CONFLICT)`、零 effect；8 线程 × 5 轮不同步；同一 preflight 两线程 -> 恰好一个执行；同一源两个不同库根 / 目标（S5-A1 修订）-> 核心门槛：最多一个执行成为 `SUCCESS`、最多一个最终目标持有原始媒体完整字节、任何时刻无静默源丢失（`assert_source_not_lost`）、不覆盖任何非本执行条目、失败者 fail closed；允许的失败者结果：`SOURCE_MISSING`、`SOURCE_CHANGED`、`MEDIA_TRANSFER_FAILED`（Windows rename / 共享 / 路径竞争）、`PUBLISHED_MEDIA_MISMATCH`（Windows 原子 rename 已成功但 post-publish 身份因同源并发不再成立，合同第 25 节）；`PUBLISHED_MEDIA_MISMATCH` 永不计为成功，出现时额外断言：失败者不是 `SUCCESS`、其最终位置不持有该媒体、只有一个目标持有完整字节、无数据丢失、无覆盖，且若得到 `PARTIAL` checkpoint，对其做 RESUME preflight 必须 not ready；多进程（`multiprocessing`，spawn）各自执行不同目标 -> 全部 `SUCCESS` |
+| `test_execution_race.py` | 同目标：barrier 强制两个 preflight 都 `ready` 后并发执行 -> 恰好一个 `SUCCESS`、另一个 `FAILED(TARGET_CONFLICT)`、零 effect；8 线程 × 5 轮不同步；同一 preflight 两线程 -> 恰好一个执行；同一源两个不同库根 / 目标、同一进程（S5-A1 修订，S5-A2 再修订；合同第 15.6 节）-> 核心门槛：最多一个执行成为 `SUCCESS`（双 `SUCCESS` 绝不允许）、最多一个最终目标持有原始媒体完整字节、任何时刻无静默源丢失（`assert_source_not_lost`）、不覆盖任何非本执行条目、失败者 fail closed；必须覆盖：(1) barrier 确保两个执行都完成 U1 后再竞争 U2；(2) 证明最多一个执行进入 `transfer_media` 的修改区；(3) 至少一个失败者为 `PARTIAL(SOURCE_CHANGED)`（源传输占用冲突），其 checkpoint 保留 `TARGET_DIRECTORY_CREATED` 前缀；(4) 胜者正常 `SUCCESS`；若失败者在对方完成移动并释放占用之后才进入 U2，也允许下层的 `SOURCE_MISSING` / `SOURCE_CHANGED`；同进程同源竞争不再以 `PUBLISHED_MEDIA_MISMATCH` / `MEDIA_TRANSFER_FAILED` 为正常失败者结果（它们只属于跨进程 / 外部行为的第 25 节剩余风险）；(5) 占用在类型化失败之后释放；(6) 占用在外来异常 / `BaseException` 之后释放（同一对象传播）；(7) 之后新的合法执行不被遗留占用永久阻断；同目标竞争规则不变（`FAILED(TARGET_CONFLICT)`、零 effect，失败者不到达源传输占用）；不新增跨进程同源“最多一个 SUCCESS”的测试（进程内占用无法保证，合同第 15.6、25 节）；多进程（`multiprocessing`，spawn）各自执行不同目标 -> 全部 `SUCCESS` |
 
 ### 验收标准
 

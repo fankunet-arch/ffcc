@@ -17,6 +17,7 @@ Branch         ：claude/phase4-c7-safe-filesystem-executor
 | 轮次 | 修订内容 | 涉及章节 |
 |---|---|---|
 | S5-A1 | U1 / U7 独占 `mkdir` 成功但 post-mkdir 归属校验失败时，不记录 effect、不伪造身份（U1 因此为 `FAILED`）；状态语义以“已验证、可记录的累计 final effect”为准；Windows 同源并发的 `PUBLISHED_MEDIA_MISMATCH` 属于第 25 节 TOCTOU 剩余风险内的 fail closed 结果 | 第 2、8、21、22、25 节；施工计划 S5 `test_execution_race.py` |
+| S5-A2 | 同进程同源 U2 增加进程内、非阻塞、仅覆盖 U2 的源传输占用（source-transfer lease，键为源身份 `(device, inode)`，登记表位于 `seal.py`）：同进程最多一个 U2 媒体修改所有者，冲突以 `SOURCE_CHANGED` fail closed（U1 之后因此为 `PARTIAL`）；同进程同源竞争不再以 `PUBLISHED_MEDIA_MISMATCH` 为正常失败者结果；跨进程同源仍属第 25 节剩余风险；该占用不是第 30 节意义上的去重；checkpoint / 公开 API / 失败词汇不变 | 第 3、9、15.6、25、30、31 节；施工计划 S5 `seal.py` 允许改动说明与 `test_execution_race.py` |
 
 ---
 
@@ -101,7 +102,7 @@ fc2_organizer.execution
 | `models.py` | 值模型、枚举、快照、checkpoint / preflight / result | `__future__`、`dataclasses`、`enum`、`re`、本 package `errors` |
 | `paths.py` | 纯词法路径校验 / 比较 | `__future__`、`ntpath`、`os`、`posixpath`、本 package `errors` |
 | `validation.py` | 计划图与 manifest 验证、执行单元推导 | 上述 + `fc2_organizer.planning`、`fc2_organizer.materialization` |
-| `seal.py` | 指纹、HMAC 封印、消费注册表 | `__future__`、`hashlib`、`hmac`、`secrets`、`threading`、本 package |
+| `seal.py` | 指纹、HMAC 封印、消费注册表、进程内源传输占用登记表（第 15.6 节，S5-A2） | `__future__`、`hashlib`、`hmac`、`secrets`、`threading`、本 package |
 | `_fs.py` | 私有文件系统接缝、`lstat` 快照、条目列举 | `__future__`、`dataclasses`、`errno`、`os`、`secrets`、`stat`、`typing`、本 package |
 | `directories.py` | 独占 `mkdir` 与目录快照 | 本 package + `errno`、`os`、`stat` |
 | `transfer.py` | 同卷移动 / 跨卷复制 / 源删除 | 本 package + `errno`、`hashlib`、`os`、`stat` |
@@ -320,7 +321,7 @@ fresh execution 在 U1 记录 `TARGET_DIRECTORY_CREATED` 之前的任何失败�
 
 ```text
 U1  CREATE_DIRECTORY                 -> effect TARGET_DIRECTORY_CREATED
-U2  MOVE_MEDIA                       -> effect MEDIA_PUBLISHED，随后 SOURCE_REMOVED
+U2  MOVE_MEDIA                       -> effect MEDIA_PUBLISHED，随后 SOURCE_REMOVED（进入前取得进程内源传输占用，第 15.6 节）
 U3  MATERIALIZE_NFO                  -> effect ARTIFACT_PUBLISHED(NFO)
 U4  MATERIALIZE_POSTER    （iff manifest 含 POSTER） -> ARTIFACT_PUBLISHED(POSTER)
 U5  MATERIALIZE_FANART    （iff manifest 含 FANART） -> ARTIFACT_PUBLISHED(FANART)
@@ -538,6 +539,47 @@ sha256: str | None, artifact_kind: ArtifactKind | None, ordinal: int | None)`：
 （`FINGERPRINT_MISMATCH`）；以上全部通过之后才登记消费（第 15.4 节）。被拒绝的 preflight 不会被消费。
 
 检查顺序（冻结）：严格类型 -> 封印 -> `ready` -> 结构重新验证与指纹 -> 消费登记 -> 文件系统。
+
+### 15.6 进程内源传输占用（S5-A2）
+
+目的：同一 Python 进程内，两个 `execute_filesystem` 不得同时对同一个冻结源身份执行 U2 媒体修改
+（Windows `MoveFileExW` 经由先打开的句柄重命名，否则可能使两个执行都通过各自的 post-publish 校验而都返回
+`SUCCESS`，第 25 节）。
+
+* **性质**：进程内、非阻塞、瞬时的运行时互斥。它**不是**批量去重、任务调度、持久锁、跨进程锁、文件锁，
+  也不是 P4-C8 的去重逻辑。
+* **键**：冻结的 `source_identity`（`FILE` `EntryIdentity`，已被封印 / checkpoint 绑定）中的 `(device, inode)`。
+  从不使用番号、目标路径、源路径字符串、内容 hash、`mtime` 或 `size` 作为互斥键——需要互斥的是同一个
+  文件系统对象，包括不同路径指向同一 inode 的情形。
+* **登记表**：位于 `seal.py`（与消费注册表同一类进程内状态；第 3 节模块表），由一个 `threading.Lock` 保护；
+  不导出、不新增模块。私有接口可为等价形式，例如 `try_acquire_source_lease(source_identity) -> token | None`
+  与 `release_source_lease(source_identity, token)`，但必须满足：
+  1. 取得在单个锁内原子完成；
+  2. 同一 `(device, inode)` 同时最多一个 token 持有者；
+  3. 取得非阻塞：冲突立即返回“未取得”；
+  4. 释放只对持有同一 token 的持有者生效；重复 / 错误的 token 永不释放他人的占用；
+  5. 占用不写磁盘、不进入 checkpoint、不进入任何公开模型，进程退出即消失。
+* **时机（冻结）**：只覆盖一次 U2 调用。顺序：执行时整体只读重新校验 -> U1（FRESH）-> 即将开始 U2 ->
+  尝试取得占用 -> 取得后调用 `transfer_media` -> `transfer_media` 返回或抛出 -> 在 `finally` 中精确释放
+  自己的占用 -> 其后的 artifact 单元。占用**从不**在 preflight、`execute_filesystem` 开头或 U1 之前取得
+  （同目标竞争必须仍由 U1 的独占 `mkdir` 决出：失败者 `FAILED(TARGET_CONFLICT)`、零 effect，第 21、30 节），
+  也**从不**持有到 U3 之后、整个调用结束、checkpoint 生命周期或下一次 RESUME。RESUME 继续 U2（含
+  `SOURCE_REMOVAL_ONLY`）时同样适用。
+* **释放**：取得之后，无论 `transfer_media` 成功、类型化失败（含 `EXDEV` 回退、`SOURCE_UNLINK_FAILED`、
+  `PUBLISHED_MEDIA_MISMATCH`），还是抛出 `BaseException` / 外来异常，都必须释放；释放不吞掉、不替换原异常，
+  同一对象传播语义不变；不得遗留永久占用。
+* **冲突**：进入 U2 前同一源身份已被同进程另一执行持有 -> 本执行不调用 `transfer_media`（不 rename / link /
+  复制 / 为传输打开源 / unlink 源），失败为既有的 `SOURCE_CHANGED`，`step = MOVE_MEDIA`、`stage = None`、
+  `errno = None`，含义冻结为“本执行无法证明自己仍拥有对冻结源身份的独占执行前提”。这是 S5-A2 唯一授权的
+  占用冲突映射，不扩展到其他并发条件；不新增任何失败 / 阻断 / 阶段枚举。
+* **状态**：占用在 U1 之后取得，因此 FRESH 冲突时 `TARGET_DIRECTORY_CREATED` 已记录：结果为 `PARTIAL`，
+  签发新 checkpoint，目标目录保留、不回滚。RESUME 冲突同样为 `PARTIAL`：签发新 checkpoint，累计 effect 不变，
+  不重新发布媒体。
+* **保证范围**：同进程内同一源身份、不同目标的并发执行最多一个同时进入 `transfer_media`，因此最多一个
+  `SUCCESS`、最多一个最终目标持有原始媒体完整字节、无静默源丢失、无覆盖，另一执行 fail closed（典型为
+  `PARTIAL(SOURCE_CHANGED)`；若在对方已完成移动并释放占用之后才进入 U2，也可由下层得到 `SOURCE_MISSING` /
+  `SOURCE_CHANGED`）。双 `SUCCESS` 绝不允许。**跨进程**不共享登记表：P4-C7 v1.0 不增加文件锁、数据库锁、
+  named mutex、`fcntl`、`msvcrt` 锁、`ctypes`、守护进程或持久协调；跨进程同源执行仍属第 25 节声明的剩余风险。
 
 ## 16. ExecutionPreflight（冻结）
 
@@ -819,13 +861,17 @@ P4-C7 基于标准库的**字符串路径 API**（`os.lstat` / `os.mkdir` / `os.
 * 剩余风险（明确声明）：恶意行为者在 `lstat(source)` 与 `unlink(source)` 之间把源路径替换为另一个文件，
   可能导致那个替换文件被删除；恶意行为者在目录校验与写入之间把父目录替换为链接，可能导致 artifact 被写到别处
   （但仍然不覆盖任何已存在的文件）。
-* 同源并发（S5-A1 澄清，非恶意情形）：Windows 上同一个源被多个并发执行（不同目标）竞争时，即使两个执行都已
+* 同源并发（S5-A1 澄清；S5-A2 限定适用范围，非恶意情形）：**同一进程内**的同源 U2 已由第 15.6 节的源传输占用
+  互斥，不再以本条结果为正常预期；本条适用于**跨进程**同源竞争或其他不受本进程占用登记表约束的外部行为。
+  Windows 上同一个源被多个并发执行（不同目标）竞争时，即使两个执行都已
   完成源重新校验，字符串路径 API 与 Windows rename（`MoveFileExW` 经由先打开的句柄完成重命名）的内部时序，
   仍可能使一个执行的 rename 成功之后、其 post-publish 校验之前，最终文件再次被另一执行移走。此时该执行得到
   `PUBLISHED_MEDIA_MISMATCH`（第 18.2 节：effect 照实记录，不回滚），或在原语层得到 `MEDIA_TRANSFER_FAILED`；
   两者都是本节剩余风险内允许的 fail closed 结果。它**不是**覆盖许可，也**不**允许数据丢失：最多一个执行成功、
   最多一个最终位置持有完整媒体、源字节始终至少存在一份、不覆盖任何已有条目；该执行的 checkpoint 在 RESUME
-  preflight 中必然被阻断（已记录的最终位置已不再持有该文件）。v1.0 威胁模型不因此扩大。
+  preflight 中必然被阻断（已记录的最终位置已不再持有该文件）。v1.0 威胁模型不因此扩大。跨进程情形下，一个执行
+  的 post-publish 校验也可能在另一执行随后移走文件之前通过，因此 P4-C7 **不保证**跨进程同源最多一个
+  `SUCCESS`；但仍保证不覆盖、无静默源丢失、检测到不一致时 fail closed（S5-A2）。
 
 ## 26. 平台规则（冻结）
 
@@ -1008,6 +1054,9 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 * P4-C7 是单影片执行器：它不调度、不并发、不去重。多个影片可以在不同线程中并发执行各自的 preflight
   （不同目标目录）；同一目标目录的竞争由独占 `mkdir` 决出唯一胜者，失败者得到 `TARGET_CONFLICT`
   （`FAILED`）或 preflight 阶段的 `TARGET_DIRECTORY_EXISTS`。
+* 第 15.6 节的进程内源传输占用（S5-A2）**不是**去重：它不比较番号、不合并或取消任务、不记忆已完成的源、
+  不跨执行持久保存、不决定哪个影片应当存在；它只是 U2 媒体修改临界区的进程内安全互斥。顺序执行的两个任务
+  不会因历史占用被 P4-C7 自动去重。批量去重（包括避免跨进程派发同一源）仍属于 P4-C8。
 
 ## 31. 测试总设计（冻结）
 
@@ -1026,6 +1075,7 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | target conflict | preflight 前已存在（文件 / 空目录 / symlink / 悬空 symlink / junction）；preflight 后、执行前植入；U2-U8 每个目标在单元开始前植入；植入者字节 / inode / mtime 不变 |
 | target replacement | 目标目录 / extrafanart 目录在单元之间被替换为 junction / symlink / 另一个目录 -> `TARGET_DIRECTORY_CHANGED` |
 | directory symlink/reparse | library_root 为 junction / symlink -> 阻断；祖先链接不检查（声明）|
+| same-source race（S5-A2） | 同进程、同一源、不同目标：barrier 使两个执行都完成 U1 后再竞争 U2；最多一个进入 `transfer_media` 的修改区；至少一个失败者 `PARTIAL(SOURCE_CHANGED)` 且 checkpoint 保留 `TARGET_DIRECTORY_CREATED` 前缀；胜者 `SUCCESS`；最多一个最终目标持有原始媒体；无静默源丢失、无覆盖；占用在类型化失败与 `BaseException` 之后都被释放，之后新的合法执行不被遗留占用永久阻断；跨进程同源不在本保证内（不设此类测试） |
 | same-target race | 两个 preflight 同一目标：barrier 强制两者都通过 preflight 后并发执行，恰好一个 `SUCCESS`，另一个 `FAILED(TARGET_CONFLICT)`，失败者零 effect；8 线程多轮不同步；两个线程执行同一个 preflight -> 恰好一个被 `CONSUMED` 拒绝 |
 | same-volume move | Windows 原生 rename；POSIX link 策略（通过接缝在 NTFS 上执行 + 在真实 POSIX 主机上原生执行）；`EXDEV` 回退；共享冲突；发布后身份不符 |
 | cross-volume copy | 通过 `_FS.device_of` 接缝强制 `CROSS_VOLUME`；可选真实跨卷（环境变量 `FC2_EXECUTION_CROSS_VOLUME_ROOT` 指向另一卷上的目录，否则 SKIP 并记录为证据缺口） |
