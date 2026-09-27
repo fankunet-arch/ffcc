@@ -18,6 +18,7 @@ Branch         ：claude/phase4-c7-safe-filesystem-executor
 |---|---|---|
 | S5-A1 | U1 / U7 独占 `mkdir` 成功但 post-mkdir 归属校验失败时，不记录 effect、不伪造身份（U1 因此为 `FAILED`）；状态语义以“已验证、可记录的累计 final effect”为准；Windows 同源并发的 `PUBLISHED_MEDIA_MISMATCH` 属于第 25 节 TOCTOU 剩余风险内的 fail closed 结果 | 第 2、8、21、22、25 节；施工计划 S5 `test_execution_race.py` |
 | S5-A2 | 同进程同源 U2 增加进程内、非阻塞、仅覆盖 U2 的源传输占用（source-transfer lease，键为源身份 `(device, inode)`，登记表位于 `seal.py`）：同进程最多一个 U2 媒体修改所有者，冲突以 `SOURCE_CHANGED` fail closed（U1 之后因此为 `PARTIAL`）；同进程同源竞争不再以 `PUBLISHED_MEDIA_MISMATCH` 为正常失败者结果；跨进程同源仍属第 25 节剩余风险；该占用不是第 30 节意义上的去重；checkpoint / 公开 API / 失败词汇不变 | 第 3、9、15.6、25、30、31 节；施工计划 S5 `seal.py` 允许改动说明与 `test_execution_race.py` |
+| S5-A2-R1 | 把 S5-A2 仅覆盖一次 U2 的源传输占用升级为跨 `PARTIAL` / checkpoint 链的进程内源所有权占用：私有状态 `ACTIVE` / `RESERVED(checkpoint_id)` / `POISONED`；发布最终媒体而源尚未删除时不释放、移交给新 checkpoint；致命异常转 `POISONED`；同进程最多一个 `SUCCESS` 且最多一个媒体最终目标；第 25 节删除跨进程唯一性表述（跨进程只保证不覆盖、无静默源丢失、fail closed）；确定性的占用重叠 / 保留 / `POISONED` 测试设计 | 第 3、9、15.6、25、30、31 节；施工计划 S5 `seal.py` 允许改动说明与 `test_execution_race.py` |
 
 ---
 
@@ -102,7 +103,7 @@ fc2_organizer.execution
 | `models.py` | 值模型、枚举、快照、checkpoint / preflight / result | `__future__`、`dataclasses`、`enum`、`re`、本 package `errors` |
 | `paths.py` | 纯词法路径校验 / 比较 | `__future__`、`ntpath`、`os`、`posixpath`、本 package `errors` |
 | `validation.py` | 计划图与 manifest 验证、执行单元推导 | 上述 + `fc2_organizer.planning`、`fc2_organizer.materialization` |
-| `seal.py` | 指纹、HMAC 封印、消费注册表、进程内源传输占用登记表（第 15.6 节，S5-A2） | `__future__`、`hashlib`、`hmac`、`secrets`、`threading`、本 package |
+| `seal.py` | 指纹、HMAC 封印、消费注册表、进程内源所有权占用登记表（第 15.6 节，S5-A2 / S5-A2-R1） | `__future__`、`hashlib`、`hmac`、`secrets`、`threading`、本 package |
 | `_fs.py` | 私有文件系统接缝、`lstat` 快照、条目列举 | `__future__`、`dataclasses`、`errno`、`os`、`secrets`、`stat`、`typing`、本 package |
 | `directories.py` | 独占 `mkdir` 与目录快照 | 本 package + `errno`、`os`、`stat` |
 | `transfer.py` | 同卷移动 / 跨卷复制 / 源删除 | 本 package + `errno`、`hashlib`、`os`、`stat` |
@@ -321,7 +322,7 @@ fresh execution 在 U1 记录 `TARGET_DIRECTORY_CREATED` 之前的任何失败�
 
 ```text
 U1  CREATE_DIRECTORY                 -> effect TARGET_DIRECTORY_CREATED
-U2  MOVE_MEDIA                       -> effect MEDIA_PUBLISHED，随后 SOURCE_REMOVED（进入前取得进程内源传输占用，第 15.6 节）
+U2  MOVE_MEDIA                       -> effect MEDIA_PUBLISHED，随后 SOURCE_REMOVED（进入前取得进程内源所有权占用，第 15.6 节）
 U3  MATERIALIZE_NFO                  -> effect ARTIFACT_PUBLISHED(NFO)
 U4  MATERIALIZE_POSTER    （iff manifest 含 POSTER） -> ARTIFACT_PUBLISHED(POSTER)
 U5  MATERIALIZE_FANART    （iff manifest 含 FANART） -> ARTIFACT_PUBLISHED(FANART)
@@ -540,46 +541,66 @@ sha256: str | None, artifact_kind: ArtifactKind | None, ordinal: int | None)`：
 
 检查顺序（冻结）：严格类型 -> 封印 -> `ready` -> 结构重新验证与指纹 -> 消费登记 -> 文件系统。
 
-### 15.6 进程内源传输占用（S5-A2）
+### 15.6 进程内源所有权占用（S5-A2；S5-A2-R1 修订）
 
-目的：同一 Python 进程内，两个 `execute_filesystem` 不得同时对同一个冻结源身份执行 U2 媒体修改
-（Windows `MoveFileExW` 经由先打开的句柄重命名，否则可能使两个执行都通过各自的 post-publish 校验而都返回
-`SUCCESS`，第 25 节）。
+目的：同一 Python 进程内，同一个冻结源身份最多产生一个媒体最终目标、最多一个 `SUCCESS`。S5-A2 的
+“仅覆盖一次 U2 调用的传输占用”不足以保证这一点（发布成功但源尚未删除的 `PARTIAL` 释放占用后，另一执行仍可
+从仍存在的源发布第二个最终目标），由 S5-A2-R1 修订为跨 `PARTIAL` / checkpoint 链的**源所有权占用**
+（source ownership claim）。以下为冻结语义；S5-A2 原“U2 之后一律 `finally` 释放”的规则作废。
 
-* **性质**：进程内、非阻塞、瞬时的运行时互斥。它**不是**批量去重、任务调度、持久锁、跨进程锁、文件锁，
-  也不是 P4-C8 的去重逻辑。
-* **键**：冻结的 `source_identity`（`FILE` `EntryIdentity`，已被封印 / checkpoint 绑定）中的 `(device, inode)`。
-  从不使用番号、目标路径、源路径字符串、内容 hash、`mtime` 或 `size` 作为互斥键——需要互斥的是同一个
-  文件系统对象，包括不同路径指向同一 inode 的情形。
-* **登记表**：位于 `seal.py`（与消费注册表同一类进程内状态；第 3 节模块表），由一个 `threading.Lock` 保护；
-  不导出、不新增模块。私有接口可为等价形式，例如 `try_acquire_source_lease(source_identity) -> token | None`
-  与 `release_source_lease(source_identity, token)`，但必须满足：
-  1. 取得在单个锁内原子完成；
-  2. 同一 `(device, inode)` 同时最多一个 token 持有者；
-  3. 取得非阻塞：冲突立即返回“未取得”；
-  4. 释放只对持有同一 token 的持有者生效；重复 / 错误的 token 永不释放他人的占用；
-  5. 占用不写磁盘、不进入 checkpoint、不进入任何公开模型，进程退出即消失。
-* **时机（冻结）**：只覆盖一次 U2 调用。顺序：执行时整体只读重新校验 -> U1（FRESH）-> 即将开始 U2 ->
-  尝试取得占用 -> 取得后调用 `transfer_media` -> `transfer_media` 返回或抛出 -> 在 `finally` 中精确释放
-  自己的占用 -> 其后的 artifact 单元。占用**从不**在 preflight、`execute_filesystem` 开头或 U1 之前取得
-  （同目标竞争必须仍由 U1 的独占 `mkdir` 决出：失败者 `FAILED(TARGET_CONFLICT)`、零 effect，第 21、30 节），
-  也**从不**持有到 U3 之后、整个调用结束、checkpoint 生命周期或下一次 RESUME。RESUME 继续 U2（含
-  `SOURCE_REMOVAL_ONLY`）时同样适用。
-* **释放**：取得之后，无论 `transfer_media` 成功、类型化失败（含 `EXDEV` 回退、`SOURCE_UNLINK_FAILED`、
-  `PUBLISHED_MEDIA_MISMATCH`），还是抛出 `BaseException` / 外来异常，都必须释放；释放不吞掉、不替换原异常，
-  同一对象传播语义不变；不得遗留永久占用。
-* **冲突**：进入 U2 前同一源身份已被同进程另一执行持有 -> 本执行不调用 `transfer_media`（不 rename / link /
-  复制 / 为传输打开源 / unlink 源），失败为既有的 `SOURCE_CHANGED`，`step = MOVE_MEDIA`、`stage = None`、
-  `errno = None`，含义冻结为“本执行无法证明自己仍拥有对冻结源身份的独占执行前提”。这是 S5-A2 唯一授权的
-  占用冲突映射，不扩展到其他并发条件；不新增任何失败 / 阻断 / 阶段枚举。
-* **状态**：占用在 U1 之后取得，因此 FRESH 冲突时 `TARGET_DIRECTORY_CREATED` 已记录：结果为 `PARTIAL`，
-  签发新 checkpoint，目标目录保留、不回滚。RESUME 冲突同样为 `PARTIAL`：签发新 checkpoint，累计 effect 不变，
-  不重新发布媒体。
-* **保证范围**：同进程内同一源身份、不同目标的并发执行最多一个同时进入 `transfer_media`，因此最多一个
-  `SUCCESS`、最多一个最终目标持有原始媒体完整字节、无静默源丢失、无覆盖，另一执行 fail closed（典型为
-  `PARTIAL(SOURCE_CHANGED)`；若在对方已完成移动并释放占用之后才进入 U2，也可由下层得到 `SOURCE_MISSING` /
-  `SOURCE_CHANGED`）。双 `SUCCESS` 绝不允许。**跨进程**不共享登记表：P4-C7 v1.0 不增加文件锁、数据库锁、
-  named mutex、`fcntl`、`msvcrt` 锁、`ctypes`、守护进程或持久协调；跨进程同源执行仍属第 25 节声明的剩余风险。
+* **性质**：进程内、非阻塞、运行时的安全互斥。它**不是**批量去重、任务调度、持久锁、跨进程锁或文件锁，也不是
+  P4-C8 的去重逻辑（第 30 节）。
+* **键**：冻结的 `source_identity`（`FILE` `EntryIdentity`，已被封印 / checkpoint 绑定）中的 `(device, inode)`；
+  从不使用源路径字符串、番号、目标、内容 hash、`mtime` 或 `size`。
+* **登记表**：位于 `seal.py`（第 3 节），由一个 `threading.Lock` 保护，所有状态转换在锁内原子完成；不导出、
+  不新增模块；状态与 token 不写磁盘、不进入 checkpoint / preflight / result / effect 或任何公开模型，进程退出
+  即消失。每个键至多处于以下一种私有状态：
+  * **`ACTIVE(token)`**：某一次执行正在对该源执行 U2；`token` 为本次执行私有的随机值。
+  * **`RESERVED(checkpoint_id)`**：某条 `PARTIAL` 链已经发布了最终媒体（累计含 `MEDIA_PUBLISHED`），但源删除
+    尚未完成（累计不含 `SOURCE_REMOVED`）；归属于该链最新签发的 checkpoint 的 `checkpoint_id`（仅作为进程内
+    关联键，checkpoint 字段不变）。
+  * **`POISONED`**：P4-C7 已无法证明哪条链可以安全继续控制该源；永不自动清除，直到进程结束。
+  * 无条目：没有任何执行持有该源。
+* **取得（冻结时机）**：只在即将开始 U2 时尝试（执行时整体只读重新校验与 U1 之后；从不在 preflight、
+  `execute_filesystem` 开头或 U1 之前——同目标竞争仍由 U1 独占 `mkdir` 决出，失败者 `FAILED(TARGET_CONFLICT)`、
+  零 effect、不到达本节）：
+  * 本次执行的累计 effect **不含** `MEDIA_PUBLISHED`（FRESH，或 U2 尚未产生最终媒体的 RESUME）：仅当该键无条目时
+    原子建立 `ACTIVE(token)`；
+  * 累计含 `MEDIA_PUBLISHED`、不含 `SOURCE_REMOVED`（RESUME 的源删除尾段）：仅当该键为
+    `RESERVED(输入 checkpoint 的 checkpoint_id)` 时原子转换为 `ACTIVE(token)`，随后只执行冻结的
+    `SOURCE_REMOVAL_ONLY`（从不重新复制、发布、link 或 rename 最终文件）；
+  * 其他任何情形（键为 `ACTIVE`、他链的 `RESERVED`、`POISONED`，或源删除尾段找不到属于本链的保留）即为冲突。
+* **冲突**：不调用 `transfer_media`（不 rename / link / 复制 / 为传输打开源 / unlink 源），失败为既有的
+  `SOURCE_CHANGED`，`step = MOVE_MEDIA`、`stage = None`、`errno = None`（含义：本执行无法证明自己拥有对冻结源
+  身份的执行前提）。U1 已记录 `TARGET_DIRECTORY_CREATED`，因此 FRESH 冲突为 `PARTIAL`（新 checkpoint，
+  目标目录保留、不回滚）；RESUME 冲突同样为 `PARTIAL`（新 checkpoint，累计 effect 不变，不重新发布）。这是唯一
+  授权的占用冲突映射；不新增任何失败 / 阻断 / 阶段枚举。
+* **`transfer_media` 正常返回类型化结果后**（按累计 effect 判定，不改变第 18-19 节的 effect 语义）：
+  * 累计不含 `MEDIA_PUBLISHED`（发布前的类型化失败，例如 `MEDIA_SOURCE_OPEN_FAILED`、`MEDIA_READ_FAILED`、
+    `MEDIA_WRITE_FAILED`）：释放占用（删除条目），其他执行随后可正常竞争该源；
+  * 累计含 `SOURCE_REMOVED`（成功，或源已删除后又因校验失败的冻结路径）：源路径已不可能再用于第二次发布，释放；
+  * 累计含 `MEDIA_PUBLISHED`、不含 `SOURCE_REMOVED`（例如 `SOURCE_UNLINK_FAILED`、`TARGET_DIRECTORY_FSYNC_FAILED`、
+    `PUBLISHED_MEDIA_MISMATCH` 的源保留路径、`MEDIA_TEMP_CLEANUP_FAILED`）：**绝不释放**；在返回结果之前、新
+    checkpoint 签发之后，原子转换为 `RESERVED(新 checkpoint 的 checkpoint_id)`。
+* **任何 `PARTIAL` 都保持保留链**：只要本次结果的累计 effect 含 `MEDIA_PUBLISHED`、不含 `SOURCE_REMOVED`，
+  无论失败发生在哪里（包括 RESUME 的执行时重新校验在 U2 之前失败、后续 artifact 单元失败），返回新 checkpoint
+  之前都把 `RESERVED` 从输入 checkpoint 的 `checkpoint_id`（或本次的 `ACTIVE`）原子移交给新 checkpoint 的
+  `checkpoint_id`。链 `cp1 -> cp2 -> cp3` 的保留单调移交：任一时刻恰好一个所有者；已消费的旧 checkpoint 永不再是
+  所有者。若输入链并不拥有该键（例如键已 `POISONED`），不发生移交。
+* **未消费的 checkpoint**：`preflight_execution(..., checkpoint=cp)` 返回 not ready 且未调用
+  `execute_filesystem` 时，什么都没有消费，`RESERVED(cp.checkpoint_id)` 保持不变。
+* **致命异常（`BaseException` / 外来异常）**：本次执行在持有 `ACTIVE`，或已消费一个拥有 `RESERVED` 的输入
+  checkpoint、而新 checkpoint 的移交尚未完成时，若 `transfer_media`、结果组装、checkpoint 签发或移交路径抛出
+  `KeyboardInterrupt`、`SystemExit`、`GeneratorExit`、`MemoryError`、`RuntimeError`、自定义 `BaseException` 或
+  其他外来异常：无法可靠知道最终媒体是否已发布，因此该键原子转换为 `POISONED`，然后原样传播同一个异常对象；
+  不释放占用、不返回结果、不签发 checkpoint、不回滚、不吞掉原异常。这是 fail closed，不是遗留占用缺陷。
+* **保证（同一进程内）**：对同一源身份的所有 P4-C7 执行，同时满足：最多一个 `SUCCESS`；最多一个媒体最终目标持有
+  原始媒体完整字节；无静默源丢失；无覆盖。只要 `MEDIA_PUBLISHED` 已发生而源仍保留，该源即处于 `RESERVED`，
+  直到源删除完成或进入 `POISONED`。反例被阻断：POSIX 同卷（或跨卷）A 发布最终媒体后 `unlink(source)` 失败 ->
+  `PARTIAL cpA`，键为 `RESERVED(cpA)`；B 即使已完成自己的 U1，进入 U2 时冲突 -> `PARTIAL(SOURCE_CHANGED)`、
+  `transfer_media` 调用 0 次、目标 B 没有媒体；最终只有目标 A 持有媒体。
+* **跨进程**：各进程的登记表互不相通；P4-C7 v1.0 不增加文件锁、数据库锁、named mutex、`fcntl`、`msvcrt` 锁、
+  `ctypes`、守护进程或持久协调。跨进程同源执行不在本节保证之内，属于第 25 节的剩余风险。
 
 ## 16. ExecutionPreflight（冻结）
 
@@ -861,17 +882,16 @@ P4-C7 基于标准库的**字符串路径 API**（`os.lstat` / `os.mkdir` / `os.
 * 剩余风险（明确声明）：恶意行为者在 `lstat(source)` 与 `unlink(source)` 之间把源路径替换为另一个文件，
   可能导致那个替换文件被删除；恶意行为者在目录校验与写入之间把父目录替换为链接，可能导致 artifact 被写到别处
   （但仍然不覆盖任何已存在的文件）。
-* 同源并发（S5-A1 澄清；S5-A2 限定适用范围，非恶意情形）：**同一进程内**的同源 U2 已由第 15.6 节的源传输占用
-  互斥，不再以本条结果为正常预期；本条适用于**跨进程**同源竞争或其他不受本进程占用登记表约束的外部行为。
-  Windows 上同一个源被多个并发执行（不同目标）竞争时，即使两个执行都已
-  完成源重新校验，字符串路径 API 与 Windows rename（`MoveFileExW` 经由先打开的句柄完成重命名）的内部时序，
-  仍可能使一个执行的 rename 成功之后、其 post-publish 校验之前，最终文件再次被另一执行移走。此时该执行得到
-  `PUBLISHED_MEDIA_MISMATCH`（第 18.2 节：effect 照实记录，不回滚），或在原语层得到 `MEDIA_TRANSFER_FAILED`；
-  两者都是本节剩余风险内允许的 fail closed 结果。它**不是**覆盖许可，也**不**允许数据丢失：最多一个执行成功、
-  最多一个最终位置持有完整媒体、源字节始终至少存在一份、不覆盖任何已有条目；该执行的 checkpoint 在 RESUME
-  preflight 中必然被阻断（已记录的最终位置已不再持有该文件）。v1.0 威胁模型不因此扩大。跨进程情形下，一个执行
-  的 post-publish 校验也可能在另一执行随后移走文件之前通过，因此 P4-C7 **不保证**跨进程同源最多一个
-  `SUCCESS`；但仍保证不覆盖、无静默源丢失、检测到不一致时 fail closed（S5-A2）。
+* 同源并发（S5-A1 澄清；S5-A2 / S5-A2-R1 限定适用范围，非恶意情形）：**同一进程内**的同源执行由第 15.6 节的
+  源所有权占用约束（最多一个 `SUCCESS`、最多一个媒体最终目标），不以本条结果为正常预期。本条只适用于**跨进程**
+  同源竞争，或其他不受本进程登记表约束的外部行为：Windows 上即使两个执行都已完成源重新校验，字符串路径 API 与
+  Windows rename（`MoveFileExW` 经由先打开的句柄完成重命名）的内部时序，仍可能使一个执行的 rename 成功之后、
+  其 post-publish 校验之前或之后，最终文件被另一执行再次移走；一个执行也可能在另一执行 unlink 源之前从同一源
+  完成复制或 link。因此对跨进程同源竞争，P4-C7 **不保证**最多一个 `SUCCESS`，**也不保证**最多一个最终目标持有
+  该媒体。P4-C7 只保证：不覆盖任何已有条目；无静默源丢失（源字节始终至少完整存在于源路径或某个最终位置）；
+  每个修改性 syscall 前按既有边界重新校验；检测到的不一致一律 fail closed（例如 `PUBLISHED_MEDIA_MISMATCH`：
+  effect 照实记录、不回滚，且对应 checkpoint 的 RESUME preflight 必然被阻断；或原语层的 `MEDIA_TRANSFER_FAILED`）。
+  这不是覆盖许可，也不允许数据丢失；v1.0 威胁模型不因此扩大；避免跨进程派发同一源属于 P4-C8（第 30 节）。
 
 ## 26. 平台规则（冻结）
 
@@ -1054,9 +1074,11 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 * P4-C7 是单影片执行器：它不调度、不并发、不去重。多个影片可以在不同线程中并发执行各自的 preflight
   （不同目标目录）；同一目标目录的竞争由独占 `mkdir` 决出唯一胜者，失败者得到 `TARGET_CONFLICT`
   （`FAILED`）或 preflight 阶段的 `TARGET_DIRECTORY_EXISTS`。
-* 第 15.6 节的进程内源传输占用（S5-A2）**不是**去重：它不比较番号、不合并或取消任务、不记忆已完成的源、
-  不跨执行持久保存、不决定哪个影片应当存在；它只是 U2 媒体修改临界区的进程内安全互斥。顺序执行的两个任务
-  不会因历史占用被 P4-C7 自动去重。批量去重（包括避免跨进程派发同一源）仍属于 P4-C8。
+* 第 15.6 节的进程内源所有权占用（S5-A2；S5-A2-R1 修订，含 `RESERVED`）**不是**去重：它只在 P4-C7 已经
+  产生部分媒体所有权（最终媒体已发布、源尚未删除）或正在执行 U2 时保留安全所有权；它不比较番号、不合并或取消
+  任务、不判断影片是否重复、不记录成功历史、不决定哪个计划优先、不跨进程协调。`SOURCE_REMOVED` 完成后占用即被
+  清除，正常完成的历史不保留；顺序执行的两个任务不会因历史占用被自动去重。批量去重（包括避免跨进程派发同一源）
+  仍属于 P4-C8。
 
 ## 31. 测试总设计（冻结）
 
@@ -1075,7 +1097,7 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | target conflict | preflight 前已存在（文件 / 空目录 / symlink / 悬空 symlink / junction）；preflight 后、执行前植入；U2-U8 每个目标在单元开始前植入；植入者字节 / inode / mtime 不变 |
 | target replacement | 目标目录 / extrafanart 目录在单元之间被替换为 junction / symlink / 另一个目录 -> `TARGET_DIRECTORY_CHANGED` |
 | directory symlink/reparse | library_root 为 junction / symlink -> 阻断；祖先链接不检查（声明）|
-| same-source race（S5-A2） | 同进程、同一源、不同目标：barrier 使两个执行都完成 U1 后再竞争 U2；最多一个进入 `transfer_media` 的修改区；至少一个失败者 `PARTIAL(SOURCE_CHANGED)` 且 checkpoint 保留 `TARGET_DIRECTORY_CREATED` 前缀；胜者 `SUCCESS`；最多一个最终目标持有原始媒体；无静默源丢失、无覆盖；占用在类型化失败与 `BaseException` 之后都被释放，之后新的合法执行不被遗留占用永久阻断；跨进程同源不在本保证内（不设此类测试） |
+| same-source race（S5-A2；S5-A2-R1 修订） | 同进程、同一源、不同目标（全部确定性调度，不用 sleep / 概率 / 循环碰运气）：(a) 占用重叠：A、B 都完成 U1；A 取得 `ACTIVE` 并进入受控 `transfer_media` 接缝阻塞，发出 owner-active 事件；收到后才放行 B 进入 U2；B 必须实际执行一次私有取得并立即冲突 -> `PARTIAL(SOURCE_CHANGED)`、`transfer_media` 调用 0 次、checkpoint 保留 `TARGET_DIRECTORY_CREATED`；确认 B 的结果后才释放 A，A 正常 `SUCCESS`；(b) 保留：POSIX 同卷与跨卷各一次 `MEDIA_PUBLISHED` + `SOURCE_UNLINK_FAILED` -> `RESERVED(cpA)`，另一执行无法进入 `transfer_media` / 发布第二个最终目标；checkpoint 链 cp1 -> 再失败 -> cp2 时所有者从 cp1 移交到 cp2（恰好一个所有者），整个链条中另一执行始终不能发布；RESUME 完成 `SOURCE_REMOVED` 后释放；(c) 类型化失败分三类：发布前失败释放、发布后且源保留转 `RESERVED`、`SOURCE_REMOVED` 完成后释放；(d) `POISONED`：持有 `ACTIVE` 时 `transfer_media` 抛 `RuntimeError` -> 同一对象传播、键 `POISONED`、同进程后续同源执行 fail closed 且不进入 `transfer_media`；已消费拥有 `RESERVED` 的 checkpoint 后、新 checkpoint 移交前抛外来异常 / `BaseException` -> 不释放、`POISONED`；每项都断言最多一个 `SUCCESS`、最多一个最终目标持有原始媒体、无静默源丢失、无覆盖；跨进程同源不在本保证内（不设此类测试） |
 | same-target race | 两个 preflight 同一目标：barrier 强制两者都通过 preflight 后并发执行，恰好一个 `SUCCESS`，另一个 `FAILED(TARGET_CONFLICT)`，失败者零 effect；8 线程多轮不同步；两个线程执行同一个 preflight -> 恰好一个被 `CONSUMED` 拒绝 |
 | same-volume move | Windows 原生 rename；POSIX link 策略（通过接缝在 NTFS 上执行 + 在真实 POSIX 主机上原生执行）；`EXDEV` 回退；共享冲突；发布后身份不符 |
 | cross-volume copy | 通过 `_FS.device_of` 接缝强制 `CROSS_VOLUME`；可选真实跨卷（环境变量 `FC2_EXECUTION_CROSS_VOLUME_ROOT` 指向另一卷上的目录，否则 SKIP 并记录为证据缺口） |
