@@ -31,7 +31,8 @@ _S1_MODULES = {"__init__.py", "errors.py", "models.py", "paths.py", "validation.
                "preflight.py"}
 _S2_MODULES = _S1_MODULES | {"directories.py"}
 _S3_MODULES = _S2_MODULES | {"transfer.py"}
-_NOT_YET = ("executor.py", "rollback.py", "orchestrator.py")
+_S4_MODULES = _S3_MODULES | {"executor.py"}
+_NOT_YET = ("rollback.py", "orchestrator.py")
 
 _PKG = "fc2_organizer.execution"
 _BARE = {"fc2_organizer.planning", "fc2_organizer.materialization"}
@@ -53,6 +54,9 @@ _ALLOWED = {
     # S3 (contract section 3 table: this package + errno / hashlib / os / stat); never planning / materialization.
     "transfer.py": {"__future__", "errno", "hashlib", "os", _PKG, f"{_PKG}.directories", f"{_PKG}.errors",
                     f"{_PKG}.models"},
+    # S4 (contract section 3 table: this package + the bare public planning / materialization packages).
+    "executor.py": {"__future__", _PKG, f"{_PKG}.directories", f"{_PKG}.errors", f"{_PKG}.models",
+                    f"{_PKG}.paths", f"{_PKG}.seal", f"{_PKG}.validation", "fc2_organizer.materialization"},
 }
 _FORBIDDEN_PREFIXES = (
     "fc2_metadata_core", "amane", "httpx", "requests", "socket", "ssl", "http", "urllib", "shutil", "tempfile",
@@ -116,9 +120,9 @@ def _calls(tree: ast.AST):
 # --------------------------------------------------------------------------- static
 
 
-def test_package_has_exactly_the_s3_modules():
+def test_package_has_exactly_the_s4_modules():
     names = {p.name for p in _files(EXEC_SRC_ROOT)}
-    assert names == _S3_MODULES
+    assert names == _S4_MODULES
     for later in _NOT_YET:
         assert later not in names
 
@@ -145,12 +149,14 @@ def test_no_overwrite_removal_directory_glob_guessing_or_rollback_calls():
 
 
 def test_no_second_fc2_parser_and_no_mapping_or_writer_reference():
+    # S4: executor.py alone may reference `materialize_artifact` (its single call site is asserted below).
     for path in _files(EXEC_SRC_ROOT):
+        forbidden = _FORBIDDEN_NAMES - ({"materialize_artifact"} if path.name == "executor.py" else set())
         for node in ast.walk(_tree(path)):
             name = node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else None
-            assert name not in _FORBIDDEN_NAMES, (path.name, name)
+            assert name not in forbidden, (path.name, name)
             if isinstance(node, ast.alias):
-                assert node.name not in _FORBIDDEN_NAMES, (path.name, node.name)
+                assert node.name not in forbidden, (path.name, node.name)
 
 
 def test_os_syscalls_only_inside_the_private_seam():
@@ -459,3 +465,84 @@ def test_transfer_is_private_to_the_package():
             assert name not in execution.__all__ and not hasattr(execution, name), name
     finally:
         _purge()
+
+
+# --------------------------------------------------------------------------- S4: executor.py (artifact units only)
+
+
+def test_executor_has_only_artifact_unit_execution_in_s4():
+    tree = _tree(EXEC_SRC_ROOT / "executor.py")
+    functions = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    assert "_execute_artifact_unit" in functions
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | functions
+    for later in ("execute_filesystem", "issue_checkpoint", "register_consumption", "transfer_media",
+                  "create_target_directory", "create_extrafanart_directory", "ExecutionResult",
+                  "ExecutionCheckpoint", "preflight_execution"):
+        assert later not in names, later
+    exported = [n for n in ast.walk(tree) if isinstance(n, ast.AnnAssign) and getattr(n.target, "id", "") == "__all__"]
+    assert len(exported) == 1 and isinstance(exported[0].value, ast.List) and exported[0].value.elts == []
+
+
+def test_materialize_artifact_is_the_only_artifact_writer_and_gets_the_original_request():
+    tree = _tree(EXEC_SRC_ROOT / "executor.py")
+    calls = [(fn.name, node) for fn in ast.walk(tree) if isinstance(fn, ast.FunctionDef)
+             for node in ast.walk(fn) if isinstance(node, ast.Call)
+             and getattr(node.func, "id", getattr(node.func, "attr", None)) == "materialize_artifact"]
+    assert [name for name, _ in calls] == ["_execute_artifact_unit"]
+    call = calls[0][1]
+    assert len(call.args) == 1 and not call.keywords
+    assert isinstance(call.args[0], ast.Name) and call.args[0].id == "request"  # the manifest's own object
+    fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_execute_artifact_unit")
+    for node in ast.walk(fn):  # `request` is never rebound before the call
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            assert all(getattr(t, "id", None) != "request" for t in targets)
+    # No content copy / conversion / direct write anywhere in executor.py.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            name = getattr(node.func, "id", getattr(node.func, "attr", None))
+            assert name not in {"open", "write", "writelines", "materialize_atomic_bytes", "copy", "deepcopy",
+                                "bytes", "bytearray", "memoryview", "encode", "decode", "ArtifactWriteRequest",
+                                "replace", "mkstemp", "NamedTemporaryFile"}, name
+        if isinstance(node, ast.Subscript):
+            base = node.value
+            assert not (isinstance(base, ast.Attribute) and base.attr == "content"), "content slicing"
+
+
+def test_executor_reaches_only_read_only_seam_helpers():
+    tree = _tree(EXEC_SRC_ROOT / "executor.py")
+    used = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+            and n.value.id == "_fs"}
+    assert used <= {"snapshot", "SnapshotRefused", "list_names", "read_bounded", "os_errno"}, used
+    attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert not attrs & (_MUTATING_ATTRS | {"_FS"}), attrs & (_MUTATING_ATTRS | {"_FS"})
+
+
+def test_executor_translates_only_materialization_errors_and_never_chains():
+    tree = _tree(EXEC_SRC_ROOT / "executor.py")
+    handlers = [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]
+    assert handlers and all(isinstance(h.type, ast.Name) and h.type.id == "MaterializationError" for h in handlers)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Raise):
+            assert node.cause is None, node.lineno
+    for node in ast.walk(tree):  # dispatch by type: no message / class-name inspection
+        if isinstance(node, ast.Attribute):
+            assert node.attr not in {"__name__", "__qualname__", "args", "__str__", "message"}, node.attr
+        if isinstance(node, ast.Call):
+            assert getattr(node.func, "id", None) not in {"str", "repr", "format"}
+
+
+def test_executor_imports_with_forbidden_modules_blocked():
+    _purge()
+    saved = {name: sys.modules.pop(name) for name in list(sys.modules) if name.split(".")[0] in _BLOCKED_ROOTS}
+    blocker = _BlockFinder()
+    sys.meta_path.insert(0, blocker)
+    try:
+        importlib.import_module(f"{_PKG}.executor")
+        loaded = set(sys.modules)
+        assert not any(n.split(".")[0] in _BLOCKED_ROOTS or n.startswith(_BLOCKED_PREFIXES) for n in loaded)
+        assert "fc2_organizer.materialization.atomic" in loaded  # through the bare public package only
+    finally:
+        sys.meta_path.remove(blocker)
+        _purge()
+        sys.modules.update(saved)

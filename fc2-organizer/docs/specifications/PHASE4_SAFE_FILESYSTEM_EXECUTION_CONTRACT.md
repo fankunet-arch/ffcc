@@ -1039,7 +1039,7 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | S1 | Foundation / graph / manifest / read-only preflight | S1-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S2 | directory ownership + checkpoint/resume foundation | S2-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S3 | same-volume + cross-volume media transfer | S3-R2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S4 | artifact execution + retry verification | NOT STARTED |
+| S4 | artifact execution + retry verification | S4 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S5 | integrated single-item executor | NOT STARTED |
 | S6 | synthetic/fault/concurrency gate + final handoff | NOT STARTED |
 

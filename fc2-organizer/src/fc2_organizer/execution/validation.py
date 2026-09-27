@@ -58,6 +58,7 @@ __all__ = [
     "expected_effects",
     "skipped_steps",
     "extrafanart_target",
+    "artifact_unit_roles",
 ]
 
 # Frozen P4-C6 extrafanart naming (materialization contract section 21); private copy.
@@ -96,6 +97,16 @@ _MAIN_ARTIFACTS = (
     (ArtifactKind.FANART, "fanart_path", ExecutionStep.MATERIALIZE_FANART, PathRole.FANART),
     (ArtifactKind.THUMB, "thumb_path", ExecutionStep.MATERIALIZE_THUMB, PathRole.THUMB),
 )
+# Frozen artifact unit shape (contract sections 9, 22, 24): kind -> (step, effect role, parent directory role).
+# The parent is fixed by the kind, never guessed from a path.
+_ARTIFACT_UNIT_ROLES = {
+    ArtifactKind.NFO: (ExecutionStep.MATERIALIZE_NFO, PathRole.NFO, PathRole.TARGET_DIRECTORY),
+    ArtifactKind.POSTER: (ExecutionStep.MATERIALIZE_POSTER, PathRole.POSTER, PathRole.TARGET_DIRECTORY),
+    ArtifactKind.FANART: (ExecutionStep.MATERIALIZE_FANART, PathRole.FANART, PathRole.TARGET_DIRECTORY),
+    ArtifactKind.THUMB: (ExecutionStep.MATERIALIZE_THUMB, PathRole.THUMB, PathRole.TARGET_DIRECTORY),
+    ArtifactKind.EXTRAFANART: (ExecutionStep.MATERIALIZE_EXTRAFANART, PathRole.EXTRAFANART_FILE,
+                               PathRole.EXTRAFANART_DIRECTORY),
+}
 _ARTIFACT_TARGET_FIELD = {
     ArtifactKind.NFO: "nfo_path", ArtifactKind.POSTER: "poster_path",
     ArtifactKind.FANART: "fanart_path", ArtifactKind.THUMB: "thumb_path",
@@ -365,3 +376,11 @@ def expected_effects(plan: OrganizePlan, artifacts: tuple[ArtifactWriteRequest, 
             effects.append(ExpectedEffect(EffectKind.ARTIFACT_PUBLISHED, PathRole.EXTRAFANART_FILE,
                                           request.target_path, ArtifactKind.EXTRAFANART, request.ordinal))
     return tuple(effects)
+
+
+def artifact_unit_roles(kind: ArtifactKind) -> tuple[ExecutionStep, PathRole, PathRole]:
+    """Frozen mapping of an artifact kind to its unit ``(step, effect role, parent directory role)``:
+    NFO / POSTER / FANART / THUMB live in the target directory, EXTRAFANART in ``extrafanart/``."""
+    if type(kind) is not ArtifactKind:
+        raise ExecutionInputError("kind must be an ArtifactKind")
+    return _ARTIFACT_UNIT_ROLES[kind]

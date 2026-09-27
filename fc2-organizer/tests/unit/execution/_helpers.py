@@ -14,7 +14,10 @@ import pytest
 from fc2_organizer.execution import _fs, preflight_execution, transfer
 from fc2_organizer.execution.models import CompletedEffect, EffectKind, PathRole
 from fc2_organizer.execution.seal import issue_checkpoint, manifest_fingerprint, plan_fingerprint
-from fc2_organizer.execution.directories import create_target_directory
+from fc2_organizer.execution import executor
+from fc2_organizer.execution.directories import create_extrafanart_directory, create_target_directory
+from fc2_organizer.materialization import ArtifactKind
+from fc2_organizer.materialization import atomic as p4c6_atomic
 
 from ._builders import make_plan, scene
 
@@ -428,3 +431,88 @@ def mismatch_resume_blockers(ts: TransferScene, outcome, manifest, transfer_mode
         leftover_temporaries=outcome.leftover_temporaries)
     preflight = preflight_execution(ts.plan, manifest, checkpoint)
     return tuple(blocker.reason for blocker in preflight.blockers)
+
+
+# --------------------------------------------------------------------------- S4 helpers (artifact units)
+
+ARTIFACT_STRATEGIES = ("native", "hardlink")
+
+
+def use_p4c6_strategy(monkeypatch: pytest.MonkeyPatch, strategy: str) -> None:
+    """P4-C6 publish strategy: native (this host's) or the POSIX hard-link strategy (link + unlink temp)."""
+    if strategy == "hardlink":
+        monkeypatch.setattr(p4c6_atomic, "_PUBLISH_LEAVES_TEMP", True)
+        inject_p4c6(monkeypatch, publish=os.link)
+
+
+def inject_p4c6(monkeypatch: pytest.MonkeyPatch, **ops) -> None:
+    """Failure injection inside the REAL materialize_artifact (``materialization.atomic._FS``)."""
+    monkeypatch.setattr(p4c6_atomic, "_FS", dataclasses.replace(p4c6_atomic._FS, **ops))
+
+
+class MaterializeSpy:
+    """Wraps the ``materialize_artifact`` executor.py calls: records the exact argument objects."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, replacement=None) -> None:
+        self.requests: list[object] = []
+        self.contents: list[object] = []
+        real = executor.materialize_artifact
+        inner = replacement or real
+
+        def spy(request):
+            self.requests.append(request)
+            self.contents.append(request.content)
+            return inner(request)
+
+        monkeypatch.setattr(executor, "materialize_artifact", spy)
+
+
+@dataclasses.dataclass
+class ArtifactScene:
+    root: Path
+    plan: object
+    artifacts: tuple
+    target_identity: object
+    extrafanart_identity: object
+    planted: dict
+
+
+ARTIFACT_PLANTED = (".fc2tmp-" + "b" * 32 + ".part", "user.part", "user.tmp")
+
+
+def artifact_scene(tmp_path: Path, *, extra: int = 2, poster: bool = True, fanart: bool = True,
+                   thumb: bool = True, plant: bool = True) -> ArtifactScene:
+    """Real plan + manifest; target and extrafanart directories created by the production helpers;
+    unrelated temp-looking / user files planted in both directories."""
+    s = scene(tmp_path, poster=poster, fanart=fanart, thumb=thumb, extra=extra)
+    target_identity, failure = create_target_directory(s.plan, _fs.snapshot(s.library_root))
+    assert failure is None
+    extrafanart_identity, failure = create_extrafanart_directory(s.plan, target_identity)
+    assert failure is None
+    planted = {}
+    if plant:
+        for directory in (s.plan.target_directory.absolute_path, s.plan.extrafanart_directory.absolute_path):
+            for name in ARTIFACT_PLANTED:
+                path = os.path.join(directory, name)
+                with open(path, "wb") as handle:
+                    handle.write(b"unrelated " + name.encode())
+                planted[path] = file_state(path)
+    return ArtifactScene(tmp_path, s.plan, s.artifacts, target_identity, extrafanart_identity, planted)
+
+
+def file_state(path) -> tuple:
+    st = os.lstat(path)
+    with open(path, "rb") as handle:
+        return handle.read(), st.st_ino, st.st_mtime_ns
+
+
+def assert_artifact_planted_unchanged(a: ArtifactScene) -> None:
+    assert {path: file_state(path) for path in a.planted} == a.planted
+
+
+def parent_identity_for(a: ArtifactScene, request) -> object:
+    return a.extrafanart_identity if request.kind is ArtifactKind.EXTRAFANART else a.target_identity
+
+
+def artifact_temp_names(directory) -> list[str]:
+    return sorted(n for n in os.listdir(directory) if n.startswith(".fc2tmp-") and n not in ARTIFACT_PLANTED)
