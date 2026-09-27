@@ -23,11 +23,13 @@ from fc2_organizer.execution import (
     PreflightBlockReason,
     PreflightMode,
     PreflightNotReadyError,
+    ExecutionStep,
     TransferMode,
     execute_filesystem,
     preflight_execution,
 )
 from fc2_organizer.execution import _fs, executor
+from fc2_organizer.execution import seal as seal_module
 from fc2_organizer.execution.seal import is_consumed
 from fc2_organizer.execution.transfer import ResumePhase
 from fc2_organizer.execution.validation import expected_effects
@@ -37,7 +39,9 @@ from ._builders import NFO_TEXT, make_manifest, make_plan, scene
 from ._helpers import (
     FakeDirectoryFsync,
     MaterializeSpy,
+    TransferSpy,
     assert_source_not_lost,
+    claim_state,
     expected_library_layout,
     failing,
     file_state,
@@ -334,3 +338,77 @@ def test_resume_revalidation_failure_is_partial_never_failed(tmp_path, monkeypat
     assert resumed.checkpoint.checkpoint_id != result.checkpoint.checkpoint_id
     assert resumed.checkpoint.completed_effects == result.completed_effects
     assert is_consumed(result.checkpoint.checkpoint_id)
+
+
+# --------------------------------------------------------------------------- S5-R2: RESUME claim conflicts (15.6)
+
+CONFLICT_STATES = {
+    "active_other": ("active", "f" * 32),
+    "reserved_other": ("reserved", "e" * 32),
+    "poisoned": ("poisoned", None),
+    "missing": None,
+}
+
+
+def _source_retained_checkpoint(tmp_path, monkeypatch):
+    """A real PARTIAL whose effects hold MEDIA_PUBLISHED but not SOURCE_REMOVED (link publish, unlink fails)."""
+    s = _scene(tmp_path, "nfo_only")
+    use_strategy(monkeypatch, "link")
+    real = _fs._FS.unlink
+    inject(monkeypatch, unlink=lambda p: (_ for _ in ()).throw(PermissionError(errno.EACCES, "busy"))
+           if p == s.source_path else real(p))
+    first = execute_filesystem(preflight_execution(s.plan, s.artifacts))
+    cp = first.checkpoint
+    assert first.failure.kind is F.SOURCE_UNLINK_FAILED
+    assert claim_state(cp.source_identity) == ("reserved", cp.checkpoint_id)
+    inject(monkeypatch, unlink=real)
+    return s, cp
+
+
+def _force_claim(identity, state):
+    key = (identity.device, identity.inode)
+    with seal_module._CLAIMS_LOCK:  # test-only construction of a foreign / missing ownership state
+        if state is None:
+            seal_module._CLAIMS.pop(key, None)
+        else:
+            seal_module._CLAIMS[key] = state
+
+
+def _assert_typed_conflict(result, checkpoint, spy):
+    assert result.status is ExecutionStatus.PARTIAL and result.checkpoint is not None
+    failure = result.failure
+    assert failure.kind is F.SOURCE_CHANGED and failure.step is ExecutionStep.MOVE_MEDIA
+    assert failure.stage is None and failure.errno is None
+    assert result.new_effect_count == 0 and result.completed_effects == checkpoint.completed_effects
+    assert result.checkpoint.checkpoint_id != checkpoint.checkpoint_id
+    assert spy.calls == []  # never re-published, never touched the source
+
+
+@pytest.mark.parametrize("state", sorted(CONFLICT_STATES))
+def test_source_retained_resume_without_ownership_is_a_typed_conflict(tmp_path, monkeypatch, state):
+    s, cp = _source_retained_checkpoint(tmp_path, monkeypatch)
+    identity = cp.source_identity
+    _force_claim(identity, CONFLICT_STATES[state])
+    spy = TransferSpy(monkeypatch)
+    preflight = preflight_execution(s.plan, s.artifacts, cp)
+    assert preflight.ready
+    result = execute_filesystem(preflight)  # a result, never ClaimIntegrityError
+    _assert_typed_conflict(result, cp, spy)
+    assert claim_state(identity) == CONFLICT_STATES[state]  # the registry is left exactly as it was
+    assert os.path.isfile(s.source_path)  # the source is retained (two names of one inode)
+    assert_source_not_lost(s.source_path, s.plan.target_media_path.absolute_path,
+                           hashlib.sha256(MEDIA).hexdigest())
+
+
+@pytest.mark.parametrize("state", ["missing", "reserved_other"])
+def test_successor_of_a_conflicting_lineage_owns_nothing(tmp_path, monkeypatch, state):
+    s, cp = _source_retained_checkpoint(tmp_path, monkeypatch)
+    identity = cp.source_identity
+    _force_claim(identity, CONFLICT_STATES[state])
+    spy = TransferSpy(monkeypatch)
+    first = execute_filesystem(preflight_execution(s.plan, s.artifacts, cp))
+    successor = first.checkpoint
+    assert claim_state(identity) == CONFLICT_STATES[state]  # no fabricated RESERVED(successor)
+    again = execute_filesystem(preflight_execution(s.plan, s.artifacts, successor))
+    _assert_typed_conflict(again, successor, spy)
+    assert claim_state(identity) == CONFLICT_STATES[state]

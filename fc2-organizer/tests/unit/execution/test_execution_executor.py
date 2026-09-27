@@ -659,7 +659,10 @@ def test_release_that_does_not_take_effect_fails_closed(tmp_path, monkeypatch):
     assert seal_module._CLAIMS[key] == ("active", other)
 
 
-def test_reservation_hand_over_that_does_not_take_effect_fails_closed(tmp_path, monkeypatch):
+def test_owned_reservation_hand_over_that_does_not_take_effect_fails_closed(tmp_path, monkeypatch):
+    # Integrity failure, NOT a claim conflict: the lineage genuinely owns RESERVED(cp1) when the resume starts
+    # (asserted below); the resume fails its revalidation before U2 (so no take-over is attempted) and owes the
+    # RESERVED(cp1) -> RESERVED(new) hand-over, which a foreign owner appearing at that moment defeats.
     s, preflight = _ready(tmp_path)
     _link_unlink_failing(monkeypatch, s.source_path)
     first = execute_filesystem(preflight)
@@ -670,10 +673,14 @@ def test_reservation_hand_over_that_does_not_take_effect_fails_closed(tmp_path, 
     Path(s.plan.target_directory.absolute_path, "late").unlink()
     resume = preflight_execution(s.plan, s.artifacts, cp1)
     Path(s.plan.target_directory.absolute_path, "late").write_bytes(b"x")  # revalidation will fail (PARTIAL)
+    key = (cp1.source_identity.device, cp1.source_identity.inode)
+    assert seal_module._CLAIMS[key] == ("reserved", cp1.checkpoint_id)  # owned at the start of the resume
     transition, other = _foreign_owner(cp1.source_identity, "claim_hand_over")
     monkeypatch.setattr(executor, "claim_hand_over", transition)
+    transfers = []
+    monkeypatch.setattr(executor, "transfer_media", lambda *a, **k: transfers.append(a) or None)
     with pytest.raises(ClaimIntegrityError):
         execute_filesystem(resume)
-    key = (cp1.source_identity.device, cp1.source_identity.inode)
+    assert transfers == []  # U2 never ran: this is the owed hand-over path, not the take-over conflict
     assert seal_module._CLAIMS[key] == ("active", other)
     assert is_consumed(cp1.checkpoint_id)

@@ -1176,7 +1176,7 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | S2 | directory ownership + checkpoint/resume foundation | S2-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S3 | same-volume + cross-volume media transfer | S3-R2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S4 | artifact execution + retry verification | S4-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S5 | integrated single-item executor | S5-R1 COMBINED REMEDIATION IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
+| S5 | integrated single-item executor | S5-R2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S6 | synthetic/fault/concurrency gate + final handoff | NOT STARTED |
 
 ## 33. 延续项处理

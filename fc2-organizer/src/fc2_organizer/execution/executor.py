@@ -395,6 +395,9 @@ class _Run:
         # RESUME of a lineage that published the media but has not removed the source -- the reservation
         # owner the consumed input checkpoint may hold until this call hands it over or takes it over.
         self.claim_token: str | None = None
+        # Set at the moment the U2 acquisition / take-over itself fails: this call then owns nothing, owes no
+        # transition and must not touch the registry (a claim conflict, never an ownership-integrity failure).
+        self.claim_conflict = False
         self.reserving_checkpoint_id: str | None = (
             checkpoint.checkpoint_id if checkpoint is not None and self._source_retained() else None)
 
@@ -465,6 +468,8 @@ class _Run:
         else:
             token = claim_acquire(self.source_identity)
         if token is None:
+            self.claim_conflict = True
+            self.reserving_checkpoint_id = None  # this lineage does not own the key: nothing to hand over
             return ExecutionFailure(step=ExecutionStep.MOVE_MEDIA, kind=_K.SOURCE_CHANGED)
         self.claim_token = token
         self.reserving_checkpoint_id = None  # taken over: ACTIVE(token) now protects the source
@@ -572,7 +577,9 @@ class _Run:
         the NEW checkpoint (ACTIVE(token) -> RESERVED, or RESERVED(input) -> RESERVED); otherwise an ACTIVE claim
         is released. Every owed transition must take effect (owner-matched) or the call fails closed."""
         identity = self.source_identity
-        if self._source_retained():
+        if self.claim_conflict:
+            pass  # section 15.6: no ownership was acquired -> no hand-over, no release; registry left as is
+        elif self._source_retained():
             if self.claim_token is not None:
                 if checkpoint is None or not claim_reserve(identity, self.claim_token, checkpoint.checkpoint_id):
                     raise ClaimIntegrityError()
