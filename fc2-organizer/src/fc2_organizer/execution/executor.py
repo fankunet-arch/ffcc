@@ -17,8 +17,9 @@ Per unit (contract section 24):
    ``target_published`` is true, re-read the final read-only and re-hash it before recording the effect;
 6. any failure stops the unit; earlier artifacts are kept (no rollback).
 
-Only ``MaterializationError`` is translated; ``BaseException`` and foreign exceptions propagate unchanged
-(P4-C6 owns its temporary cleanup). Failures carry enums, errno, ``write_stage``, kind and ordinal only.
+Only the ``MaterializationError`` types of the frozen table are translated; an undefined
+``MaterializationError`` subtype, ``BaseException`` and foreign exceptions propagate unchanged (P4-C6 owns its
+temporary cleanup), as does the ``OSError`` of a failed post-cleanup listing (leftovers unknown, never "none"). Failures carry enums, errno, ``write_stage``, kind and ordinal only.
 
 This package and the bare public ``fc2_organizer.materialization`` package only.
 """
@@ -125,7 +126,8 @@ def _execute_artifact_unit(request: ArtifactWriteRequest, parent_identity: Entry
     """Execute one artifact unit. ``plan`` / ``request`` must already be validated (plan + manifest).
 
     Returns ``(effect, failure, leftovers)``: ``effect`` only for a verified publish; ``failure`` is ``None``
-    iff the unit completed. Never raises for a ``MaterializationError`` or an ``OSError``.
+    iff the unit completed. Propagates (same object, never wrapped) only: a ``MaterializationError`` type the
+    frozen table does not define, and the ``OSError`` of a failed after-listing on the cleanup path.
     """
     if type(request) is not ArtifactWriteRequest:
         raise ExecutionInputError("request must be an exact ArtifactWriteRequest")
@@ -158,7 +160,12 @@ def _execute_artifact_unit(request: ArtifactWriteRequest, parent_identity: Entry
     if isinstance(result, ArtifactCleanupError):
         return _cleanup_failed(unit, result, before)
     if isinstance(result, MaterializationError):
-        return None, _mapped_failure(unit, result), ()
+        failure = _mapped_failure(unit, result)
+        if failure is None:
+            # A MaterializationError type the frozen table does not define: never silently classified as an
+            # existing kind; the same object propagates (raised outside any except block: nothing chained).
+            raise result
+        return None, failure, ()
 
     # 4. verify the receipt and the published entry.
     sha256 = content_sha256(request.content)
@@ -179,8 +186,9 @@ def _published_identity(request: ArtifactWriteRequest) -> EntryIdentity | None:
     return current if current.size == len(request.content) else None
 
 
-def _mapped_failure(unit: _Unit, error: MaterializationError) -> ExecutionFailure:
-    """Contract section 24 table, by exception type only (never the message)."""
+def _mapped_failure(unit: _Unit, error: MaterializationError) -> ExecutionFailure | None:
+    """Contract section 24 table, by exception type only (never the message); ``None`` for a type the
+    frozen table does not define (no catch-all row)."""
     errno = getattr(error, "errno", None)
     errno = errno if type(errno) is int else None
     for error_type, kind in _MAPPING:
@@ -188,7 +196,7 @@ def _mapped_failure(unit: _Unit, error: MaterializationError) -> ExecutionFailur
             if kind is _K.ARTIFACT_WRITE_FAILED:
                 return unit.failure(kind, errno=errno, write_stage=error.stage.value)
             return unit.failure(kind, errno=errno)
-    return unit.failure(_K.ARTIFACT_PATH_REJECTED, errno=errno)  # unexpected P4-C6 type: fail closed
+    return None
 
 
 def _cleanup_failed(unit: _Unit, error: ArtifactCleanupError, before: list[str]) -> _UnitResult:
@@ -211,10 +219,13 @@ def _cleanup_failed(unit: _Unit, error: ArtifactCleanupError, before: list[str])
 
 def _new_temporaries(unit: _Unit, before: list[str]) -> tuple[LeftoverTemporary, ...]:
     """Names present now but not before this unit (Windows: casefold comparison), matching the exact
-    lowercase temporary pattern; the actual on-disk names are recorded. Nothing is deleted."""
+    lowercase temporary pattern; the actual on-disk names are recorded. Nothing is deleted.
+
+    If the after-listing fails, the leftovers are UNKNOWN, which must never become "none": the listing's
+    own ``OSError`` object propagates, so no checkpointable unit result claims a known inventory."""
     after = _fs.list_names(unit.parent)
     if isinstance(after, OSError):
-        return ()
+        raise after
     directory_role = (PathRole.EXTRAFANART_DIRECTORY if unit.parent_role is PathRole.EXTRAFANART_DIRECTORY
                       else PathRole.TARGET_DIRECTORY)
     return tuple(LeftoverTemporary(directory_role, name) for name in after

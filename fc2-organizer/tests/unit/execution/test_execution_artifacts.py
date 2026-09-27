@@ -36,6 +36,7 @@ from fc2_organizer.materialization import (
     ArtifactMappingError,
     InvalidTargetPathError,
     MappingRejectionReason,
+    MaterializationError,
     MaterializationInputError,
     MaterializationModelError,
     MaterializedArtifact,
@@ -341,7 +342,6 @@ def test_publish_failure(tmp_path, monkeypatch, strategy):
     InvalidTargetPathError(TargetPathRejectionReason.RESERVED_NAME),
     MaterializationInputError("x"),
     MaterializationModelError("x"),
-    ArtifactMappingError(MappingRejectionReason.PLAN_PATH_INVALID),  # not in the table: fail closed
 ])
 def test_unreachable_rows_map_to_path_rejected(tmp_path, monkeypatch, error):
     a = artifact_scene(tmp_path)
@@ -350,6 +350,28 @@ def test_unreachable_rows_map_to_path_rejected(tmp_path, monkeypatch, error):
     outcome = _run(a, request)
     _assert_nothing_published(a, request, outcome, _failure(request, F.ARTIFACT_PATH_REJECTED))
     assert spy.requests == [request]
+
+
+class FutureMaterializationError(MaterializationError):
+    """A MaterializationError subtype the frozen section 24 table does not define."""
+
+
+@pytest.mark.parametrize("make", [
+    lambda: ArtifactMappingError(MappingRejectionReason.PLAN_PATH_INVALID),  # mapping layer, not a writer error
+    lambda: FutureMaterializationError("future"),
+], ids=["ArtifactMappingError", "FutureMaterializationError"])
+def test_undefined_materialization_error_propagates_as_the_same_object(tmp_path, monkeypatch, make):
+    # R-02: no catch-all row; an undefined subtype is never silently classified (e.g. ARTIFACT_PATH_REJECTED).
+    a = artifact_scene(tmp_path)
+    request = _request(a, ArtifactKind.EXTRAFANART, 1)
+    exc = make()
+    spy = MaterializeSpy(monkeypatch, replacement=failing(exc))
+    with pytest.raises(MaterializationError) as info:
+        _run(a, request)
+    assert info.value is exc and exc.__cause__ is None and exc.__context__ is None
+    assert spy.requests == [request]
+    assert not os.path.lexists(request.target_path)
+    assert_artifact_planted_unchanged(a)
 
 
 # --------------------------------------------------------------------------- ArtifactCleanupError
@@ -624,3 +646,55 @@ def test_failure_carries_no_path_text_or_exception(tmp_path, monkeypatch):
     assert failure.step is ExecutionStep.MATERIALIZE_EXTRAFANART
     for name in failure.__slots__:
         assert not isinstance(getattr(failure, name), BaseException)
+
+
+# --------------------------------------------------------------------------- R-01: unknown leftovers are never "none"
+
+
+def _after_listing_fails(monkeypatch, exc):
+    """The execution seam's listdir works for the "before" listing and raises ``exc`` for the next one."""
+    real = _fs._FS.listdir
+    calls = []
+
+    def listdir(directory):
+        calls.append(directory)
+        if len(calls) == 2:
+            raise exc
+        return real(directory)
+
+    inject(monkeypatch, listdir=listdir)
+    return calls
+
+
+@pytest.mark.parametrize("strategy", ARTIFACT_STRATEGIES)
+def test_cleanup_unpublished_with_failed_after_listing_propagates_the_same_oserror(tmp_path, monkeypatch,
+                                                                                   strategy):
+    use_p4c6_strategy(monkeypatch, strategy)
+    a = artifact_scene(tmp_path)
+    request = _request(a, ArtifactKind.POSTER)
+    inject_p4c6(monkeypatch, write=failing(OSError(errno.ENOSPC, "full")))
+    _unlink_fails_for_temps(monkeypatch)
+    exc = PermissionError(errno.EACCES, "listing denied")
+    calls = _after_listing_fails(monkeypatch, exc)
+    with pytest.raises(OSError) as info:
+        _run(a, request)  # never (None, ARTIFACT_CLEANUP_FAILED, ()): unknown leftovers are not "none"
+    assert info.value is exc and exc.__cause__ is None and len(calls) == 2
+    assert len(artifact_temp_names(_parent(a, request))) == 1  # the real P4-C6 temp stays; never deleted
+    assert not os.path.lexists(request.target_path)
+    assert_artifact_planted_unchanged(a)
+
+
+@pytest.mark.parametrize("kind", [ArtifactKind.NFO, ArtifactKind.EXTRAFANART])
+def test_cleanup_published_with_failed_after_listing_propagates_and_keeps_the_final(tmp_path, monkeypatch, kind):
+    use_p4c6_strategy(monkeypatch, "hardlink")
+    a = artifact_scene(tmp_path)
+    request = _request(a, kind, 1 if kind is ArtifactKind.EXTRAFANART else None)
+    _unlink_fails_for_temps(monkeypatch)
+    exc = OSError(errno.EIO, "listing failed")
+    calls = _after_listing_fails(monkeypatch, exc)
+    with pytest.raises(OSError) as info:
+        _run(a, request)  # no effect / failure / leftovers=() result is formed
+    assert info.value is exc and exc.__cause__ is None and len(calls) == 2
+    assert _read(request.target_path) == request.content  # the published final is kept
+    assert len(artifact_temp_names(_parent(a, request))) == 1  # the leftover stays; never deleted
+    assert_artifact_planted_unchanged(a)
