@@ -18,6 +18,7 @@ Branch         ：claude/phase4-c8-batch-orchestration
 | 轮次 | 修订内容 | 涉及章节 |
 |---|---|---|
 | E0-R1 | 闭合独立 E0 Review 的三个 finding：P4-C8-E0-R-01（新增派生的批级最终结果 `BatchOutcome` 及完整真值表）；P4-C8-E0-R-02（批量条目数硬上限 `MAX_BATCH_ITEMS`、preview 保留 artifact 字节预算、单条图片预算上限、确定性的预约 / 准入规则、`OrchestrationResourceLimitError`）；P4-C8-E0-R-03（S1 的 E0 / S1 状态行治理特例）。其余已 PASS 的设计不变 | 第 5、7.1、7.2、7.4、8、9、10.1、10.7、11.1、11.4、11.5、15.1、19.1、19.5、19.6、25.4、28.3、28.4、34.1、35、35.1、37、38 节；附录 A 第 21-24 条 |
+| E0-R2 | 只闭合 E0-R1 复查的两个资源 finding（因而 P4-C8-E0-R-02 仍 OPEN）：P4-C8-E0-R1-01（输入条目数上限改为**快照之前**的有界迭代准入，不信任 `__len__`）；P4-C8-E0-R1-02（lineage 固定的保留预算 `retention_budget_bytes`；当前完整结果保留不变量；`preview_retry` 以 `B - base_retained` 为可用额度；`merge_retry` 纵深防御；多代归纳证明）。P4-C8-E0-R-01、R-03 已 CLOSED，未改动；资源常量数值不变 | 第 5、8、10.4、10.7、18.1、19.6.1、19.6.2、19.6.6、19.6.7、19.6.8、19.6.10、25.4、26、34.1、35、35.1、37、38 节；附录 A 第 25-28 条 |
 
 基线状态（E0 建立时）：
 
@@ -164,15 +165,15 @@ P4-C8 不修改 Phase 3 的任何语义：重复番号仍是独立工作条目�
 |---|---|---|
 | `__init__.py` | 公开 API 再导出（第 7.1 节集合） | S1（部分）、S5（最终集合） |
 | `errors.py` | 错误层次（第 7.4 节） | S1 |
-| `models.py` | 枚举、`OrchestrationConfig`、`ItemIssue`、`ItemPreview`、`BatchPreview`、`RetryMaterial`、`ItemExecution`（含第 25.1 节 `retry_kind` 判定表，模型不变量依赖它）、`BatchExecutionResult`、类名提取 helper；（E0-R1）`BatchOutcome` 与 `outcome` 属性、`ResourceLimitReason`、四个资源常量；S5 增加 summary 模型与属性 | S1、S5 |
+| `models.py` | 枚举、`OrchestrationConfig`、`ItemIssue`、`ItemPreview`、`BatchPreview`、`RetryMaterial`、`ItemExecution`（含第 25.1 节 `retry_kind` 判定表，模型不变量依赖它）、`BatchExecutionResult`、类名提取 helper；（E0-R1）`BatchOutcome` 与 `outcome` 属性、`ResourceLimitReason`、四个资源常量；（E0-R2）`retention_budget_bytes` / `retry_budget_bytes` 字段、保留载荷计量 helper `retry_payload_bytes(material)` 与派生属性 `retained_retry_payload_bytes` / `retained_artifact_bytes`、结果保留不变量；S5 增加 summary 模型与属性 | S1、S5 |
 | `cancellation.py` | `CancellationToken` | S1 |
 | `_consumption.py` | 进程内一次性登记表（preview 执行、结果重试、重试结果合并），私有 | S1 |
-| `recognition.py` | 输入校验与快照、番号识别、Phase A 批内冲突分组（纯函数） | S1 |
+| `recognition.py` | 输入校验与快照（E0-R2：唯一拥有有界快照 helper `bounded_snapshot`，第 19.6.1 节）、番号识别、Phase A 批内冲突分组（纯函数） | S1 |
 | `stages.py` | 逐条同步阶段：plan -> publication -> NFO；manifest；preflight；异常 -> `ItemIssue` 映射；Phase B 冲突 | S2 |
 | `preview.py` | 异步 preview 组合：scheduler、有界图片 worker、调用 `stages`；（E0-R1）调用局部的保留预算账本与预约准入门 | S2 |
 | `orchestrator.py` | `BatchOrchestrator`：构造校验、忙碌守卫、`preview` / `execute` / `preview_retry` 委托 | S2（构造 + `preview`）、S3、S4 |
 | `execute.py` | 同步有界执行、selection、disposition 映射、取消、致命异常排空 | S3 |
-| `retry.py` | 重试集合（按 `ItemExecution.retry_kind` 与 scope 选择）、`preview_retry` 组合、`merge_retry` | S4 |
+| `retry.py` | 重试集合（按 `ItemExecution.retry_kind` 与 scope 选择）、`preview_retry` 组合、`merge_retry`；（E0-R2）lineage 预算校验、`base_retained` / `available_retry_budget` 计算、`merge_retry` 的保留不变量纵深防御 | S4 |
 
 `fc2_organizer/__init__.py` **不**急切 import `orchestration`（该文件不修改）。调用方显式使用
 `from fc2_organizer.orchestration import BatchOrchestrator`。
@@ -325,12 +326,14 @@ OrchestrationError(Exception)
   `CancellationToken`、`OrchestrationConfig`、`OutputPolicy`、`ImageAcquisitionPolicy`、`BatchConfig`、`RetryKind`、
   `tuple`、`frozenset`、`int`（`bool` 不是 `int`）、`str`。子类一律拒绝，被拒绝对象的任何方法 / 属性钩子都不运行。
 * `items` 容器：`collections.abc.Sequence`，但拒绝 `str` / `bytes` / `bytearray` / `memoryview`、任何 `Set`、`Mapping`、
-  生成器 / 迭代器（与 Phase 3 §4 同一规则）；只做一次快照 `tuple(items)`；之后调用方修改自己的 list 无影响。
+  生成器 / 迭代器（与 Phase 3 §4 同一规则）；（E0-R2）唯一的快照由第 19.6.1 节的**有界快照算法**产生——从不调用
+  `tuple(items)` / `list(items)` / `len(items)` 完整物化或度量未知长度的输入；快照之后调用方修改自己的 list 无影响。
   元素全有或全无：任何一个元素不是严格 `DiscoveredMediaItem` -> `OrchestrationInputError`，在任何网络 / 文件系统访问之前，
   消息列出至多 10 个出问题的下标（总数始终统计）与类名。
-* （E0-R1）条目数硬上限：容器校验通过、快照完成后、元素校验之前，若 `len(snapshot) > MAX_BATCH_ITEMS` ->
-  `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)`，在任何网络 / 文件系统访问之前；`len == MAX_BATCH_ITEMS` 合法
-  （第 19.6.1 节）。
+* （E0-R2，取代 E0-R1 的“快照完成后检查长度”）`preview(items)` 的输入错误优先级冻结为：
+  `busy-first -> 容器种类校验 -> 有界快照 / 条目数门（BATCH_ITEM_LIMIT）-> 逐元素严格类型校验 -> 其余语义校验`。
+  实际可迭代出超过 `MAX_BATCH_ITEMS` 个元素的输入一律得到 `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)`，
+  不再读取第 `MAX_BATCH_ITEMS + 1` 个之后的任何元素，也不为寻找其他非法元素而继续扫描；恰好 `MAX_BATCH_ITEMS` 个合法。
 * 所有模型是 `@dataclass(frozen=True, slots=True)`；所有集合字段是严格 `tuple` / `frozenset`；不保存调用方持有的可变容器。
 * 类名提取（`error_type`）是全函数，不运行调用方控制的代码：`type(obj)`、经 `type.__dict__["__name__"]` descriptor 读取、
   metaclass 不是 `type` 或名称不是长度 ≤ 128 的严格标识符 `str` 时为 `"UnknownType"`（与 Phase 3 C4-R1-01 相同的规则；
@@ -542,7 +545,14 @@ image_policy    : ImageAcquisitionPolicy
 batch_size      : int >= 0   本 lineage 的输入条目总数 N
 items           : tuple[ItemPreview, ...]
 metadata_batch  : BatchResult    Phase 3 metadata 账本（最新）
+retention_budget_bytes : int     （E0-R2）lineage 固定的保留预算 B（第 19.6.2 节）
+retry_budget_bytes     : int | None   （E0-R2）重试 preview：本轮可用额度 B - base_retained；主 preview：None
 ```
+
+（E0-R2）派生属性 `retained_artifact_bytes` = 全部 `preflight is not None` 的条目的 `Σ len(req.content)`（对 `preflight.artifacts`；
+共享的 bytes 对象按引用次数重复计入，保守，不会少计）。不变量：`1 <= retention_budget_bytes <= MAX_RETAINED_ARTIFACT_BYTES_LIMIT`；
+`retry_budget_bytes is None` ⇔ 主 preview；重试 preview 满足 `0 <= retry_budget_bytes <= retention_budget_bytes`；
+`retained_artifact_bytes <= retention_budget_bytes`（主 preview）或 `<= retry_budget_bytes`（重试 preview）。
 
 不变量：`base_result_id is None` ⇔ `retry_scope is None` ⇔ `generation == 0`（主 preview）；主 preview 的
 `[i.index for i in items] == list(range(batch_size))`；重试 preview 的 index 严格递增且均 `< batch_size`，`generation >= 1`；
@@ -605,7 +615,24 @@ retry_scope     : frozenset[RetryKind] | None
 library_root, output_policy, image_policy, batch_size
 items           : tuple[ItemExecution, ...]
 metadata_batch  : BatchResult
+retention_budget_bytes : int          （E0-R2）lineage 固定的 B，从被执行的 preview 原样复制；合并结果从 previous 复制
+retry_budget_bytes     : int | None   （E0-R2）重试轮结果：从重试 preview 原样复制；主结果 / 合并结果：None
 ```
+
+（E0-R2）派生属性（`models.py` 中的纯 helper，不存储）：
+
+* `retry_payload_bytes(material)` = `Σ len(req.content) for req in material.artifacts`（NFO、poster、fanart、thumb、
+  每张 extrafanart 的 `ArtifactWriteRequest.content`）；
+* `retained_retry_payload_bytes` = 全部 `retry_material is not None` 的条目的 `retry_payload_bytes` 之和。`SUCCESS`、
+  `ABORTED`、`REJECTED` 以及其他 `RetryKind.NONE` 条目不持有 `RetryMaterial`，贡献 0；`METADATA_REFETCH` 条目不持有
+  `RetryMaterial`，贡献 0。共享的 bytes 对象按引用重复计入（保守，不会少计）。
+
+（E0-R2）结果保留不变量（`__post_init__` 强制，`OrchestrationContractError`）：
+
+* `1 <= retention_budget_bytes <= MAX_RETAINED_ARTIFACT_BYTES_LIMIT`；
+* 主结果与合并结果：`retry_budget_bytes is None` 且 `retained_retry_payload_bytes <= retention_budget_bytes`
+  （**当前完整结果保留不变量**，第 19.6.10 节）；
+* 重试轮结果：`0 <= retry_budget_bytes <= retention_budget_bytes` 且 `retained_retry_payload_bytes <= retry_budget_bytes`。
 
 三种形态（互斥，`__post_init__` 强制）：
 
@@ -929,7 +956,8 @@ P4-C8 不为 preview 设置 TTL，也不读取时钟。任意久之后执行的 
      对每个条目重跑 ItemPreview 不变量；READY 条目：type(preflight) is ExecutionPreflight、preflight.ready is True、
      preflight.plan is item.plan、plan.source_path == media_item.source_path、plan.canonical_number == canonical_number；
      BatchPreview 不变量
-4  preview.library_root / output_policy / image_policy 与本 orchestrator 相等    否则 OrchestrationInputError
+4  preview.library_root / output_policy / image_policy 与本 orchestrator 相等，且（E0-R2）
+   preview.retention_budget_bytes == 本 orchestrator 的 config.max_retained_artifact_bytes    否则 OrchestrationInputError
 5  cancel：None 或严格 CancellationToken                             否则 OrchestrationInputError
 6  selection：None（= 全部 READY 条目）或严格 tuple[int, ...]：严格 int、严格递增、每个都是本 preview 中某个 READY 条目的 index
                                                                     否则 OrchestrationInputError（不执行任何条目）
@@ -1024,8 +1052,33 @@ Phase 2 / 3 transport 的响应大小上限约束，不计入本节的字节预�
 #### 19.6.1 条目数硬上限
 
 * `MAX_BATCH_ITEMS = 2000`（常量，不可配置；`>= 500`，正式支持 v1.0 的 500-item 要求）。
-* `preview(items)`：快照后若 `len(snapshot) > MAX_BATCH_ITEMS` -> `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)`，
-  零网络、零文件系统（第 8 节）。`== MAX_BATCH_ITEMS` 合法。
+* （E0-R2）条目数门在 P4-C8 创建任何完整快照**之前**生效，由 `recognition.bounded_snapshot(items)`（唯一实现位置）按以下
+  **有界快照算法**完成（`preview` 的第 8 节顺序中，它紧接在 busy-first 与容器种类校验之后）：
+
+```text
+1  （已完成）busy-first；容器种类校验：必须是 collections.abc.Sequence，且不是 str / bytes / bytearray / memoryview、
+   任何 Set、任何 Mapping、生成器 / 迭代器
+2  it = iter(items)                                   只调用一次；从不调用 len(items) / items.__len__
+3  collected = []；重复至多 MAX_BATCH_ITEMS 次：
+       取 next(it)；StopIteration -> 转到第 5 步；否则 collected.append(元素)
+4  溢出探测：再调用恰好一次 next(it)
+       StopIteration          -> 转到第 5 步
+       得到第 MAX_BATCH_ITEMS + 1 个元素 -> 立即丢弃该引用，抛出 OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)，
+                                 不再调用 next(it)
+5  snapshot = tuple(collected)（最多 MAX_BATCH_ITEMS 个元素；这是唯一的不可变快照），随后释放 collected
+6  之后才做逐元素严格类型校验（第 8 节）与其余校验
+```
+
+  * 迭代异常：`iter()` / `next()` 抛出的普通 `Exception`（`StopIteration` 除外）-> `OrchestrationInputError`
+    （固定消息，只含异常类名，不链接）；非 `Exception` 的 `BaseException` 原样传播。
+  * **不信任 `__len__`**：资源正确性只由第 2-4 步的有界迭代保证，不依赖调用方 `__len__` 的诚实性；P4-C8 完全不调用
+    `len(items)`（没有非规范的 `len` 预判），因此 `__len__` 报小但实际可迭代出超过 `MAX_BATCH_ITEMS` 个元素的“说谎序列”
+    同样得到 `BATCH_ITEM_LIMIT`，`__len__` 报大但实际很短的序列按实际元素数处理。
+  * **P4-C8 自身分配上界**：P4-C8 为输入最多同时持有 `MAX_BATCH_ITEMS` 个已收集引用（`collected`；第 5 步转换期间
+    `collected` 与 `snapshot` 两个各至多 `MAX_BATCH_ITEMS` 个指针的数组短暂并存）加 1 个溢出探测临时引用。对 2001、10000、
+    1000000 个元素的输入，P4-C8 至多读取 `MAX_BATCH_ITEMS + 1` 个元素，从不先复制完整输入再拒绝。调用方在调用前自己持有的
+    超大容器不属于 P4-C8 的额外分配。
+  * 零网络、零文件系统、零 engine / 图片 client 调用；`== MAX_BATCH_ITEMS` 合法。
 * 一个 lineage 的 `batch_size` 在主 preview 中确定，之后的重试 / 合并只处理其子集，因此整个 lineage 的条目数都
   `<= MAX_BATCH_ITEMS`。
 
@@ -1033,8 +1086,15 @@ Phase 2 / 3 transport 的响应大小上限约束，不计入本节的字节预�
 
 * 预算 `B = config.max_retained_artifact_bytes`（默认 `DEFAULT_MAX_RETAINED_ARTIFACT_BYTES = 2 GiB`，范围
   `1..MAX_RETAINED_ARTIFACT_BYTES_LIMIT = 16 GiB`）。
-* 预算作用域：**一次** `preview` 或 `preview_retry` 调用（每次调用一个私有账本，位于 `preview.py`，调用结束即丢弃；
-  没有模块级状态）。
+* （E0-R2）**lineage 固定预算**：主 preview 把当时的 `config.max_retained_artifact_bytes` 记为不可变的
+  `BatchPreview.retention_budget_bytes = B`；此后该 lineage 的每个执行结果、重试 preview、重试轮结果、合并结果都原样携带
+  同一个 `B`（第 10.4、10.7 节），从不重新读取、放大或缩小。`execute`、`preview_retry` 要求执行它们的 orchestrator 的
+  `config.max_retained_artifact_bytes` 与 `B` 严格相等，否则 `OrchestrationInputError`（第 18.1、25.4 节；跨 orchestrator
+  重试时不静默采用新 orchestrator 的预算；M / K / W 的既有冻结语义不变）；`merge_retry` 要求 `previous` 与 `retry` 的 `B`
+  相等（第 26 节）。
+* 预算作用域：**一次** `preview` 或 `preview_retry` 调用各有一个私有账本（位于 `preview.py`，调用结束即丢弃；没有模块级
+  状态）。主 preview 的账本上限为 `B`；`preview_retry` 的账本上限为 `available_retry_budget = B - base_retained`
+  （第 19.6.7 节），而不是重新获得完整的 `B`。下文 19.6.3-19.6.4 节中的 `B` 在 `preview_retry` 中一律读作该可用额度。
 * 账本 `L = charged + reserved`：
   * `charged`：已计入、从不在调用内减少的字节；
   * `reserved`：进行中图片调用的预约额。
@@ -1082,12 +1142,15 @@ Phase 2 / 3 transport 的响应大小上限约束，不计入本节的字节预�
 
 | 触发 | 检查时机 | 行为 |
 |---|---|---|
-| `len(items) > MAX_BATCH_ITEMS` | `preview` 输入校验（第 8 节），零网络 / 零文件系统 | `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)` |
+| 输入可迭代出第 `MAX_BATCH_ITEMS + 1` 个元素（E0-R2：有界快照的溢出探测） | `preview` 输入校验（第 8 节、第 19.6.1 节），零网络 / 零文件系统 | `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)` |
 | `image_policy.max_total_bytes > MAX_ITEM_IMAGE_BYTES` | `BatchOrchestrator` 构造（第 7.2 节） | `OrchestrationConfigError` |
 | `max_retained_artifact_bytes` 越界 / 类型错误 | `OrchestrationConfig` 构造（第 9 节） | `OrchestrationConfigError` |
 | NFO 计量超预算 | 第 5 步，图片请求之前 | `OrchestrationResourceLimitError(RETAINED_BYTES_LIMIT)` |
 | 图片预约无法满足且无进行中调用 | 第 6 步准入门 | 停止准入，取消并 await 全部图片 worker，然后抛出 `OrchestrationResourceLimitError(RETAINED_BYTES_LIMIT)` |
-| `preview_retry` 的保留材料计量超预算 | 第 25.4 节第 7a 步 | `OrchestrationResourceLimitError(RETAINED_BYTES_LIMIT)` |
+| `preview_retry` 的保留材料或新载荷计量超过 `available_retry_budget`（E0-R2） | 第 25.4 节第 7a 步及其后的 NFO / 图片计量 | `OrchestrationResourceLimitError(RETAINED_BYTES_LIMIT)` |
+| `available_retry_budget < 0`（E0-R2；只可能来自被篡改的 previous） | 第 25.4 节第 7a 步 | `OrchestrationIntegrityError` |
+| orchestrator 预算与 lineage `B` 不相等（E0-R2） | `execute` 第 18.1 节第 4 步 / `preview_retry` 第 25.4 节第 4 步 | `OrchestrationInputError` |
+| `merge_retry` 预算不一致或合并后保留载荷 `> B`（E0-R2，纵深防御） | 第 26 节第 9a、9b 步，登记之前 | `OrchestrationRetryError` / `OrchestrationIntegrityError`，不登记 `retry.result_id` |
 
 共同规则：
 
@@ -1095,16 +1158,34 @@ Phase 2 / 3 transport 的响应大小上限约束，不计入本节的字节预�
   影片的业务失败，因此不映射为任何 `ItemIssue`，不影响条目顺序、重试、汇总与 `outcome` 的既有语义（它们只定义在成功返回的
   模型上）。
 * 零文件系统修改（这两个操作只读，第 16 节）。`preview_retry` 超限时 `previous` 不被登记为已重试（登记在最后，第 25.4 节），
-  调用方可以用更大的预算或更小的范围再次重试。
+  不消费任何 checkpoint（preflight 不消费，P4-C7 §15.4），不产生任何部分重试 preview；调用方可以改变重试范围（例如先执行 /
+  结算其他持有保留材料的条目以降低 `base_retained`）后再次重试。（E0-R2）lineage 的 `B` 固定，不能通过换用更大预算的
+  orchestrator 绕过。
 * orchestrator 在 `finally` 中恢复空闲；错误不链接、不含路径 / URL / secret。
 * 它是普通 `Exception`，不是致命控制流：调用方可以拆分批次或调整配置后重试。
 
 #### 19.6.7 `preview_retry` 的计量
 
-第 25.4 节第 7 步确定重试集合后，按 index 升序先对每个保留材料条目（`PREFLIGHT_RECHECK` / `FRESH_REEXECUTE` / `RESUME` /
-`DEFERRED`）计入其 `retry_material.artifacts` 的 `Σ len(content)`（精确值；这些字节与 previous 共享同一对象，计入是为了让
-每个 preview 对象的保留载荷都受同一上界约束）；超限则按第 19.6.6 节失败。随后 `METADATA_REFETCH` 恢复的条目按第 19.6.3、
-19.6.4 节计量。
+（E0-R2 重写）第 25.4 节第 7 步确定本轮重试的 index 集合 `R` 之后：
+
+```text
+B                        = previous.retention_budget_bytes（lineage 固定）
+base_retained            = Σ retry_payload_bytes(item.retry_material)
+                           对 previous.items 中 index ∉ R 且 retry_material is not None 的条目
+                           （即合并后仍原样保留、未参加本轮重试的条目的保留载荷）
+available_retry_budget   = B - base_retained
+```
+
+* `R` 中条目的旧 `ItemExecution` / 旧 `RetryMaterial` 在合并结果中会被本轮条目**替换**，因此不计入 `base_retained`；合并结果
+  从不同时长期强引用同一 index 的旧载荷与新载荷。
+* `available_retry_budget < 0` 只可能来自违反第 10.7 节不变量的 previous（被篡改）-> `OrchestrationIntegrityError`。
+* 本轮账本上限为 `available_retry_budget`：按 index 升序先对 `R` 中每个保留材料条目（`PREFLIGHT_RECHECK` / `FRESH_REEXECUTE` /
+  `RESUME` / `DEFERRED`）计入 `retry_payload_bytes(retry_material)`（精确值）；随后 `METADATA_REFETCH` 恢复的条目的 NFO 与图片按
+  第 19.6.3、19.6.4 节计入同一账本。任何一步使账本超过 `available_retry_budget` -> `OrchestrationResourceLimitError
+  (RETAINED_BYTES_LIMIT)`，不返回重试 preview（第 19.6.6 节）。
+* 成功返回的重试 preview 携带 `retry_budget_bytes = available_retry_budget`，且 `retained_artifact_bytes <= available_retry_budget`。
+* 资源可合并性在 `preview_retry` 成功返回之前就已保证；`merge_retry` 中的检查只是纵深防御（第 26 节），从不是第一道资源发现点
+  （否则 `previous.result_id` 已被登记为已重试，lineage 可能陷入无法重新选择范围的死路）。
 
 #### 19.6.8 硬上界证明
 
@@ -1121,15 +1202,48 @@ preview 期间的峰值 artifact 字节（含下载中未保留的临时字节�
 最后一行的依据：P4-C5 §14.7 保证一次 `acquire_images` 的瞬时内存不超过“已接受字节 + `max_image_bytes`”，其中已接受字节
 包含在该条目的预约额内，`max_image_bytes <= max_total_bytes = R <= MAX_ITEM_IMAGE_BYTES`；进行中的调用至多 K 个。
 
-`BatchExecutionResult` 引用的 artifact 字节：主结果与重试轮结果 `⊆` 其所执行 preview 的保留载荷 `<= B`；合并结果中每个条目
-至多引用一个 `RetryMaterial`，每个都来自某个已受 `B` 约束的 preview，因此 `<=`（参与合并的 preview 个数）`× B`，且始终
-`<= MAX_BATCH_ITEMS × B`，为有限值。
+（E0-R2 取代 E0-R1 中“参与合并的 preview 个数 × B / MAX_BATCH_ITEMS × B”的结果上界，该上界作废）：
+
+```text
+任意当前完整结果（主结果、合并结果 g1..gn）  retained_retry_payload_bytes <= B <= 16 GiB   （第 19.6.10 节归纳；与 generation 数无关）
+任意重试轮结果                               retained_retry_payload_bytes <= B - base_retained <= B
+preview_retry 期间的瞬时峰值（诚实上界，previous 在调用期间仍然存活）
+    previous 完整结果的保留载荷                          <= B
+  + 新重试 preview 的保留载荷                             <= B - base_retained  （与 previous 共享的保留材料按引用计入，实际更少）
+  + 进行中图片调用的临时字节                              <= K * MAX_ITEM_IMAGE_BYTES
+                                                          <= 2B + K * 64 MiB <= 32 GiB + 1 GiB（默认：4 GiB + 256 MiB）
+```
 
 #### 19.6.9 与 v1.0 500-item 验收的兼容性
 
 默认配置下：500 `<= MAX_BATCH_ITEMS`；默认 `R = 64 MiB`、`B = 2 GiB`，准入条件 `A_nfo + Σ a_i + 64 MiB <= 2 GiB` 在实际
 载荷约为每条数 MiB 时可容纳数百条（例如每条约 3 MiB 时约 660 条）。S6 的 500-item 合成门槛在**默认资源配置**下完整运行
 （第 35.1 节）。需要更大批量的调用方在 `16 GiB` 内提高 `B` 或拆分批次。
+
+#### 19.6.10 当前完整结果保留不变量与归纳证明（E0-R2，冻结）
+
+**CURRENT COMPLETE RESULT RETENTION INVARIANT**：对任意主结果与任意合并结果 `r`，
+
+```text
+retained_retry_payload_bytes(r) <= r.retention_budget_bytes = B <= MAX_RETAINED_ARTIFACT_BYTES_LIMIT
+```
+
+它由第 10.7 节的模型不变量在构造时强制，并由以下归纳保证合法路径永远不会触发：
+
+1. **基例（g0 主结果）**：主 preview 的保留载荷 `<= B`（第 19.6.2-19.6.5 节）。`execute` 不产生任何新的 artifact 载荷：每个
+   `RetryMaterial.artifacts` 都是该条目 preview preflight 中的**同一个** tuple，`SUCCESS` / `NONE` 条目不保留材料（第 10.6、
+   25.1 节）。因此 `charge(g0) <= preview retained <= B`。
+2. **归纳步**：设 `charge(previous) <= B`。`preview_retry` 只允许重试 preview 使用 `available = B - base_retained`（第 19.6.7 节），
+   得到 `retry preview retained <= available`；`execute` 同样不增加载荷，故 `charge(retry result) <= available`。`merge_retry`
+   只组合引用：`R` 之外的条目是 previous 中的同一 `ItemExecution` 对象（其载荷恰为 `base_retained`），`R` 中的条目是 retry result
+   中的同一对象（旧载荷被替换）。于是
+   `charge(merged) = base_retained + charge(retry result) <= base_retained + (B - base_retained) = B`。
+3. 由归纳，g0、g1、g2、……、gn 的每一个当前完整结果都 `<= B`；上界不随 generation 数量增长，不存在 `generation × B` 或
+   `MAX_BATCH_ITEMS × B` 形式的累积。
+4. **不复制载荷**：`merge_retry` 不深拷贝 artifacts、不调用 `bytes(...)`、不重建任何 payload；合并本身不产生新的字节副本。
+5. **调用方所有权**：上述不变量约束的是**当前结果对象图自身**。调用方若同时继续强引用 previous、重试轮结果或更早的合并结果，
+   由此产生的累计内存属于调用方所有权；P4-C8 内部不持有任何历史 generation。进程内一次性登记表（`_consumption.py`）只保存
+   32 位 hex id 字符串，不保存 `BatchPreview`、`BatchExecutionResult`、`RetryMaterial` 或 artifact 字节。
 
 ## 20. Item 隔离与致命边界（冻结）
 
@@ -1309,11 +1423,14 @@ checkpoint=retry_material.checkpoint)`，其中 `plan` / `artifacts` 是原执�
 1  busy-first
 2  type(previous) is BatchExecutionResult 且 previous.is_complete        否则 OrchestrationInputError
 3  previous 对象图完整性重新检查（重跑模型不变量）                        否则 OrchestrationIntegrityError
-4  配置相等（library_root / output_policy / image_policy）               否则 OrchestrationInputError
+4  配置相等（library_root / output_policy / image_policy；E0-R2：config.max_retained_artifact_bytes == previous.retention_budget_bytes）
+                                                                        否则 OrchestrationInputError
 5  scope：None（= 除 NONE 以外的全部 RetryKind）或严格 frozenset[RetryKind]，不含 NONE（可为空）   否则 OrchestrationInputError
 6  previous.result_id 未被重试过（查询登记表）                            否则 OrchestrationConsumedError
 7  重试集合 R = [item for item in previous.items if item.retry_kind in scope]，index 升序
-7a （E0-R1）保留预算：按第 19.6.7 节计入保留材料字节；超限 -> OrchestrationResourceLimitError（不登记 previous）
+7a （E0-R1；E0-R2 修订）保留预算：按第 19.6.7 节计算 base_retained 与 available_retry_budget = B - base_retained
+   （< 0 -> OrchestrationIntegrityError），以 available_retry_budget 为本轮账本上限计入保留材料字节；
+   超限 -> OrchestrationResourceLimitError（不登记 previous、不消费 checkpoint、不返回部分 preview）
 8  METADATA_REFETCH 子集：25.3（其 NFO 与图片按第 19.6.3、19.6.4 节计量）
 9  保留材料子集（PREFLIGHT_RECHECK / FRESH_REEXECUTE / RESUME / DEFERRED）：逐条同步 preflight_execution（25.1 表）
      CheckpointError -> CHECKPOINT_REJECTED；PlanGraphError / ArtifactManifestError / 其他普通 Exception -> PREFLIGHT_REJECTED；
@@ -1321,7 +1438,8 @@ checkpoint=retry_material.checkpoint)`，其中 `plan` / `artifacts` 是原执�
 10 Phase B 冲突（14.3），范围为 R
 11 原子登记 previous.result_id（一次性）；已登记 -> OrchestrationConsumedError，丢弃本次产物
 12 返回重试 BatchPreview：generation = previous.generation + 1、base_result_id = previous.result_id、retry_scope = scope、
-   items = R 对应的新 ItemPreview（retry_origin = 各自的 RetryKind）、metadata_batch = 第 8 步结果或原账本
+   items = R 对应的新 ItemPreview（retry_origin = 各自的 RetryKind）、metadata_batch = 第 8 步结果或原账本、
+   （E0-R2）retention_budget_bytes = B、retry_budget_bytes = available_retry_budget
 ```
 
 * 登记放在最后（第 11 步）：`preview_retry` 只读、不消费 checkpoint（P4-C7 §15.4），中途因致命异常 / 取消终止时 previous
@@ -1357,9 +1475,15 @@ Partial 在 P4-C8 中由文件系统 `PARTIAL` 的 `RESUME` 与上述子集 prev
 7  [i.index for i in retry.items] == [i.index for i in previous.items if i.retry_kind in retry.retry_scope]
 8  每个被重试 index：retry 条目的 media_item is previous 条目的 media_item，canonical_number 相等
 9  retry.metadata_batch.lineage == previous.lineage 且 generation >= previous.metadata_batch.generation
+9a （E0-R2）lineage 预算一致：retry.retention_budget_bytes == previous.retention_budget_bytes，且
+   retry.retry_budget_bytes == previous.retention_budget_bytes - base_retained(previous, R)      否则 OrchestrationRetryError
+9b （E0-R2）合并后保留载荷：base_retained(previous, R) + retry.retained_retry_payload_bytes <= B  否则 OrchestrationIntegrityError
+   （正常合同路径下不可能失败，preview_retry 已提前保证；这是纵深防御，不是第一道资源发现点）
 10 原子登记 retry.result_id 为“已合并”（一次性）；已登记 -> OrchestrationConsumedError
+   （第 1-9b 步任何失败都发生在登记之前：retry.result_id 不被登记，可在修正后重新合并）
 11 返回合并结果：被重试的 index 替换为 retry 的条目，其余是 previous 中的同一对象；generation = retry.generation；
-   新 result_id；preview_id / base_result_id / retry_scope = None；metadata_batch = retry.metadata_batch
+   新 result_id；preview_id / base_result_id / retry_scope = None；metadata_batch = retry.metadata_batch；
+   （E0-R2）retention_budget_bytes = B、retry_budget_bytes = None；只组合引用，不复制任何 artifact 载荷
 ```
 
 * 重试结果永远不会被隐式合并；调用方负责调用 `merge_retry`（与 Phase 3 `apply_retry` 相同）。
@@ -1541,6 +1665,11 @@ P4-C8 不把 P4-C7 变成批量 API：P4-C7 的公开 API、模块与语义在 P
 * （E0-R1）资源控制：`MAX_BATCH_ITEMS` 等四个资源常量只在 `models.py` 定义；保留预算账本只存在于 `preview.py` 的调用局部
   对象中（`preview.py` / `retry.py` 没有模块级可变状态）；`BatchOutcome` 只由 `BatchExecutionResult.outcome` 属性产生，
   没有任何存储 `outcome` 的字段。
+* （E0-R2）资源 helper 归属冻结（不新增任何生产模块）：有界快照只在 `recognition.py`（`bounded_snapshot`）；保留载荷计量
+  （`retry_payload_bytes`、`retained_retry_payload_bytes`、`retained_artifact_bytes`）与结果 / preview 保留不变量只在
+  `models.py`；lineage 预算校验、`base_retained` / `available_retry_budget` 与 `merge_retry` 纵深防御只在 `retry.py`；调用局部账本
+  只在 `preview.py`。AST 断言：P4-C8 生产源码中不出现对 `preview` 输入参数的 `tuple(...)` / `list(...)` / `len(...)` 调用
+  （`recognition.py` 只对内部 `collected` 调用 `tuple`）；`copy` 模块与 `deepcopy` 不出现。
 
 ### 34.2 生产 / 测试的私有接缝许可
 
@@ -1587,7 +1716,10 @@ tests/contract/test_materialization_architecture.py test_no_reverse_dependency_o
 | race regression | 同一 preview 被两个线程同时 `execute` -> 恰好一个运行、另一个 `OrchestrationConsumedError`；两个 orchestrator 在同一进程并发执行重叠条目 -> 每个源最多一个 `SUCCESS`、失败者 fail closed、源不丢失；hardlink / 同文件两次 / 重叠根目录 -> Phase A / B 冲突；preview 之后、execute 之前对源 / 目标的漂移 -> 类型化失败而非执行另一件事 |
 | public API exact-set | `__all__` 与第 7.1 节逐项相等；每个名称可 import；没有第 7.1 节禁止的名称 |
 | batch outcome（E0-R1） | 第 11.5 节真值表逐行（每种条目类别单独、每种“全部为某类”、空结果、`S` 与各类混合、`P` 与各类混合、`ABORTED` 与 `S` 混合）；主结果、重试轮结果、合并结果三种形态；`outcome` 是纯函数（同一 `items` 重复求值相等、不同对象但相同条目序列相等）；第 28.4 节与 summary 的恒等式在 S5 的生成批次上全部成立；没有存储字段 |
-| resource limits（E0-R1） | 条目数：`MAX_BATCH_ITEMS` 条接受、`MAX_BATCH_ITEMS + 1` 条 -> `BATCH_ITEM_LIMIT` 且 engine / client 调用 0 次、零文件系统访问（使用不可识别番号或极小条目，不申请大内存）；`image_policy.max_total_bytes == MAX_ITEM_IMAGE_BYTES` 接受、`+ 1` -> `OrchestrationConfigError`；`max_retained_artifact_bytes` 边界（0 / 1 / 上限 / 上限 + 1 / `bool`）；字节预算（小预算、小 `R`，由用例定义精确推导 `B_exact`）：`B == B_exact` 接受、`B == B_exact - 1` -> `RETAINED_BYTES_LIMIT`；NFO 计量超限时图片请求 0 次；预约准入：`K = 4` 而 `B` 只容纳 2 个预约时，进行中的 `acquire_images` 峰值 `<= 2`，账本观测（测试替身在每次准入 / 完成时读取私有账本）始终 `<= B`；失败 index 在反转完成顺序与 `K ∈ {1, 2, 4}` 下相同；`total_bytes > R` 的违约替身 -> `IMAGE_ACQUISITION_ERROR`；超限时不返回 preview、零修改、orchestrator 恢复空闲、错误不链接且消息不含路径 / URL；`preview_retry` 保留材料计量超限 -> 不登记 previous，放宽预算后可再次重试 |
+| resource limits（E0-R1） | 条目数：`MAX_BATCH_ITEMS` 条接受、`MAX_BATCH_ITEMS + 1` 条 -> `BATCH_ITEM_LIMIT` 且 engine / client 调用 0 次、零文件系统访问（使用不可识别番号或极小条目，不申请大内存）；`image_policy.max_total_bytes == MAX_ITEM_IMAGE_BYTES` 接受、`+ 1` -> `OrchestrationConfigError`；`max_retained_artifact_bytes` 边界（0 / 1 / 上限 / 上限 + 1 / `bool`）；字节预算（小预算、小 `R`，由用例定义精确推导 `B_exact`）：`B == B_exact` 接受、`B == B_exact - 1` -> `RETAINED_BYTES_LIMIT`；NFO 计量超限时图片请求 0 次；预约准入：`K = 4` 而 `B` 只容纳 2 个预约时，进行中的 `acquire_images` 峰值 `<= 2`，账本观测（测试替身在每次准入 / 完成时读取私有账本）始终 `<= B`；失败 index 在反转完成顺序与 `K ∈ {1, 2, 4}` 下相同；`total_bytes > R` 的违约替身 -> `IMAGE_ACQUISITION_ERROR`；超限时不返回 preview、零修改、orchestrator 恢复空闲、错误不链接且消息不含路径 / URL；`preview_retry` 保留材料计量超限 -> 不登记 previous，改变重试范围（降低 `base_retained`）后可再次重试 |
+| bounded snapshot（E0-R2） | 输入以计数型自定义 `Sequence`（记录 `__iter__` / `__getitem__` / `__len__` 调用与读取的元素数）提供：A `MAX_BATCH_ITEMS` 个元素 -> 接受，读取恰好 `MAX_BATCH_ITEMS` 个元素 + 1 次 `StopIteration`；B `MAX_BATCH_ITEMS + 1` 个 -> `BATCH_ITEM_LIMIT`，读取恰好 `MAX_BATCH_ITEMS + 1` 个元素、之后 `next` 调用 0 次；C 惰性生成、声称 1 000 000 个元素的自定义序列 -> `BATCH_ITEM_LIMIT`，读取元素数 `== MAX_BATCH_ITEMS + 1`（证明没有完整遍历 / 复制）；D 说谎长度序列（`__len__` 返回 1，实际迭代出 3000 个）-> `BATCH_ITEM_LIMIT`；E `__len__` 从不被调用（计数为 0），`__len__` 返回很大值但实际只有 5 个元素的序列按 5 个处理；F 超限输入中第 2001 个之后放置非 `DiscoveredMediaItem` 元素 -> 仍是 `BATCH_ITEM_LIMIT`（优先级）；G 前 2000 个中有非法元素且总数 `<= 2000` -> `OrchestrationInputError`；H 迭代中抛普通异常 -> `OrchestrationInputError`（不链接），抛 `KeyboardInterrupt` -> 原样传播；全部情形 engine / 图片 client 调用 0 次、零文件系统访问 |
+| result retention（E0-R2） | 边界：A 主结果保留载荷恰好 `B` -> 接受；B 构造保留载荷 `> B` 的主结果 / 合并结果 -> `OrchestrationContractError`（合法 preview 不可能产生）；C previous 未重试部分载荷接近 `B`、可用额度只剩少量；D 重试载荷恰好等于可用额度 -> 接受；E 可用额度 + 1 -> `preview_retry` `RETAINED_BYTES_LIMIT`；F 失败后 previous 未被登记、checkpoint 未被消费，改变范围后可再次 `preview_retry`；G 合并后保留载荷恰好 `B` -> `merge_retry` 成功；H 以 `object.__setattr__` 篡改重试轮结果使合并后 `> B` 或篡改 `retry_budget_bytes` -> `merge_retry` fail closed 且不登记 `retry.result_id`（修正后的正确结果仍可合并）；I lineage 预算不同（不同 `max_retained_artifact_bytes` 的 orchestrator 调用 `execute` / `preview_retry`；`merge_retry` 两侧 `retention_budget_bytes` 不同）-> 拒绝；`available_retry_budget < 0`（篡改 previous）-> `OrchestrationIntegrityError`；合并不复制载荷（合并结果条目与来源条目 `is` 相同，`RetryMaterial.artifacts` 为同一 tuple）；登记表只保存 id 字符串 |
+| multi-generation retention（E0-R2） | 第 35.1.1 节冻结场景（g0-g4，每代作用于不同条目子集；若每代使用独立完整 `B`，g2 的合并结果将 `> B`）：每个当前完整结果 `retained_retry_payload_bytes <= B`，逐代数值与场景定义精确相等；g2 的越界重试以 `RETAINED_BYTES_LIMIT` 失败且 previous 可改变范围后继续 |
 
 **核心不变量（每个执行 / 注入 / 门槛测试都必须断言）：** 每个输入条目的源视频要么仍在源路径上且字节不变，要么在最终路径上
 且字节相同（或两者都有）；任何非本执行创建的条目的字节、inode、mtime 不变；汇总恒等式成立。
@@ -1642,6 +1774,10 @@ tests/contract/test_materialization_architecture.py test_no_reverse_dependency_o
 * （E0-R1）资源边界子门槛（同一测试文件；使用小配置，不申请大内存）：
   * 条目数：`MAX_BATCH_ITEMS` 个条目（不可识别番号的极小文件）-> preview 成功返回；`MAX_BATCH_ITEMS + 1` ->
     `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)`，engine / 图片 client 调用 0 次，零修改；
+  * （E0-R2）有界快照：以计数型自定义 `Sequence` 经 `preview` 端到端验证第 35 节 “bounded snapshot” 行的 B、C、D（读取元素数
+    `== MAX_BATCH_ITEMS + 1`、说谎长度被拒绝、`__len__` 调用 0 次）；
+  * （E0-R2）多代保留：第 35.1.1 节场景完整运行，g0-g4 每个当前完整结果的 `retained_retry_payload_bytes` 与定义值精确相等且
+    `<= B`；
   * 字节预算：取 500-item 语料的主 preview，设置小 `R`（能容纳合成图片）与由用例定义推导的 `B_exact`（第 19.6.4 节准入式
     在最紧的条目处取等号）：`B_exact` -> 成功，且结果与默认配置下的主 preview 投影相等；`B_exact - 1` ->
     `RETAINED_BYTES_LIMIT`，不返回 preview，零修改；
@@ -1657,8 +1793,32 @@ tests/contract/test_materialization_architecture.py test_no_reverse_dependency_o
   `RESUME` 与 `FRESH_REEXECUTE` 对调；(e) 执行 worker 改为每条目一个线程；（E0-R1）(f) 移除图片阶段的保留预算预约准入
   （无条件准入）-> 资源边界子门槛在行为层失败（`B_exact - 1` 不再抛出和 / 或并发预约峰值 / 账本超过 `B`）；(g) 移除
   `MAX_BATCH_ITEMS` 检查 -> `MAX_BATCH_ITEMS + 1` 被接受，子门槛失败；(h) `outcome` 把含 `PARTIAL` 的结果判为
-  `SUCCESS`（或把空结果以外的全 `SUCCESS` 判为其他值）-> outcome 断言失败。变异只能以行为层断言失败证明，不能只靠 AST
-  检测常量消失。
+  `SUCCESS`（或把空结果以外的全 `SUCCESS` 判为其他值）-> outcome 断言失败；（E0-R2）(i) 恢复 snapshot-first（先
+  `tuple(items)` 完整快照再检查长度）-> 有界快照子门槛失败（读取元素数远大于 `MAX_BATCH_ITEMS + 1`）；(j) 把
+  `preview_retry` 的可用额度从 `B - base_retained` 改为 `B` -> 第 35.1.1 节 g2 越界重试不再失败，其合并结果保留载荷 `> B`，
+  多代保留子门槛失败。变异只能以行为层断言失败证明，不能只靠 AST 检测常量消失。
+
+#### 35.1.1 多代保留场景（E0-R2，冻结；S4 以单元测试实现，S6 作为子门槛再运行）
+
+小配置：`M = K = W = 1`；`image_policy.max_total_bytes = R = I`，其中 `I` 为每个图片条目的精确图片字节数；NFO 为纯 ASCII，
+记其长度为 `L`，要求 `I > 2 * L`（使错误实现可被检测）。条目：
+
+* `D1..D4`：主 preview 中 READY，每个的保留载荷 `pay(D) = L + I`（精确，`retry_payload_bytes`）；记 `payD = 4 * pay(D)`；
+* `M1..M4`：主 preview 中 metadata `FAILED`；脚本化 engine 在指定的 generation 才让 `Mk` 成功；每个恢复后的准入需求
+  `need(M) = 4 * L + I`（第 19.6.3、19.6.4 节账本），实际保留载荷 `pay(M) = L + I`。
+* `B = payD + need(M)`（经 `OrchestrationConfig.max_retained_artifact_bytes` 设定）。
+
+| 代 | 操作 | 期望 |
+|---|---|---|
+| g0 | `preview`；`execute(selection=())` | 主结果 `retained_retry_payload_bytes == payD <= B`（D1-D4 为 `DEFERRED`） |
+| g1 | `preview_retry(scope={METADATA_REFETCH})`，engine 只让 M1 成功；`execute(selection=())`；合并 | 可用额度 `B - payD == need(M)`，M1 恰好准入（边界 D）；合并结果 `== payD + pay(M) <= B` |
+| g2（失败尝试） | `preview_retry(scope={METADATA_REFETCH})`，engine 让 M2 成功 | 可用额度 `B - payD - pay(M) = need(M) - pay(M) < need(M)` -> `RETAINED_BYTES_LIMIT`；g1 合并结果未被登记为已重试 |
+| g2 | `preview_retry(scope={DEFERRED})`；`execute(selection=(M1 的 index,))`；合并 | M1 `SUCCESS`（释放其载荷），D1-D4 仍 `NOT_SELECTED`；合并结果 `== payD` |
+| g3 | `preview_retry(scope={METADATA_REFETCH})`，engine 让 M2 成功；`execute(selection=())`；合并 | 可用额度 `== need(M)`，M2 恰好准入；合并结果 `== payD + pay(M) <= B` |
+| g4 | `preview_retry(scope={DEFERRED})`；`execute()`（全部 READY）；合并 | D1-D4、M2 `SUCCESS`；合并结果 `== 0`；M3、M4 仍为 metadata `FAILED` |
+
+若实现错误地让每代重新获得完整 `B`（变异 (j)），g2 的 M2 重试会成功，执行 `selection=()` 并合并后保留载荷
+`payD + 2 * pay(M) = payD + 2L + 2I > payD + 4L + I = B`（因为 `I > 2L`），被第 10.7 节不变量或测试断言拒绝。
 
 ## 36. 延续项（冻结）
 
@@ -1684,7 +1844,8 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 * 非法 `library_root` 在 metadata / 图片网络阶段之后才以 `PLANNING_REJECTED` 暴露（第 15.3 节）；
 * （E0-R1）资源硬限制：条目数 `<= MAX_BATCH_ITEMS`、每个 preview 的保留 artifact 载荷 `<= max_retained_artifact_bytes`；
   超过时整个 `preview` / `preview_retry` fail closed，调用方需拆分批次或在绝对上限内提高预算（第 19.6 节）；预约准入可能使
-  图片并发低于 K；
+  图片并发低于 K；（E0-R2）预算在一个 lineage 内固定，当前完整结果保留载荷 `<= B`，因此当未结算条目占满预算时，新的
+  `METADATA_REFETCH` 重试可能需要先执行 / 结算其他条目；调用方自己同时持有多代结果的内存属于调用方所有权；
 * 执行中的条目不可中断，取消只停止准入（第 27 节）；
 * 致命异常后不返回部分结果，已执行条目的 checkpoint 随之丢失（第 20.3 节）；
 * 无跨进程协调（第 30.3 节）；无 durable resume（第 24.3、33 节）；无进度流（第 11.4 节）；
@@ -1698,7 +1859,7 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 
 | 批次 | 内容 | 状态 |
 |---|---|---|
-| E0 | 本合同 + 施工计划（docs-only） | E0 原始候选 `0f2188f5444b0f7c6293607db0132dae0297ee34`：Independent Architecture / Contract Review FAIL（P4-C8-E0-R-01、R-02、R-03）；E0-R1（本修订）：REMEDIATED — INDEPENDENT REVIEW REQUIRED；E0 NOT ACCEPTED |
+| E0 | 本合同 + 施工计划（docs-only） | E0 原始候选 `0f2188f5444b0f7c6293607db0132dae0297ee34`：Independent Architecture / Contract Review FAIL（P4-C8-E0-R-01、R-02、R-03）；E0-R1 `fe12d1d1833b12925c13916bc477ea5e7424aec4`：closure review 关闭 R-01、R-03，R-02 仍 OPEN（新 finding P4-C8-E0-R1-01、R1-02）；E0-R2（本修订）：REMEDIATED — INDEPENDENT REVIEW REQUIRED；E0 NOT ACCEPTED |
 | S1 | Foundation：errors / models / config / cancellation / consumption / recognition / 架构守卫 | NOT STARTED |
 | S2 | Preview composition：stages / preview / orchestrator.preview | NOT STARTED |
 | S3 | Execution orchestration：execute / selection / cancellation / fatal drain | NOT STARTED |
@@ -1707,10 +1868,13 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 | S6 | 500-item batch orchestration gate + HANDOFF | NOT STARTED |
 
 ```text
-P4-C8-E0-R-01        : REMEDIATED — REVIEW REQUIRED（批级 BatchOutcome，第 11.5 节）
-P4-C8-E0-R-02        : REMEDIATED — REVIEW REQUIRED（资源硬限制，第 19.6 节）
-P4-C8-E0-R-03        : REMEDIATED — REVIEW REQUIRED（S1 治理特例，施工计划第 0.4 节）
-P4-C8 E0-R1          : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+P4-C8-E0-R-01        : CLOSED（批级 BatchOutcome，第 11.5 节；E0-R1 closure review）
+P4-C8-E0-R-02        : REMEDIATED — REVIEW REQUIRED（资源硬限制，第 19.6 节；经 E0-R2 修订）
+P4-C8-E0-R-03        : CLOSED（S1 治理特例，施工计划第 0.4 节；E0-R1 closure review）
+P4-C8-E0-R1-01       : REMEDIATED — REVIEW REQUIRED（快照之前的有界条目数门，第 19.6.1 节）
+P4-C8-E0-R1-02       : REMEDIATED — REVIEW REQUIRED（lineage 固定预算与多代保留不变量，第 19.6.7、19.6.10、26 节）
+P4-C8 E0-R1          : REVIEWED — R-01 / R-03 CLOSED，R-02 OPEN
+P4-C8 E0-R2          : REMEDIATED — INDEPENDENT REVIEW REQUIRED
 P4-C8 E0             : NOT ACCEPTED（等待 E0-R1 closure review）
 P4-C8 S1 Input       : NOT ESTABLISHED
 P4-C8 Implementation : NOT STARTED
@@ -1747,6 +1911,10 @@ Phase 4              : NOT CLOSED
 | 22 | （E0-R1）`MAX_BATCH_ITEMS = 2000`（常量）与每次 preview 的保留 artifact 预算（默认 2 GiB，绝对上限 16 GiB）；单条图片预算上限 64 MiB | 两个维度同时有界；2000 覆盖 500-item 验收并留有余量；64 MiB 等于 P4-C5 默认值；默认预算在真实载荷下可容纳数百条 |
 | 23 | （E0-R1）NFO 以 `4 × len` 立即计入；图片按 index 升序、以单条上限预约后才准入，完成时转为实际字节；无进行中调用仍不满足则 fail closed | 确定性（失败 index 与完成顺序、K 无关）；不等待不可能下降的账本；图片请求前就能发现 NFO 超限 |
 | 24 | （E0-R1）资源超限以 `OrchestrationResourceLimitError` 使整个 `preview` / `preview_retry` fail closed；S1 的 E0 / S1 状态行治理特例 | 资源耗尽是批级调用约束，不是条目业务失败；消除不存在的 “S0” |
+| 25 | （E0-R2）条目数门改为快照之前的有界迭代（至多 `MAX_BATCH_ITEMS` 个引用 + 1 次溢出探测），完全不调用 `len(items)` | 真正的硬上界；资源正确性不依赖调用方 `__len__`；超大输入只读取 2001 个元素 |
+| 26 | （E0-R2）lineage 固定预算 `retention_budget_bytes`，由主 preview 记录并被所有后续模型原样携带；跨 orchestrator 预算必须相等 | 杜绝代际之间预算漂移；`merge_retry` 可仅凭模型自身验证 |
+| 27 | （E0-R2）`preview_retry` 可用额度 `B - base_retained`，`base_retained` 只计未参加本轮重试的条目 | 归纳保证每个当前完整结果 `<= B`，上界与 generation 数无关；在 `preview_retry` 成功返回前就保证可合并 |
+| 28 | （E0-R2）`merge_retry` 在登记之前做预算一致与合并后载荷的纵深防御；模型构造时强制结果保留不变量 | 纵深防御而非第一道发现点；失败不消费重试结果 |
 
 无需项目所有者决定的外部业务问题：以上裁决全部落在“仓库 / 合同 / 历史已有答案”或“存在明显更安全的 fail-closed 默认方案”
 的情形内（Owner Question Gate 三条件不同时满足）。
