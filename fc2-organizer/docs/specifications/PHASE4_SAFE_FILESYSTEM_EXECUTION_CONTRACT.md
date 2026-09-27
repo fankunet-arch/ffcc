@@ -12,6 +12,12 @@ Branch         ：claude/phase4-c7-safe-filesystem-executor
 后续批次对本文件唯一允许的改动是第 32 节“实现状态”表中的状态行；任何语义改动都必须作为独立的
 合同修订轮次提出，并经独立复查。
 
+合同修订记录（每一轮都需独立文档复查）：
+
+| 轮次 | 修订内容 | 涉及章节 |
+|---|---|---|
+| S5-A1 | U1 / U7 独占 `mkdir` 成功但 post-mkdir 归属校验失败时，不记录 effect、不伪造身份（U1 因此为 `FAILED`）；状态语义以“已验证、可记录的累计 final effect”为准；Windows 同源并发的 `PUBLISHED_MEDIA_MISMATCH` 属于第 25 节 TOCTOU 剩余风险内的 fail closed 结果 | 第 2、8、21、22、25 节；施工计划 S5 `test_execution_race.py` |
+
 ---
 
 ## 1. 范围
@@ -43,7 +49,7 @@ P4-C7 **不做**：批量编排、并发调度、预览 UI、CLI、JSON / 持久
 
 | 术语 | 含义 |
 |---|---|
-| final effect | 在最终位置上可见的文件系统结果：已创建的目标目录、已发布的最终媒体、已删除的源、已发布的 artifact、已创建的 `extrafanart` 目录 |
+| final effect | 在最终位置上可见的文件系统结果：已创建的目标目录、已发布的最终媒体、已删除的源、已发布的 artifact、已创建的 `extrafanart` 目录。作为 `CompletedEffect` 记录的只能是**已经完成、且能以冻结身份可靠证明归属于本执行**的 effect；一个修改性 syscall 曾返回成功，并不自动构成可记录的 effect（第 8、21、22 节，S5-A1） |
 | 临时文件 | 本次调用独占创建的同级 `.fc2tmp-<32 hex>.part`；不算 final effect |
 | 快照（snapshot） | 一次 `lstat` 得到的 `EntryIdentity`（第 12 节） |
 | 重新校验（revalidation） | 在修改之前再次 `lstat` 并与快照逐字段比较 |
@@ -290,11 +296,22 @@ class ExecutionStatus(Enum):
 | 状态 | 条件 | `checkpoint` | `failure` |
 |---|---|---|---|
 | `SUCCESS` | 第 9 节全部执行单元都已完成（含源删除） | `None` | `None` |
-| `PARTIAL` | 失败发生时，累计至少存在一个 final effect（包括 checkpoint 中已有的） | 非 `None`，新签发 | 非 `None` |
-| `FAILED` | 失败发生时，累计不存在任何 final effect | `None` | 非 `None` |
+| `PARTIAL` | 失败发生时，累计至少存在一个**已验证、可记录**的 final effect（包括 checkpoint 中已有的） | 非 `None`，新签发 | 非 `None` |
+| `FAILED` | 失败发生时，累计不存在任何**已验证、可记录**的 final effect | `None` | 非 `None` |
 
-推论：resume 执行的结果永远不会是 `FAILED`（checkpoint 至少记录了目标目录已创建）；
-fresh execution 在 `mkdir` 成功之前的任何失败都是 `FAILED`；`mkdir` 成功之后的任何失败都是 `PARTIAL`。
+“已验证、可记录”的含义见第 2 节：`CompletedEffect` 只记录能以冻结身份证明归属于本执行的 effect。
+`FAILED` 表示“不存在可安全记录、可 resume 的累计 final effect，因此没有 checkpoint”，**不**声称
+“没有任何修改性 syscall 曾经成功”。
+
+推论：resume 执行的结果永远不会是 `FAILED`（checkpoint 至少记录了已验证的目标目录已创建）；
+fresh execution 在 U1 记录 `TARGET_DIRECTORY_CREATED` 之前的任何失败都是 `FAILED`；该 effect 记录之后的任何失败
+都是 `PARTIAL`。
+
+唯一的窄例外（S5-A1，第 21 节）：U1 的独占 `mkdir` syscall 已返回成功，但紧随其后的归属校验（post-mkdir
+快照）无法证明它是一个真实、非链接、身份可用的目录时，不能形成 `TARGET_DIRECTORY_CREATED`，结果仍为
+`FAILED`（`completed_effects == ()`，`checkpoint is None`）。目标路径上可能残留某个条目：P4-C7 不信任、不采用、
+不删除它，交由人工 / 上层（P4-C8 报告）处理；之后的 fresh preflight 若仍看到该条目，按
+`TARGET_DIRECTORY_EXISTS` fail closed。已经记录了任何已验证 effect 之后的失败，一律仍为 `PARTIAL`。
 遗留的临时文件不是 final effect，不会把 `FAILED` 变成 `PARTIAL`（但会记录在 `leftover_temporaries` 中）。
 
 ## 9. 执行单元与顺序（冻结）
@@ -714,9 +731,17 @@ SOURCE_PATH_REVALIDATE, SOURCE_UNLINK, SAME_VOLUME_PRIMITIVE
 * `mkdir` 失败：`FileExistsError` -> `TARGET_CONFLICT`（`FAILED`：没有任何 effect，那个目录不是本执行创建的，
   永不触碰）；`FileNotFoundError` / `NotADirectoryError` -> `LIBRARY_ROOT_CHANGED`；其他 ->
   `DIRECTORY_CREATE_FAILED(errno)`。
-* 成功后立即 `lstat(target_directory)`：必须是目录、非链接；记录 `target_directory_identity`，effect
-  `TARGET_DIRECTORY_CREATED`。若快照不合法（例如在 mkdir 与 lstat 之间被替换为 junction）->
-  `TARGET_DIRECTORY_CHANGED`，状态 `PARTIAL`（mkdir 已成功，effect 已发生）。
+* 成功后立即 `lstat(target_directory)`（归属校验）：必须是目录、非链接、身份可用；记录
+  `target_directory_identity`，effect `TARGET_DIRECTORY_CREATED`。
+* 归属校验失败（S5-A1；例如在 mkdir 与 lstat 之间被替换为 junction、被移走、身份不可用）->
+  `TARGET_DIRECTORY_CHANGED`，`stage = PUBLISH_VERIFY`：`mkdir` 没有返回句柄或身份，而归属身份此时无法建立，
+  因此**不**记录 `TARGET_DIRECTORY_CREATED`、**不**伪造 `target_directory_identity`、**不**签发声称可 resume 的
+  checkpoint。fresh U1 此时没有任何已验证、可记录的 effect，结果为 `FAILED`（`completed_effects == ()`，
+  `checkpoint is None`；第 8 节的窄例外）。该路径上的条目永不被采用、接管、删除、重命名或回滚——即使之后看到
+  一个目录，也不能推断它就是刚才 `mkdir` 创建的那个。
+* 本条只适用于“`mkdir` 不返回身份、且 post-mkdir 归属身份根本无法建立”的情形；它**不**改变其他发布原语的
+  effect 语义：第 18.2 节 Windows 原子 rename 校验失败仍记录 `MEDIA_PUBLISHED` + `SOURCE_REMOVED`（身份来自
+  可信源快照），第 18.3 / 19 节发布后校验失败仍记录 `MEDIA_PUBLISHED`，第 24 节 artifact 规则不变。
 * 之后每个写入目标目录的单元（U2-U7）在修改前重新校验目标目录身份。
 * 本执行“拥有”目标目录的含义仅是：它是由本执行的独占 mkdir 创建的，其条目集合受第 14.3 节列举检查约束。
   所有权**不**授予任何删除权限：P4-C7 从不删除目标目录或其中任何条目。
@@ -725,8 +750,13 @@ SOURCE_PATH_REVALIDATE, SOURCE_UNLINK, SAME_VOLUME_PRIMITIVE
 
 * U7 在 U1-U6 之后执行，**即使 manifest 中没有 extrafanart 图片**。
 * 修改前：重新校验目标目录身份；`lstat(extrafanart_directory)` 必须不存在（`TARGET_CONFLICT`）。
-* `os.mkdir(extrafanart_directory, 0o777)` 独占创建；成功后 `lstat` 快照（目录、非链接），effect
-  `EXTRAFANART_DIRECTORY_CREATED`。
+* `os.mkdir(extrafanart_directory, 0o777)` 独占创建；成功后 `lstat` 快照（归属校验：目录、非链接、身份可用），
+  effect `EXTRAFANART_DIRECTORY_CREATED`。
+* 归属校验失败（S5-A1，与第 21 节同类）-> `TARGET_DIRECTORY_CHANGED`，`stage = PUBLISH_VERIFY`：**不**记录
+  `EXTRAFANART_DIRECTORY_CREATED`、**不**伪造 `extrafanart_directory_identity`；该条目永不被删除、接管或回滚。
+  U7 之前已经存在已验证 effect，因此结果仍为 `PARTIAL` 并签发 checkpoint（`extrafanart_directory_identity`
+  为 `None`）；checkpoint 只表示已知的已验证前缀，下一次 RESUME 可能因这个未记录的条目以 `UNEXPECTED_ENTRY`
+  fail closed——这是允许的，checkpoint 不声称所有磁盘残留都可自动恢复。
 * U8.. 每个 extrafanart 文件写入前重新校验 `extrafanart_directory` 身份。
 * 与目标目录相同：所有权不授予删除权限。
 
@@ -789,6 +819,13 @@ P4-C7 基于标准库的**字符串路径 API**（`os.lstat` / `os.mkdir` / `os.
 * 剩余风险（明确声明）：恶意行为者在 `lstat(source)` 与 `unlink(source)` 之间把源路径替换为另一个文件，
   可能导致那个替换文件被删除；恶意行为者在目录校验与写入之间把父目录替换为链接，可能导致 artifact 被写到别处
   （但仍然不覆盖任何已存在的文件）。
+* 同源并发（S5-A1 澄清，非恶意情形）：Windows 上同一个源被多个并发执行（不同目标）竞争时，即使两个执行都已
+  完成源重新校验，字符串路径 API 与 Windows rename（`MoveFileExW` 经由先打开的句柄完成重命名）的内部时序，
+  仍可能使一个执行的 rename 成功之后、其 post-publish 校验之前，最终文件再次被另一执行移走。此时该执行得到
+  `PUBLISHED_MEDIA_MISMATCH`（第 18.2 节：effect 照实记录，不回滚），或在原语层得到 `MEDIA_TRANSFER_FAILED`；
+  两者都是本节剩余风险内允许的 fail closed 结果。它**不是**覆盖许可，也**不**允许数据丢失：最多一个执行成功、
+  最多一个最终位置持有完整媒体、源字节始终至少存在一份、不覆盖任何已有条目；该执行的 checkpoint 在 RESUME
+  preflight 中必然被阻断（已记录的最终位置已不再持有该文件）。v1.0 威胁模型不因此扩大。
 
 ## 26. 平台规则（冻结）
 
