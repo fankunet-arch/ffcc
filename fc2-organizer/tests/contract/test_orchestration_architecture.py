@@ -1,23 +1,26 @@
 """Contract test: ``fc2_organizer.orchestration`` architecture boundary (P4-C8 contract sections 5, 6, 16, 33,
-34.1; construction plan S1).
+34.1; construction plan S1, S2).
 
-* exact S1 module set; no ``stages`` / ``preview`` / ``orchestrator`` / ``execute`` / ``retry`` yet;
+* exact S2 module set (S1 six + ``stages`` / ``preview`` / ``orchestrator``); no ``execute`` / ``retry`` yet;
 * per-module import allow-lists; only the bare public lower packages of contract section 6 (plus the two
   frozen explicit paths, not used before S2); the forbidden module list asserted item by item; zero
   private lower-layer module references;
 * no ``os`` use beyond ``os.name`` / ``os.path.basename``; no ``open`` / ``eval`` / ``exec`` / ``compile`` /
   ``__import__`` / ``print`` / ``shutil``; no rollback / persistence / diagnostics names;
-* structural zero mutation: ``execute_filesystem`` / ``materialize_*`` never named (S1 has no ``execute.py``);
-  no ``threading.Thread`` / ``asyncio.create_task`` / ``TaskGroup`` / ``gather`` / thread pools;
+* structural zero mutation: ``execute_filesystem`` / ``materialize_*`` never named (S2 has no ``execute.py``);
+  no ``threading.Thread`` / thread pools / ``gather`` anywhere; ``TaskGroup.create_task`` only in ``preview.py``,
+  exactly once, inside a ``range(min(...))`` loop (bounded workers); ``acquire_images`` only in ``preview.py``;
+  the five other stage APIs only in ``stages.py``; the retention ledger only in ``preview.py``;
+* ``BatchOrchestrator.preview`` claims the busy flag as its very first statement;
 * no reverse dependency; ``fc2_organizer/__init__`` does not import it; a bare ``import fc2_organizer`` does
   not load it;
 * resource ownership (E0-R1 / E0-R2): the four resource constants are defined only in ``models.py``;
   ``outcome`` is never a stored field; ``bounded_snapshot`` only in ``recognition.py``; payload metering
   helpers only in ``models.py``; no ``len`` / ``tuple`` / ``list`` of the ``items`` input; no ``copy`` /
   ``deepcopy``;
-* the S1 public API is exactly the construction plan S1 set;
+* the public API is exactly the S1 set plus ``BatchOrchestrator`` (no ``execute`` / ``preview_retry`` yet);
 * at runtime, with ``amane`` / ``requests`` / ``sqlite3`` / ``shelve`` / ``dbm`` / ``pickle`` blocked, the
-  package imports and its S1 functions run.
+  package imports, its S1 functions run and a real ``preview`` runs end to end (scripted engine / client).
 """
 
 from __future__ import annotations
@@ -34,7 +37,10 @@ CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 
 _PKG = "fc2_organizer.orchestration"
 _S1_MODULES = {"__init__.py", "errors.py", "models.py", "cancellation.py", "_consumption.py", "recognition.py"}
-_NOT_YET = ("stages.py", "preview.py", "orchestrator.py", "execute.py", "retry.py")
+_S2_MODULES = _S1_MODULES | {"stages.py", "preview.py", "orchestrator.py"}
+_NOT_YET = ("execute.py", "retry.py")
+_STAGE_APIS = {"build_organize_plan", "prepare_publication", "render_movie_nfo", "build_artifact_requests",
+               "preflight_execution"}
 
 _ALLOWED_STDLIB = {"__future__", "asyncio", "collections.abc", "dataclasses", "enum", "ntpath", "os", "posixpath",
                    "re", "secrets", "threading", "typing"}
@@ -48,13 +54,21 @@ _LOWER_MODELS = {"fc2_metadata_core.batch", "fc2_metadata_core.normalize", "fc2_
                  "fc2_organizer.planning", "fc2_organizer.images", "fc2_organizer.materialization",
                  "fc2_organizer.execution"}
 _ALLOWED = {
-    "__init__.py": {f"{_PKG}.cancellation", f"{_PKG}.errors", f"{_PKG}.models"},
+    "__init__.py": {f"{_PKG}.cancellation", f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.orchestrator"},
     "errors.py": {"__future__"},
     "cancellation.py": {"__future__", "threading"},
     "_consumption.py": {"__future__", "threading"},
     "models.py": {"__future__", "dataclasses", "enum", f"{_PKG}.errors"} | _LOWER_MODELS,
     "recognition.py": {"__future__", "collections.abc", "dataclasses", "os", f"{_PKG}.errors", f"{_PKG}.models",
                        "fc2_metadata_core.normalize", "fc2_organizer.discovery"},
+    # S2 (contract sections 5, 34.1)
+    "stages.py": {"__future__", "os", "fc2_metadata_core.batch", "fc2_organizer.execution", "fc2_organizer.images",
+                  "fc2_organizer.materialization", "fc2_organizer.materialization.mapping", "fc2_organizer.nfo",
+                  "fc2_organizer.planning", "fc2_organizer.publication", f"{_PKG}.models"},
+    "preview.py": {"__future__", "asyncio", "dataclasses", "secrets", "fc2_organizer.images.acquisition",
+                   f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.recognition", f"{_PKG}.stages"},
+    "orchestrator.py": {"__future__", "threading", "fc2_metadata_core.batch", "fc2_organizer.images",
+                        "fc2_organizer.planning", f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.preview"},
 }
 _FORBIDDEN_MODULES = (
     "amane", "httpx", "requests", "socket", "ssl", "urllib", "http", "json", "pickle", "marshal", "shelve", "dbm",
@@ -123,9 +137,9 @@ def _call_name(node: ast.Call) -> str | None:
 # --------------------------------------------------------------------------- module set / imports
 
 
-def test_package_has_exactly_the_s1_modules():
+def test_package_has_exactly_the_s2_modules():
     names = {p.name for p in _files()}
-    assert names == _S1_MODULES
+    assert names == _S2_MODULES
     for later in _NOT_YET:
         assert later not in names
     assert not [p for p in ORCH_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"]
@@ -135,7 +149,7 @@ def test_every_module_imports_only_its_allow_list():
     for path in _files():
         imported = _imports(_tree(path))
         assert imported <= _ALLOWED[path.name], (path.name, imported - _ALLOWED[path.name])
-        assert imported <= _ALLOWED_STDLIB | _ALLOWED_LOWER | {f"{_PKG}.{m[:-3]}" for m in _S1_MODULES}, path.name
+        assert imported <= _ALLOWED_STDLIB | _ALLOWED_LOWER | {f"{_PKG}.{m[:-3]}" for m in _S2_MODULES}, path.name
 
 
 def test_errors_cancellation_and_consumption_import_boundaries():
@@ -205,11 +219,66 @@ def test_structural_zero_mutation_and_no_unbounded_concurrency():
         aliases = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
         for writer in _WRITER_NAMES:
             assert writer not in names | attrs | aliases, (path.name, writer)
-        for concurrency in ("Thread", "create_task", "TaskGroup", "gather", "ThreadPoolExecutor",
-                            "ProcessPoolExecutor"):
+        for concurrency in ("Thread", "gather", "ThreadPoolExecutor", "ProcessPoolExecutor", "run_in_executor",
+                            "to_thread", "ensure_future"):
             assert concurrency not in names | attrs | aliases, (path.name, concurrency)
-        for node in ast.walk(tree):
-            assert not isinstance(node, (ast.AsyncFunctionDef, ast.Await)), path.name
+        if path.name != "preview.py":
+            assert not {"create_task", "TaskGroup"} & (names | attrs | aliases), path.name
+        if path.name not in {"preview.py", "orchestrator.py"}:
+            for node in ast.walk(tree):
+                assert not isinstance(node, (ast.AsyncFunctionDef, ast.Await)), path.name
+
+
+def test_image_workers_are_created_once_in_a_bounded_loop():
+    tree = _tree(ORCH_SRC_ROOT / "preview.py")
+    creates = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and _call_name(n) == "create_task"]
+    assert len(creates) == 1
+    loops = [n for n in ast.walk(tree) if isinstance(n, ast.For) and creates[0] in list(ast.walk(n))]
+    assert len(loops) == 1
+    iterator = loops[0].iter
+    assert _call_name(iterator) == "range" and len(iterator.args) == 1 and _call_name(iterator.args[0]) == "min"
+    assert getattr(creates[0].func.value, "id", None) == "group"
+
+
+def test_stage_api_and_acquire_images_ownership():
+    for path in _files():
+        tree = _tree(path)
+        names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {
+            n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} | {
+            a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
+        if path.name != "stages.py":
+            assert not names & _STAGE_APIS, (path.name, names & _STAGE_APIS)
+        if path.name != "preview.py":
+            assert "acquire_images" not in names, path.name
+    assert "fc2_organizer.images.acquisition" not in _imports(_tree(ORCH_SRC_ROOT / "stages.py"))
+
+
+def test_retention_ledger_lives_only_in_preview_and_is_call_local():
+    classes = {path.name: {n.name for n in ast.walk(_tree(path)) if isinstance(n, ast.ClassDef)} for path in _files()}
+    assert {name for name, defined in classes.items() if "_Ledger" in defined} == {"preview.py"}
+    tree = _tree(ORCH_SRC_ROOT / "preview.py")
+    for node in tree.body:  # type: ignore[attr-defined]
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(getattr(t, "id", None) == "__all__" for t in targets):
+                continue
+            value = node.value
+            assert not isinstance(value, (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.DictComp, ast.SetComp))
+            assert not (isinstance(value, ast.Call) and _call_name(value) in {"_Ledger", "list", "dict", "set"})
+    assert not any(isinstance(n, (ast.Global, ast.Nonlocal)) for n in ast.walk(tree))
+
+
+def test_preview_claims_busy_first():
+    tree = _tree(ORCH_SRC_ROOT / "orchestrator.py")
+    preview = next(n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == "preview")
+    body = preview.body
+    if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]  # docstring
+    assert isinstance(body[0], ast.Expr) and _call_name(body[0].value) == "_claim"
+    assert isinstance(body[1], ast.Try) and body[1].finalbody
+    assert _call_name(body[1].finalbody[0].value) == "_release"
+    methods = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    assert not methods & {"execute", "preview_retry", "merge_retry"}
 
 
 def test_no_persistence_or_diagnostics_output():
@@ -329,15 +398,17 @@ def test_no_production_module_has_mutable_state_except_the_consumption_registrie
 # --------------------------------------------------------------------------- public API / runtime
 
 
-def test_public_api_is_exactly_the_s1_set():
+def test_public_api_is_exactly_the_s1_set_plus_batch_orchestrator():
     _purge()
     try:
         orchestration = importlib.import_module(_PKG)
-        assert len(orchestration.__all__) == len(set(orchestration.__all__)) == len(_S1_PUBLIC_API) == 33
-        assert set(orchestration.__all__) == _S1_PUBLIC_API
+        assert len(orchestration.__all__) == len(set(orchestration.__all__)) == len(_S1_PUBLIC_API) + 1 == 34
+        assert set(orchestration.__all__) == _S1_PUBLIC_API | {"BatchOrchestrator"}
+        for later in ("execute", "preview_retry", "merge_retry", "summary"):
+            assert not hasattr(orchestration.BatchOrchestrator, later), later
         for name in orchestration.__all__:
             assert hasattr(orchestration, name), name
-        for name in _LATER_OR_FORBIDDEN_PUBLIC | {"revalidate", "type_name", "reason_detail", "bounded_snapshot",
+        for name in (_LATER_OR_FORBIDDEN_PUBLIC - {"BatchOrchestrator"}) | {"revalidate", "type_name", "reason_detail", "bounded_snapshot",
                                                    "retry_payload_bytes", "ConsumptionRegistry"}:
             assert name not in orchestration.__all__ and not hasattr(orchestration, name), name
     finally:
@@ -354,7 +425,41 @@ class _BlockFinder:
         return None
 
 
-def test_orchestration_imports_and_runs_with_forbidden_modules_blocked():
+class _Engine:
+    """Every source missing: a real FAILED aggregation (no network)."""
+
+    def __init__(self, aggregation):
+        self.aggregation = aggregation
+
+    async def aggregate(self, number):
+        models = importlib.import_module("fc2_metadata_core.models")
+        failed = models.SourceResult(source_id="s", status=models.SourceStatus.NOT_FOUND, metadata=None,
+                                     elapsed_ms=0.0, error_kind=models.SourceErrorKind("not_found"),
+                                     error_detail="scripted")
+        return self.aggregation.merge_source_results(number, [failed], self.aggregation.AggregationPolicy.build(("s",)))
+
+
+class _Client:
+    async def get(self, url, *, deadline_seconds, max_redirects, max_bytes):  # pragma: no cover - no URLs
+        raise AssertionError("no image request expected")
+
+
+def _run_real_preview(orchestration, discovery, tmp_path) -> None:
+    import asyncio
+
+    aggregation = importlib.import_module("fc2_metadata_core.aggregation")
+    (tmp_path / "dl").mkdir()
+    (tmp_path / "dl" / "FC2-PPV-1234567.mp4").write_bytes(b"media")
+    (tmp_path / "lib").mkdir()
+    items = discovery.discover_media(str(tmp_path / "dl")).items
+    orchestrator = orchestration.BatchOrchestrator(_Engine(aggregation), _Client(), str(tmp_path / "lib"))
+    preview = asyncio.run(orchestrator.preview(items))
+    assert [i.issue.reason for i in preview.items] == [orchestration.IssueReason.METADATA_UNAVAILABLE]
+    assert (tmp_path / "dl" / "FC2-PPV-1234567.mp4").read_bytes() == b"media"
+    assert not any((tmp_path / "lib").iterdir())
+
+
+def test_orchestration_imports_and_runs_with_forbidden_modules_blocked(tmp_path):
     _purge()
     saved = {name: sys.modules.pop(name) for name in list(sys.modules) if name.split(".")[0] in _BLOCKED_ROOTS}
     blocker = _BlockFinder()
@@ -376,6 +481,7 @@ def test_orchestration_imports_and_runs_with_forbidden_modules_blocked():
         token = orchestration.CancellationToken()
         token.cancel()
         assert token.cancelled and orchestration.OrchestrationConfig().filesystem_workers == 1
+        _run_real_preview(orchestration, discovery, tmp_path)
         loaded = set(sys.modules)
         assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in loaded)
     finally:

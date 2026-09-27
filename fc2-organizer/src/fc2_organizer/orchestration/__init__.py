@@ -11,8 +11,9 @@ Contract: ``docs/specifications/PHASE4_BATCH_ORCHESTRATION_CONTRACT.md``; constr
 ``docs/P4_C8_CONSTRUCTION_PLAN.md``.
 
 S1 (foundation) exports the models, configuration, cancellation token, resource / concurrency
-constants and the error hierarchy. ``BatchOrchestrator`` (S2-S4), ``merge_retry`` (S4) and the
-summary models (S5) are added by later batches.
+constants and the error hierarchy; S2 adds ``BatchOrchestrator`` (construction + ``preview``).
+``execute`` (S3), ``preview_retry`` / ``merge_retry`` (S4) and the summary models (S5) are added by
+later batches.
 
 Dependencies: standard library plus the bare public packages listed in contract section 6; never a
 lower-layer private module. ``fc2_organizer/__init__.py`` does not import this package; import it
@@ -56,8 +57,10 @@ from fc2_organizer.orchestration.models import (
     RetryKind,
     RetryMaterial,
 )
+from fc2_organizer.orchestration.orchestrator import BatchOrchestrator
 
 __all__ = [
+    "BatchOrchestrator",
     "OrchestrationConfig",
     "CancellationToken",
     "BatchPreview",

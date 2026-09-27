@@ -7,7 +7,9 @@ checkpoints as plain, model-valid, *unsealed* P4-C7 values) so the P4-C8 model i
 exercised without any filesystem access. Builders never decide a P4-C8 verdict (retry kind,
 outcome, warnings, ...): tests state the frozen expectations themselves.
 
-Production code never imports this module.
+Production code never imports this module. Every production name is bound at import (collection) time:
+several contract guards purge ``fc2_*`` from ``sys.modules`` while running, and a later function-level import
+would build a second copy of a package whose exact-type checks then reject the first copy's objects.
 """
 
 from __future__ import annotations
@@ -25,9 +27,12 @@ from pathlib import Path
 
 from fc2_metadata_core.batch import BatchItemErrorKind, BatchItemResult, BatchItemStatus, BatchLineage, BatchResult
 from fc2_metadata_core.models import NormalizedMetadata
+from fc2_metadata_core.normalize import normalize_fc2_number
 from fc2_organizer import execution as execution_package
 from fc2_organizer import materialization as materialization_package
 from fc2_organizer.discovery import DiscoveredMediaItem, discover_media
+from fc2_organizer.execution import _fs as execution_fs
+from fc2_organizer.execution import executor as execution_executor
 from fc2_organizer.execution import (
     CompletedEffect,
     EffectKind,
@@ -49,9 +54,12 @@ from fc2_organizer.execution import (
 )
 from fc2_organizer.images import ImageAcquisitionPolicy, ImageCandidateFailure, ImageFailureKind, ImageRole
 from fc2_organizer.materialization import ArtifactKind, ArtifactWriteRequest
+from fc2_organizer.materialization import artifacts as materialization_artifacts
+from fc2_organizer.materialization import atomic as materialization_atomic
 from fc2_organizer.orchestration import (
     DEFAULT_MAX_RETAINED_ARTIFACT_BYTES,
     BatchExecutionResult,
+    BatchOrchestrator,
     BatchPreview,
     ExecutionDisposition,
     IssueReason,
@@ -64,7 +72,14 @@ from fc2_organizer.orchestration import (
 )
 from fc2_organizer.planning import OrganizePlan, OutputPolicy, build_organize_plan
 
-from ._fakes import build_metadata
+from ._fakes import (
+    ScriptedEngine,
+    ScriptedImageClient,
+    build_metadata,
+    jpeg_response,
+    minimal_jpeg,
+    status_response,
+)
 
 NUMBER = "FC2-1234567"
 LIBRARY = r"C:\fc2-p4c8-library" if os.name == "nt" else "/fc2-p4c8-library"
@@ -164,14 +179,26 @@ def mutation_traps(monkeypatch) -> MutationTrap:
     monkeypatch.setattr(builtins, "open", guarded_open)
     for name in _MUTATING_SHUTIL:
         monkeypatch.setattr(shutil, name, trap.make(f"shutil.{name}"))
-    real_writers = {getattr(execution_package, "execute_filesystem"),
-                    getattr(materialization_package, "materialize_artifact"),
-                    getattr(materialization_package, "materialize_atomic_bytes")}
-    for module in list(sys.modules.values()):
-        for name in _WRITER_NAMES:
-            if getattr(module, name, None) in real_writers:
-                monkeypatch.setattr(module, name, trap.make(name))
+    for name, module in writer_bindings():
+        monkeypatch.setattr(module, name, trap.make(name))
     return trap
+
+
+_HELD_WRITER_MODULES = (execution_package, execution_executor, materialization_package, materialization_artifacts,
+                        materialization_atomic)
+
+
+def writer_bindings() -> list[tuple[str, object]]:
+    """Every module attribute bound to one of the three writers: the collection-time module objects held here
+    plus whatever is in ``sys.modules`` now (contract guards may have purged and re-imported the packages)."""
+    modules = {id(m): m for m in (*_HELD_WRITER_MODULES, *list(sys.modules.values())) if m is not None}
+    bindings = []
+    for module in modules.values():
+        for name in _WRITER_NAMES:
+            value = getattr(module, name, None)
+            if callable(value) and str(getattr(value, "__module__", "")).startswith("fc2_organizer."):
+                bindings.append((name, module))
+    return bindings
 
 
 def assert_source_not_lost(source_path, final_path, original_sha256: str) -> None:
@@ -200,9 +227,6 @@ class FsFault:
     _FD_OPS = {"fstat", "read", "write", "fsync", "close"}
 
     def __init__(self, monkeypatch) -> None:
-        from fc2_organizer.execution import _fs as execution_fs
-        from fc2_organizer.materialization import atomic as materialization_atomic
-
         self._lock = threading.Lock()
         self._rules: list[list] = []
         self._fd_paths: dict[tuple[str, int], str] = {}
@@ -362,7 +386,8 @@ def fake_checkpoint(plan: OrganizePlan) -> ExecutionCheckpoint:
 
 
 def fake_preflight(plan: OrganizePlan, artifacts: tuple[ArtifactWriteRequest, ...] | None = None, *,
-                   ready: bool = True, checkpoint: ExecutionCheckpoint | None = None) -> ExecutionPreflight:
+                   ready: bool = True, checkpoint: ExecutionCheckpoint | None = None,
+                   source_identity: EntryIdentity | None = None) -> ExecutionPreflight:
     """A model-valid (unsealed) P4-C7 preflight; never executable by P4-C7 itself."""
     blockers = () if ready else (PreflightBlocker(PreflightBlockReason.TARGET_DIRECTORY_EXISTS,
                                                   PathRole.TARGET_DIRECTORY),)
@@ -370,7 +395,7 @@ def fake_preflight(plan: OrganizePlan, artifacts: tuple[ArtifactWriteRequest, ..
         preflight_id=new_id(), mode=PreflightMode.FRESH if checkpoint is None else PreflightMode.RESUME,
         plan=plan, artifacts=manifest_for(plan) if artifacts is None else artifacts, checkpoint=checkpoint,
         plan_fingerprint=_HEX64, manifest_fingerprint=_HEX64, ready=ready, blockers=blockers,
-        library_root_identity=None, source_identity=None, transfer_mode=None, completed_units=(),
+        library_root_identity=None, source_identity=source_identity, transfer_mode=None, completed_units=(),
         pending_units=(), skipped_steps=(), seal=_HEX64)
 
 
@@ -521,3 +546,99 @@ def tampered(obj, **changes):
     for name, value in changes.items():
         object.__setattr__(clone, name, value)
     return clone
+
+
+# =========================================================================== S2: preview corpus / runner
+
+
+WATCHDOG_SECONDS = 60
+
+
+def run(coro, timeout: float = WATCHDOG_SECONDS):
+    """``asyncio.run`` under a watchdog: a regression that would hang fails the test instead (never used as a
+    correctness mechanism)."""
+    import asyncio
+
+    async def guarded():
+        return await asyncio.wait_for(coro, timeout)
+
+    return asyncio.run(guarded())
+
+
+def image_url(number: str, role: str) -> str:
+    return f"https://img.example.test/{number}/{role}.jpg"
+
+
+@dataclasses.dataclass
+class Film:
+    """One synthetic media file of a corpus and the scripted answers about it."""
+
+    name: str
+    directory: str = ""
+    kind: str = "success"  # metadata: success / partial / failed / engine (exception) / mismatch
+    poster: bool = True
+    fanart: bool = True
+    thumb: bool = True
+    extra: int = 0
+    extra_fail: int = 0
+    release: str | None = None
+    content: bytes | None = None
+
+
+class Corpus:
+    """A real ``tmp_path`` download tree discovered by ``discover_media`` plus a scripted engine and image
+    client that answer for its films (built only through public APIs)."""
+
+    def __init__(self, root: Path, films: list[Film], *, library: bool = True) -> None:
+        self.root = root
+        self.downloads = root / "dl"
+        self.library = root / "lib"
+        self.downloads.mkdir(parents=True, exist_ok=True)
+        if library:
+            self.library.mkdir(parents=True, exist_ok=True)
+        files: dict[str, bytes] = {}
+        script: dict[str, object] = {}
+        fields: dict[str, dict] = {}
+        images: dict[str, object] = {}
+        seed = 0
+        for position, film in enumerate(films):
+            relative = f"{film.directory}/{film.name}" if film.directory else film.name
+            files[relative] = film.content if film.content is not None else b"media-%d-" % position + relative.encode()
+            number = normalize_fc2_number(film.name).canonical
+            if number is None or number in script:
+                continue
+            script[number] = {"engine": RuntimeError("scripted engine failure"), "mismatch": object()}.get(
+                film.kind, film.kind)
+            urls: dict[str, tuple[str, ...]] = {}
+            for role, present in (("poster", film.poster), ("fanart", film.fanart), ("thumb", film.thumb)):
+                if present:
+                    urls[f"{role}_urls"] = (image_url(number, role),)
+            extra_urls = []
+            for ordinal in range(film.extra + film.extra_fail):
+                extra_urls.append(image_url(number, f"extra{ordinal}"))
+            if extra_urls:
+                urls["extrafanart"] = tuple(extra_urls)
+            for role_urls in urls.values():
+                for url in role_urls:
+                    seed += 1
+                    failing = url.endswith(tuple(f"extra{i}.jpg" for i in range(film.extra,
+                                                                                 film.extra + film.extra_fail)))
+                    images[url] = status_response(404) if failing else jpeg_response(minimal_jpeg(seed=seed))
+            if film.release is not None:
+                urls["release"] = film.release
+            fields[number] = urls
+        self.items = make_media_tree(self.downloads, files)
+        self.engine = ScriptedEngine(script, fields=fields)
+        self.client = ScriptedImageClient(images)
+
+    def orchestrator(self, **kwargs):
+        return BatchOrchestrator(self.engine, self.client, kwargs.pop("library_root", str(self.library)), **kwargs)
+
+    def preview(self, orchestrator=None, items=None):
+        orchestrator = orchestrator or self.orchestrator()
+        return run(orchestrator.preview(self.items if items is None else items))
+
+
+def by_name(preview) -> dict[str, object]:
+    """basename of the source -> preview item."""
+    return {os.path.basename(item.source_path): item for item in preview.items}
