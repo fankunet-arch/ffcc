@@ -1,7 +1,8 @@
 # FC2 Organizer -- Phase 4 / P4-C7 安全文件系统执行合同（Safe Filesystem Execution Contract）
 
 ```text
-状态           ：ESTABLISHED（E0，Docs-Only Establishment）-- 开发未开始
+E0 建立时状态 ：ESTABLISHED（E0，Docs-Only Establishment）-- 建立时 S1-S6 均尚未开始（历史快照，非当前状态）
+当前状态       ：以第 32 节“实现状态”及第 32.1 节闭合记录为准
 Package        ：fc2_organizer.execution（新顶层 package，S1 起创建）
 Frozen Base    ：a0a69c71a1451232ded2c8ae8ecd514cf48ba95b（DOCS-CN Final Closure Head）
 Branch         ：claude/phase4-c7-safe-filesystem-executor
@@ -1169,13 +1170,15 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 
 ## 32. 实现状态
 
+本表是 P4-C7 各批次的**当前**权威状态（E0 头部的建立时状态仅为历史快照）。
+
 | 批次 | 内容 | 状态 |
 |---|---|---|
 | E0 | 本合同 + 施工计划（docs-only） | ESTABLISHED |
-| S1 | Foundation / graph / manifest / read-only preflight | S1-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S2 | directory ownership + checkpoint/resume foundation | S2-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S3 | same-volume + cross-volume media transfer | S3-R2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S4 | artifact execution + retry verification | S4-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
+| S1 | Foundation / graph / manifest / read-only preflight | S1 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD 416d69ae1af5b5d374a70a9d483ceb14e73ab50d（S1-R1） |
+| S2 | directory ownership + checkpoint/resume foundation | S2 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD edac3b675c50ca3cd20ca81543fc7728ca44b69f（S2-R1） |
+| S3 | same-volume + cross-volume media transfer | S3 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD b0b79e0cbba6507dca8f06c06678b22a0f051f0b（S3-R2） |
+| S4 | artifact execution + retry verification | S4 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD aef025450217521707916c59dbaa121d665512b7（S4-R1） |
 | S5 | integrated single-item executor | S5 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD 3a2d737286723ecc399813bb4da8dfb40ffbe104 |
 | S6 | synthetic/fault/concurrency gate + final handoff | NOT STARTED |
 
@@ -1206,6 +1209,11 @@ P4-C7-S5-A2-R1-01、P4-C7-S5-R1-01 全部 **CLOSED**。
 S5 最终代码基线为上述 Final Reviewed Code Head；本闭合记录所在的 docs-only 提交是 S5 Final Closure Docs Head，
 经独立 docs-only 闭合复查通过后才成为 S6 Frozen Base。S6 不修改 S5 代码，除非 S6 门槛发现新的真实生产缺陷，
 并按施工计划单独形成修复提交与独立复查。
+
+S5 闭合文档的复查记录：首个闭合文档提交 e6cc011d68b0ae2238dfa8311684e1a543e408d4 的独立 docs-only 复查未通过
+（REVIEWED-FAILED：当前治理状态不一致——合同 / 施工计划头部的 E0 建立时状态未标明为历史快照、第 32 节 S1-S4
+状态过期），不成为 S6 Frozen Base；其后的治理一致性清理 docs-only 提交（S5 final closure R1）是新的 S6 Frozen Base
+候选，仍须独立 docs-only 复查通过。S5 代码闭合链与上表不变。
 
 ## 33. 延续项处理
 

@@ -6,7 +6,8 @@ Package        = P4-C7 Safe Filesystem Executor（fc2_organizer.execution）
 Frozen Base    = a0a69c71a1451232ded2c8ae8ecd514cf48ba95b（DOCS-CN Final Closure Head）
 Branch         = claude/phase4-c7-safe-filesystem-executor
 规范合同       = docs/specifications/PHASE4_SAFE_FILESYSTEM_EXECUTION_CONTRACT.md
-状态           = E0 ESTABLISHED；S1-S6 NOT STARTED
+E0 建立时状态 = E0 ESTABLISHED；建立时 S1-S6 NOT STARTED（历史快照，非当前状态）
+当前状态       = 以合同第 32 节“实现状态”及各批次闭合记录（如本计划“S5 最终闭合记录”、合同第 32.1 节）为准
 ```
 
 本计划在 E0 一次性冻结 P4-C7 的全部施工批次。之后的开发**只能执行本计划**：不得重新设计下一批，
@@ -461,7 +462,9 @@ S6                          : NOT STARTED
 
 以上 S5 冻结要求不变（S5 期间的合同修订 S5-A1 / S5-A2-R2 与闭合链见合同第 32.1 节）。S6 的代码输入**不是**
 `3a2d737286723ecc399813bb4da8dfb40ffbe104` 本身，而是在其之上记录本闭合的 docs-only 提交（S5 Final Closure Docs Head）；该 Docs Head 经独立
-docs-only 闭合复查通过后，才正式成为 S6 Frozen Base（即 S6 “输入”中的 S5 Head）。
+docs-only 闭合复查通过后，才正式成为 S6 Frozen Base（即 S6 “输入”中的 S5 Head）。首个闭合文档提交 `e6cc011`
+复查未通过（治理状态不一致），不成为 S6 Frozen Base；其后的治理一致性清理 docs-only 提交（S5 final closure R1）
+是新的候选，仍须独立复查（合同第 32.1 节）。
 
 ---
 
