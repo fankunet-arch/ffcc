@@ -1180,7 +1180,7 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | S3 | same-volume + cross-volume media transfer | S3 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD b0b79e0cbba6507dca8f06c06678b22a0f051f0b（S3-R2） |
 | S4 | artifact execution + retry verification | S4 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD aef025450217521707916c59dbaa121d665512b7（S4-R1） |
 | S5 | integrated single-item executor | S5 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD 3a2d737286723ecc399813bb4da8dfb40ffbe104 |
-| S6 | synthetic/fault/concurrency gate + final handoff | NOT STARTED |
+| S6 | synthetic/fault/concurrency gate + final handoff | S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 
 ### 32.1 S5 闭合记录（治理记录，不改变第 1-31、33、34 节语义）
 
