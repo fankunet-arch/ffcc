@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from fc2_organizer.execution import _fs, preflight_execution, transfer
+from fc2_organizer.execution import _fs, execute_filesystem, preflight_execution, transfer
 from fc2_organizer.execution.models import CompletedEffect, EffectKind, PathRole
 from fc2_organizer.execution.seal import issue_checkpoint, manifest_fingerprint, plan_fingerprint
 from fc2_organizer.execution import executor
@@ -19,7 +19,7 @@ from fc2_organizer.execution.directories import create_extrafanart_directory, cr
 from fc2_organizer.materialization import ArtifactKind
 from fc2_organizer.materialization import atomic as p4c6_atomic
 
-from ._builders import make_plan, scene
+from ._builders import make_manifest, make_plan, scene
 
 # Every mutating entry of the private seam (S1 must never reach any of them).
 MUTATING_SEAM_OPS = ("mkdir", "rename", "link", "unlink", "write", "fsync", "open", "read", "close")
@@ -516,3 +516,80 @@ def parent_identity_for(a: ArtifactScene, request) -> object:
 
 def artifact_temp_names(directory) -> list[str]:
     return sorted(n for n in os.listdir(directory) if n.startswith(".fc2tmp-") and n not in ARTIFACT_PLANTED)
+
+
+# --------------------------------------------------------------------------- S5 helpers (integrated executor)
+
+TRANSFERS = ("native", "hardlink", "cross_volume")
+_P4C6_OPS = ("lstat", "stat", "open", "write", "fsync", "close", "publish", "unlink")
+
+
+def trap_every_filesystem_access(monkeypatch: pytest.MonkeyPatch) -> Trap:
+    """ZERO filesystem access: every execution seam op (reads included), every P4-C6 seam op, os mutators and
+    builtins.open raise. Use inside ``monkeypatch.context()`` so the test can inspect the disk afterwards."""
+    trap = trap_all_io(monkeypatch)
+    monkeypatch.setattr(p4c6_atomic, "_FS", dataclasses.replace(
+        p4c6_atomic._FS, **{name: trap.make(f"p4c6.{name}") for name in _P4C6_OPS}))
+    return trap
+
+
+def use_transfer(monkeypatch: pytest.MonkeyPatch, transfer_kind: str) -> None:
+    """native: this host's strategies; hardlink: POSIX link strategies (media + artifacts) through the seams;
+    cross_volume: the device_of seam makes files report another device (call BEFORE preflight)."""
+    if transfer_kind == "hardlink":
+        use_strategy(monkeypatch, "link")
+        use_p4c6_strategy(monkeypatch, "hardlink")
+    elif transfer_kind == "cross_volume":
+        force_cross_volume_devices(monkeypatch)
+
+
+def tree_layout(root) -> dict:
+    """Relative path -> "<dir>" or SHA-256 of the file bytes, for every entry below ``root``."""
+    layout = {}
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames:
+            layout[os.path.relpath(os.path.join(dirpath, name), root)] = "<dir>"
+        for name in filenames:
+            layout[os.path.relpath(os.path.join(dirpath, name), root)] = sha256_of_file(os.path.join(dirpath, name))
+    return layout
+
+
+def expected_library_layout(plan, artifacts, media: bytes) -> dict:
+    """The exact final layout of one successful film (relative to the library root)."""
+    root = plan.library_root
+    rel = lambda path: os.path.relpath(path, root)  # noqa: E731
+    layout = {rel(plan.target_directory.absolute_path): "<dir>",
+              rel(plan.target_media_path.absolute_path): hashlib.sha256(media).hexdigest(),
+              rel(plan.extrafanart_directory.absolute_path): "<dir>"}
+    for request in artifacts:
+        layout[rel(request.target_path)] = hashlib.sha256(request.content).hexdigest()
+    return layout
+
+
+class UnitInterrupter:
+    """Wraps the executor's unit entry points; raises ``exc`` right before the ``at``-th unit call (0-based)."""
+
+    NAMES = ("create_target_directory", "transfer_media", "create_extrafanart_directory", "_execute_artifact_unit")
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, at: int | None = None, exc: BaseException | None = None):
+        self.calls: list[str] = []
+        for name in self.NAMES:
+            real = getattr(executor, name)
+            monkeypatch.setattr(executor, name, self._wrap(name, real, at, exc))
+
+    def _wrap(self, name, real, at, exc):
+        def unit(*args, **kwargs):
+            if at is not None and len(self.calls) == at:
+                self.calls.append(name + "!")
+                raise exc
+            self.calls.append(name)
+            return real(*args, **kwargs)
+        return unit
+
+
+def spawn_worker(args: tuple[str, str, int]) -> str:
+    """multiprocessing (spawn) worker: preflight + execute one film in a fresh interpreter."""
+    library_root, source_path, size = args
+    plan = make_plan(library_root, source_path, extension=os.path.splitext(source_path)[1], size=size)
+    result = execute_filesystem(preflight_execution(plan, make_manifest(plan, extra=2)))
+    return result.status.value

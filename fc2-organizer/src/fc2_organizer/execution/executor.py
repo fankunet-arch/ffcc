@@ -1,10 +1,13 @@
-"""Artifact unit execution for ``fc2_organizer.execution`` (P4-C7 S4; contract sections 14.4, 20, 23-25, 27-29).
+"""The single-film filesystem executor of ``fc2_organizer.execution`` (P4-C7 S4 + S5).
 
-S4 scope only: :func:`_execute_artifact_unit` runs ONE artifact unit (U3-U6 / U8..) and maps P4-C6
-``MaterializationError`` types to typed failures. ``execute_filesystem`` (integrated orchestration,
-consumption, checkpoint issuance) is added in S5.
+* :func:`execute_filesystem` (S5; contract sections 4, 8, 9, 14.5, 15.4, 15.5, 27-30) -- the only entry that
+  produces final effects: frozen pre-filesystem checks (type -> seal -> ready -> structure + fingerprints ->
+  consumption), a read-only whole-state revalidation, then the pending units U1..U8.. in order, stopping at the
+  first typed failure; status from the cumulative effects; a new sealed checkpoint for every PARTIAL.
+* :func:`_execute_artifact_unit` (S4; contract sections 20, 24) -- ONE artifact unit (U3-U6 / U8..) and the
+  ``MaterializationError`` type mapping.
 
-Per unit (contract section 24):
+Per artifact unit (contract section 24):
 
 1. revalidate the parent directory identity (target directory, or ``extrafanart/`` for extrafanart);
 2. the target must be absent (an early exit only -- the no-overwrite guarantee is P4-C6's);
@@ -21,28 +24,65 @@ Only the ``MaterializationError`` types of the frozen table are translated; an u
 ``MaterializationError`` subtype, ``BaseException`` and foreign exceptions propagate unchanged (P4-C6 owns its
 temporary cleanup), as does the ``OSError`` of a failed post-cleanup listing (leftovers unknown, never "none"). Failures carry enums, errno, ``write_stage``, kind and ordinal only.
 
-This package and the bare public ``fc2_organizer.materialization`` package only.
+Synchronous, single film, forward-only: no batch, thread / process pool, persistence, rollback, undo or
+transaction. This package and the bare public ``fc2_organizer.materialization`` / ``fc2_organizer.planning``
+packages only.
 """
 
 from __future__ import annotations
 
 from fc2_organizer.execution import _fs
-from fc2_organizer.execution.directories import revalidate_directory
-from fc2_organizer.execution.errors import ExecutionInputError
+from fc2_organizer.execution import preflight as _preflight
+from fc2_organizer.execution.directories import (
+    create_extrafanart_directory,
+    create_target_directory,
+    revalidate_directory,
+)
+from fc2_organizer.execution.errors import (
+    CheckpointError,
+    CheckpointRejectionReason,
+    ExecutionInputError,
+    PreflightIntegrityError,
+    PreflightIntegrityReason,
+    PreflightNotReadyError,
+)
 from fc2_organizer.execution.models import (
     CompletedEffect,
     EffectKind,
     EntryIdentity,
     EntryType,
+    ExecutionCheckpoint,
     ExecutionFailure,
     ExecutionFailureKind,
+    ExecutionPreflight,
+    ExecutionResult,
+    ExecutionStatus,
+    ExecutionStep,
+    ExecutionUnit,
     LeftoverTemporary,
     PathRole,
+    PreflightBlocker,
+    PreflightBlockReason,
+    PreflightMode,
+    TransferMode,
     same_identity,
 )
 from fc2_organizer.execution.paths import same_entry_name
-from fc2_organizer.execution.seal import content_sha256
-from fc2_organizer.execution.validation import artifact_unit_roles
+from fc2_organizer.execution.seal import (
+    content_sha256,
+    is_consumed,
+    issue_checkpoint,
+    manifest_fingerprint,
+    plan_fingerprint,
+    register_consumption,
+    verify_seal,
+)
+from fc2_organizer.execution.transfer import ResumePhase, transfer_media
+from fc2_organizer.execution.validation import (
+    artifact_unit_roles,
+    validate_manifest,
+    validate_plan,
+)
 from fc2_organizer.materialization import (
     ArtifactCleanupError,
     ArtifactPublishError,
@@ -60,7 +100,7 @@ from fc2_organizer.materialization import (
     materialize_artifact,
 )
 
-__all__: list[str] = []  # S4: nothing public yet; execute_filesystem arrives in S5
+__all__ = ["execute_filesystem"]
 
 _K = ExecutionFailureKind
 _TEMP_PREFIX = ".fc2tmp-"
@@ -250,3 +290,258 @@ def _reverified_effect(unit: _Unit) -> CompletedEffect | None:
     if isinstance(after, OSError) or not same_identity(after, identity):
         return None
     return unit.effect(identity, sha256)
+
+
+# =========================================================================== S5: execute_filesystem
+
+# Read-only whole-state revalidation (contract sections 10-14.3 re-run at execution time): the first blocker,
+# in the frozen library -> source -> target order, becomes the typed failure that stops before any mutation.
+_BLOCKER_FAILURE = {
+    PreflightBlockReason.LIBRARY_ROOT_MISSING: _K.LIBRARY_ROOT_CHANGED,
+    PreflightBlockReason.LIBRARY_ROOT_NOT_DIRECTORY: _K.LIBRARY_ROOT_CHANGED,
+    PreflightBlockReason.LIBRARY_ROOT_IS_LINK: _K.LIBRARY_ROOT_CHANGED,
+    PreflightBlockReason.LIBRARY_ROOT_INACCESSIBLE: _K.LIBRARY_ROOT_CHANGED,
+    PreflightBlockReason.LIBRARY_ROOT_CHANGED: _K.LIBRARY_ROOT_CHANGED,
+    PreflightBlockReason.SOURCE_MISSING: _K.SOURCE_MISSING,
+    PreflightBlockReason.SOURCE_IS_LINK: _K.SOURCE_CHANGED,
+    PreflightBlockReason.SOURCE_NOT_REGULAR_FILE: _K.SOURCE_CHANGED,
+    PreflightBlockReason.SOURCE_SIZE_MISMATCH: _K.SOURCE_CHANGED,
+    PreflightBlockReason.SOURCE_INACCESSIBLE: _K.SOURCE_CHANGED,
+    PreflightBlockReason.SOURCE_CHANGED: _K.SOURCE_CHANGED,
+    PreflightBlockReason.TARGET_DIRECTORY_EXISTS: _K.TARGET_CONFLICT,
+    PreflightBlockReason.TARGET_DIRECTORY_INACCESSIBLE: _K.TARGET_DIRECTORY_CHANGED,
+    PreflightBlockReason.TARGET_DIRECTORY_CHANGED: _K.TARGET_DIRECTORY_CHANGED,
+    PreflightBlockReason.UNEXPECTED_ENTRY: _K.UNEXPECTED_ENTRY,
+    PreflightBlockReason.COMPLETED_EFFECT_MISSING: _K.TARGET_DIRECTORY_CHANGED,
+    PreflightBlockReason.COMPLETED_EFFECT_CHANGED: _K.TARGET_DIRECTORY_CHANGED,
+}
+
+
+def execute_filesystem(preflight: ExecutionPreflight) -> ExecutionResult:
+    """Execute one film's sealed, ready preflight against the real filesystem (contract section 4).
+
+    Frozen order (section 15.5): exact type -> seal -> ``ready`` -> plan / manifest re-validation and
+    fingerprints -> consumption registration -> filesystem. Rejections before consumption touch nothing and
+    consume nothing. Typed failures become a result; ``BaseException``, foreign exceptions and the raw
+    propagations of the lower layers pass through unchanged (no result, no checkpoint, no rollback).
+    """
+    if type(preflight) is not ExecutionPreflight:
+        raise ExecutionInputError("preflight must be an exact ExecutionPreflight")
+    if not verify_seal(preflight):
+        raise PreflightIntegrityError(PreflightIntegrityReason.SEAL_INVALID)
+    if preflight.ready is not True:
+        raise PreflightNotReadyError()
+    plan, artifacts = preflight.plan, preflight.artifacts
+    validate_plan(plan)
+    validate_manifest(plan, artifacts)
+    if (plan_fingerprint(plan) != preflight.plan_fingerprint
+            or manifest_fingerprint(artifacts) != preflight.manifest_fingerprint):
+        raise PreflightIntegrityError(PreflightIntegrityReason.FINGERPRINT_MISMATCH)
+    _consume(preflight)
+    return _Run(preflight).execute()
+
+
+def _consume(preflight: ExecutionPreflight) -> None:
+    """Atomic check-and-register of the preflight id (and the checkpoint id on RESUME), before any filesystem
+    access (section 15.4). The two CONSUMED families stay distinct."""
+    checkpoint = preflight.checkpoint
+    ids = (preflight.preflight_id,) if checkpoint is None else (preflight.preflight_id, checkpoint.checkpoint_id)
+    if register_consumption(ids):
+        return
+    if is_consumed(preflight.preflight_id):
+        raise PreflightIntegrityError(PreflightIntegrityReason.CONSUMED)
+    raise CheckpointError(CheckpointRejectionReason.CONSUMED)
+
+
+class _Run:
+    """The mutable bookkeeping of ONE execute_filesystem call (never shared, never persisted)."""
+
+    def __init__(self, preflight: ExecutionPreflight) -> None:
+        self.preflight = preflight
+        self.plan = preflight.plan
+        checkpoint = preflight.checkpoint
+        self.resume = checkpoint is not None
+        if checkpoint is None:
+            self.library_identity = preflight.library_root_identity
+            self.source_identity = preflight.source_identity
+            self.target_identity: EntryIdentity | None = None
+            self.extrafanart_identity: EntryIdentity | None = None
+            self.mode: TransferMode | None = preflight.transfer_mode
+            self.effects: list[CompletedEffect] = []
+            self.leftovers: list[LeftoverTemporary] = []
+        else:
+            self.library_identity = checkpoint.library_root_identity
+            self.source_identity = checkpoint.source_identity
+            self.target_identity = checkpoint.target_directory_identity
+            self.extrafanart_identity = checkpoint.extrafanart_directory_identity
+            self.mode = checkpoint.transfer_mode
+            self.effects = list(checkpoint.completed_effects)
+            self.leftovers = list(checkpoint.leftover_temporaries)
+        self.initial_count = len(self.effects)
+        self.u2_mode: TransferMode | None = self.mode if self._has(EffectKind.MEDIA_PUBLISHED) else None
+        self.requests = {(r.kind, r.ordinal): r for r in preflight.artifacts}  # the manifest's own objects
+
+    def _has(self, kind: EffectKind) -> bool:
+        return any(effect.kind is kind for effect in self.effects)
+
+    # ------------------------------------------------------------------ driver
+
+    def execute(self) -> ExecutionResult:
+        units = self.preflight.pending_units
+        failure = self._revalidate(units[0].step)
+        if failure is None:
+            for unit in units:
+                failure = self._run_unit(unit)
+                if failure is not None:
+                    break  # first failure: nothing after it runs (forward-only, no rollback)
+        return self._result(failure)
+
+    def _run_unit(self, unit: ExecutionUnit) -> ExecutionFailure | None:
+        step = unit.step
+        if step is ExecutionStep.CREATE_DIRECTORY:
+            return self._u1()
+        if step is ExecutionStep.MOVE_MEDIA:
+            return self._u2()
+        if step is ExecutionStep.ENSURE_EXTRAFANART_DIRECTORY:
+            return self._u7()
+        return self._artifact(unit)
+
+    # ------------------------------------------------------------------ units
+
+    def _u1(self) -> ExecutionFailure | None:
+        identity, failure = create_target_directory(self.plan, self.library_identity)
+        if failure is not None:
+            return failure  # PUBLISH_VERIFY: see _result -- no identity, so no recordable effect
+        self.target_identity = identity
+        self.effects.append(CompletedEffect(EffectKind.TARGET_DIRECTORY_CREATED, PathRole.TARGET_DIRECTORY,
+                                            self.plan.target_directory.absolute_path, identity,
+                                            None, None, None, None))
+        # Section 17: the actual mode is decided against the NEW target directory's device.
+        same = self.source_identity.device == identity.device
+        self.mode = TransferMode.SAME_VOLUME if same else TransferMode.CROSS_VOLUME
+        return None
+
+    def _u2(self) -> ExecutionFailure | None:
+        phase = (ResumePhase.SOURCE_REMOVAL_ONLY if self._has(EffectKind.MEDIA_PUBLISHED)
+                 else ResumePhase.FULL)
+        outcome = transfer_media(self.plan, self.source_identity, self.target_identity, self.mode,
+                                 resume_phase=phase)
+        self.effects.extend(outcome.effects)  # every effect that really happened, even with a failure
+        self.leftovers.extend(outcome.leftover_temporaries)
+        self.mode = outcome.transfer_mode  # CROSS_VOLUME after an EXDEV fallback
+        self.u2_mode = outcome.transfer_mode
+        return outcome.failure
+
+    def _u7(self) -> ExecutionFailure | None:
+        identity, failure = create_extrafanart_directory(self.plan, self.target_identity)
+        if failure is not None:
+            return failure
+        self.extrafanart_identity = identity
+        self.effects.append(CompletedEffect(EffectKind.EXTRAFANART_DIRECTORY_CREATED,
+                                            PathRole.EXTRAFANART_DIRECTORY,
+                                            self.plan.extrafanart_directory.absolute_path, identity,
+                                            None, None, None, None))
+        return None
+
+    def _artifact(self, unit: ExecutionUnit) -> ExecutionFailure | None:
+        request = self.requests[(unit.artifact_kind, unit.ordinal)]
+        parent = (self.extrafanart_identity if unit.step is ExecutionStep.MATERIALIZE_EXTRAFANART
+                  else self.target_identity)
+        effect, failure, leftovers = _execute_artifact_unit(request, parent, self.plan)
+        if effect is not None:
+            self.effects.append(effect)
+        self.leftovers.extend(leftovers)
+        return failure
+
+    # ------------------------------------------------------------------ read-only whole-state revalidation
+
+    def _revalidate(self, step: ExecutionStep) -> ExecutionFailure | None:
+        kind, errno = self._revalidate_resume() if self.resume else self._revalidate_fresh()
+        if kind is None:
+            return None
+        return ExecutionFailure(step=step, kind=kind, errno=errno)
+
+    def _revalidate_fresh(self) -> tuple[ExecutionFailureKind | None, int | None]:
+        plan, preflight = self.plan, self.preflight
+        blockers: list[PreflightBlocker] = []
+        library = _preflight._snapshot_library_root(plan.library_root, blockers)
+        if library is None or not same_identity(library, preflight.library_root_identity):
+            return _K.LIBRARY_ROOT_CHANGED, None
+        source = _preflight._snapshot_source(plan.source_path, plan.source_size, blockers)
+        if source is None:
+            return _first(blockers)
+        if not same_identity(source, preflight.source_identity):
+            return _K.SOURCE_CHANGED, None
+        _preflight._require_target_directory_absent(plan.target_directory.absolute_path, blockers)
+        return _first(blockers)
+
+    def _revalidate_resume(self) -> tuple[ExecutionFailureKind | None, int | None]:
+        plan, checkpoint = self.plan, self.preflight.checkpoint
+        library = _fs.snapshot(plan.library_root)
+        if (isinstance(library, OSError) or library.entry_type is not EntryType.DIRECTORY
+                or not same_identity(library, checkpoint.library_root_identity)):
+            return _K.LIBRARY_ROOT_CHANGED, None
+        blockers: list[PreflightBlocker] = []
+        if not self._has(EffectKind.SOURCE_REMOVED):
+            _preflight._check_resume_source(plan.source_path, checkpoint.source_identity, blockers)
+            if blockers:
+                return _first(blockers)
+        _preflight._check_owned_state(plan, self.preflight.artifacts, checkpoint, blockers)
+        return _first(blockers)
+
+    # ------------------------------------------------------------------ result
+
+    def _result(self, failure: ExecutionFailure | None) -> ExecutionResult:
+        preflight = self.preflight
+        effects = tuple(self.effects)
+        leftovers = tuple(self.leftovers)
+        media = next((e for e in effects if e.kind is EffectKind.MEDIA_PUBLISHED), None)
+        media_sha256 = None if media is None else media.sha256  # cross-volume only; never re-read
+        if failure is None:
+            status, checkpoint = ExecutionStatus.SUCCESS, None  # every pending unit completed: E is complete
+        elif effects:
+            status, checkpoint = ExecutionStatus.PARTIAL, self._checkpoint(effects, leftovers)
+        else:
+            # Includes U1's exclusive mkdir succeeding while its snapshot shows no owned directory
+            # (stage PUBLISH_VERIFY): our directory is not visible at the final location, no identity can be
+            # recorded, and no checkpoint may claim it; a later fresh preflight fails closed
+            # (TARGET_DIRECTORY_EXISTS).
+            status, checkpoint = ExecutionStatus.FAILED, None
+        return ExecutionResult(
+            status=status,
+            preflight_id=preflight.preflight_id,
+            mode=preflight.mode,
+            transfer_mode=self.u2_mode,
+            completed_effects=effects,
+            new_effect_count=len(effects) - self.initial_count,
+            failure=failure,
+            checkpoint=checkpoint,
+            leftover_temporaries=leftovers,
+            media_sha256=media_sha256,
+            skipped_steps=preflight.skipped_steps,
+        )
+
+    def _checkpoint(self, effects: tuple[CompletedEffect, ...],
+                    leftovers: tuple[LeftoverTemporary, ...]) -> ExecutionCheckpoint:
+        """A NEW sealed checkpoint (new id, new seal) over the cumulative prefix and leftovers (section 14.5)."""
+        preflight = self.preflight
+        return issue_checkpoint(
+            plan_fingerprint=preflight.plan_fingerprint,
+            manifest_fingerprint=preflight.manifest_fingerprint,
+            library_root_identity=self.library_identity,
+            source_identity=self.source_identity,
+            transfer_mode=self.mode,
+            target_directory_identity=self.target_identity,
+            extrafanart_directory_identity=(self.extrafanart_identity
+                                            if any(e.kind is EffectKind.EXTRAFANART_DIRECTORY_CREATED
+                                                   for e in effects) else None),
+            completed_effects=effects,
+            leftover_temporaries=leftovers,
+        )
+
+
+def _first(blockers: list[PreflightBlocker]) -> tuple[ExecutionFailureKind | None, int | None]:
+    if not blockers:
+        return None, None
+    blocker = blockers[0]
+    return _BLOCKER_FAILURE[blocker.reason], blocker.errno

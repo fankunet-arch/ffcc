@@ -37,7 +37,7 @@ _NOT_YET = ("rollback.py", "orchestrator.py")
 _PKG = "fc2_organizer.execution"
 _BARE = {"fc2_organizer.planning", "fc2_organizer.materialization"}
 _ALLOWED = {
-    "__init__.py": {f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.preflight"},
+    "__init__.py": {f"{_PKG}.errors", f"{_PKG}.executor", f"{_PKG}.models", f"{_PKG}.preflight"},
     "errors.py": {"__future__", "enum"},
     # models.py also imports the two bare authorised packages (S1 technical ruling: strict-type model checks
     # of plan / artifacts / artifact_kind, contract sections 16 and 27).
@@ -56,7 +56,8 @@ _ALLOWED = {
                     f"{_PKG}.models"},
     # S4 (contract section 3 table: this package + the bare public planning / materialization packages).
     "executor.py": {"__future__", _PKG, f"{_PKG}.directories", f"{_PKG}.errors", f"{_PKG}.models",
-                    f"{_PKG}.paths", f"{_PKG}.seal", f"{_PKG}.validation", "fc2_organizer.materialization"},
+                    f"{_PKG}.paths", f"{_PKG}.preflight", f"{_PKG}.seal", f"{_PKG}.transfer",
+                    f"{_PKG}.validation", "fc2_organizer.materialization"},
 }
 _FORBIDDEN_PREFIXES = (
     "fc2_metadata_core", "amane", "httpx", "requests", "socket", "ssl", "http", "urllib", "shutil", "tempfile",
@@ -295,12 +296,14 @@ def test_bare_import_of_fc2_organizer_does_not_load_execution():
         _purge()
 
 
-def test_public_api_is_the_frozen_set_minus_execute_filesystem():
+def test_public_api_is_exactly_the_frozen_set():
+    # S5: the final public API (contract section 4), no more and no less.
     _purge()
     try:
         execution = importlib.import_module(_PKG)
-        assert set(execution.__all__) == _FROZEN_PUBLIC_API - {"execute_filesystem"}
-        assert not hasattr(execution, "execute_filesystem")
+        assert len(execution.__all__) == len(set(execution.__all__)) == len(_FROZEN_PUBLIC_API) == 34
+        assert set(execution.__all__) == _FROZEN_PUBLIC_API
+        assert execution.execute_filesystem is importlib.import_module(f"{_PKG}.executor").execute_filesystem
         for name in execution.__all__:
             assert hasattr(execution, name), name
         for private in ("_FS", "seal_of", "register_consumption", "PathRejectionReason", "validate_plan"):
@@ -470,17 +473,50 @@ def test_transfer_is_private_to_the_package():
 # --------------------------------------------------------------------------- S4: executor.py (artifact units only)
 
 
-def test_executor_has_only_artifact_unit_execution_in_s4():
+def test_executor_is_the_single_synchronous_single_film_entry():
+    # S5: execute_filesystem has exactly one production definition (executor.py); no batch / async /
+    # thread / process machinery, no multi-film API, no persistence, no rollback names.
+    definitions = [(path.name, n.name) for path in _files(EXEC_SRC_ROOT) for n in ast.walk(_tree(path))
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "execute_filesystem"]
+    assert definitions == [("executor.py", "execute_filesystem")]
     tree = _tree(EXEC_SRC_ROOT / "executor.py")
-    functions = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    assert "_execute_artifact_unit" in functions
-    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | functions
-    for later in ("execute_filesystem", "issue_checkpoint", "register_consumption", "transfer_media",
-                  "create_target_directory", "create_extrafanart_directory", "ExecutionResult",
-                  "ExecutionCheckpoint", "preflight_execution"):
-        assert later not in names, later
-    exported = [n for n in ast.walk(tree) if isinstance(n, ast.AnnAssign) and getattr(n.target, "id", "") == "__all__"]
-    assert len(exported) == 1 and isinstance(exported[0].value, ast.List) and exported[0].value.elts == []
+    assert not any(isinstance(n, (ast.AsyncFunctionDef, ast.Await)) for n in ast.walk(tree))
+    for module in _imports(tree):
+        assert module.split(".")[0] not in {"threading", "concurrent", "multiprocessing", "asyncio", "queue",
+                                            "json", "pickle", "shelve", "sqlite3"}, module
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {
+        n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+    for forbidden in ("rollback", "undo", "revert", "transaction", "cleanup_all", "execute_batch", "execute_many",
+                      "preflight_execution", "Thread", "ThreadPoolExecutor", "ProcessPoolExecutor"):
+        assert forbidden not in names, forbidden
+    exported = [n for n in ast.walk(tree) if isinstance(n, ast.Assign)
+                and any(getattr(t, "id", "") == "__all__" for t in n.targets)]
+    assert len(exported) == 1 and [e.value for e in exported[0].value.elts] == ["execute_filesystem"]
+    signature = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "execute_filesystem")
+    assert [a.arg for a in signature.args.args] == ["preflight"] and not signature.args.kwonlyargs
+    assert signature.args.vararg is None and signature.args.kwarg is None and not signature.args.defaults
+
+
+def test_execute_filesystem_checks_before_consuming_and_consumes_before_the_filesystem():
+    # Frozen section 15.5 order inside execute_filesystem: type -> seal -> ready -> validate_plan ->
+    # validate_manifest -> fingerprints -> consumption -> the run (the first filesystem access).
+    tree = _tree(EXEC_SRC_ROOT / "executor.py")
+    fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "execute_filesystem")
+    order = []
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call):
+            name = getattr(node.func, "id", getattr(node.func, "attr", None))
+            if name in {"type", "verify_seal", "validate_plan", "validate_manifest", "plan_fingerprint",
+                        "manifest_fingerprint", "_consume", "_Run"}:
+                order.append((node.lineno, node.col_offset, name))
+        if isinstance(node, ast.Attribute) and node.attr == "ready":
+            order.append((node.lineno, node.col_offset, "ready"))
+    sequence = [name for *_, name in sorted(order)]
+    assert sequence == ["type", "verify_seal", "ready", "validate_plan", "validate_manifest", "plan_fingerprint",
+                        "manifest_fingerprint", "_consume", "_Run"], sequence
+    fs_names = {n.attr for n in ast.walk(fn) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                and n.value.id == "_fs"}
+    assert fs_names == set()  # no filesystem access inside the pre-consumption part itself
 
 
 def test_materialize_artifact_is_the_only_artifact_writer_and_gets_the_original_request():
@@ -530,6 +566,39 @@ def test_executor_translates_only_materialization_errors_and_never_chains():
             assert node.attr not in {"__name__", "__qualname__", "args", "__str__", "message"}, node.attr
         if isinstance(node, ast.Call):
             assert getattr(node.func, "id", None) not in {"str", "repr", "format"}
+
+
+def test_execute_filesystem_end_to_end_with_forbidden_modules_blocked(tmp_path):
+    _purge()
+    saved = {name: sys.modules.pop(name) for name in list(sys.modules) if name.split(".")[0] in _BLOCKED_ROOTS}
+    blocker = _BlockFinder()
+    sys.meta_path.insert(0, blocker)
+    try:
+        execution = importlib.import_module(_PKG)
+        planning = importlib.import_module("fc2_organizer.planning")
+        materialization = importlib.import_module("fc2_organizer.materialization")
+        discovery = importlib.import_module("fc2_organizer.discovery")
+        core_models = importlib.import_module("fc2_metadata_core.models")
+        library = tmp_path / "library"
+        library.mkdir()
+        source = tmp_path / "dl" / "raw.mp4"
+        source.parent.mkdir()
+        source.write_bytes(b"media")
+        item = discovery.DiscoveredMediaItem(index=0, source_path=str(source), relative_path="raw.mp4",
+                                             extension=".mp4", size=5)
+        plan = planning.build_organize_plan(item, "FC2-1234567",
+                                            core_models.NormalizedMetadata(number="FC2-1234567", title="t"),
+                                            str(library))
+        manifest = (materialization.ArtifactWriteRequest(materialization.ArtifactKind.NFO,
+                                                         plan.nfo_path.absolute_path, b"<movie/>"),)
+        result = execution.execute_filesystem(execution.preflight_execution(plan, manifest))
+        assert result.status is execution.ExecutionStatus.SUCCESS and not source.exists()
+        loaded = set(sys.modules)
+        assert not any(n.split(".")[0] in _BLOCKED_ROOTS or n.startswith(_BLOCKED_PREFIXES) for n in loaded)
+    finally:
+        sys.meta_path.remove(blocker)
+        _purge()
+        sys.modules.update(saved)
 
 
 def test_executor_imports_with_forbidden_modules_blocked():

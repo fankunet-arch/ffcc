@@ -6,10 +6,9 @@ forward-only and never overwriting anything. See
 ``docs/specifications/PHASE4_SAFE_FILESYSTEM_EXECUTION_CONTRACT.md`` and
 ``docs/P4_C7_CONSTRUCTION_PLAN.md``.
 
-Construction state: S1 -- foundation models, plan-graph and manifest hardening,
-fingerprints / seals and the READ-ONLY ``preflight_execution`` (FRESH path).
-``execute_filesystem`` is added in S5; the final public API is frozen by contract
-section 4.
+Public API (frozen by contract section 4): the READ-ONLY ``preflight_execution`` and
+``execute_filesystem``, the only entry that produces final effects, plus their value
+models and errors.
 
 Dependencies: standard library plus the bare public packages
 ``fc2_organizer.planning`` (which loads ``fc2_metadata_core`` transitively) and
@@ -54,10 +53,12 @@ from fc2_organizer.execution.models import (
     TransferMode,
     TransferStage,
 )
+from fc2_organizer.execution.executor import execute_filesystem
 from fc2_organizer.execution.preflight import preflight_execution
 
 __all__ = [
     "preflight_execution",
+    "execute_filesystem",
     "ExecutionPreflight",
     "ExecutionResult",
     "ExecutionCheckpoint",
