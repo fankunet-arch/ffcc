@@ -450,6 +450,19 @@ tests/unit/execution/test_execution_race.py
 
 `feat(execution): add integrated single-item filesystem executor with checkpoint retry (P4-C7 S5)`
 
+### S5 最终闭合记录（治理记录）
+
+```text
+S5 Final Reviewed Code Head : 3a2d737286723ecc399813bb4da8dfb40ffbe104
+Review                      : P4-C7 S5-R2 INDEPENDENT INCREMENTAL LEVEL 1 CLOSURE REVIEW -- PASS
+S5                          : CLOSED
+S6                          : NOT STARTED
+```
+
+以上 S5 冻结要求不变（S5 期间的合同修订 S5-A1 / S5-A2-R2 与闭合链见合同第 32.1 节）。S6 的代码输入**不是**
+`3a2d737286723ecc399813bb4da8dfb40ffbe104` 本身，而是在其之上记录本闭合的 docs-only 提交（S5 Final Closure Docs Head）；该 Docs Head 经独立
+docs-only 闭合复查通过后，才正式成为 S6 Frozen Base（即 S6 “输入”中的 S5 Head）。
+
 ---
 
 ## S6 -- Synthetic / fault / concurrency gate + final handoff

@@ -1176,8 +1176,36 @@ PreflightIntegrityReason : SEAL_INVALID, CONSUMED, FINGERPRINT_MISMATCH
 | S2 | directory ownership + checkpoint/resume foundation | S2-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S3 | same-volume + cross-volume media transfer | S3-R2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S4 | artifact execution + retry verification | S4-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S5 | integrated single-item executor | S5-R2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
+| S5 | integrated single-item executor | S5 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD 3a2d737286723ecc399813bb4da8dfb40ffbe104 |
 | S6 | synthetic/fault/concurrency gate + final handoff | NOT STARTED |
+
+### 32.1 S5 闭合记录（治理记录，不改变第 1-31、33、34 节语义）
+
+```text
+S5 Final Reviewed Code Head : 3a2d737286723ecc399813bb4da8dfb40ffbe104
+Final Review                : P4-C7 S5-R2 INDEPENDENT INCREMENTAL LEVEL 1 CLOSURE REVIEW -- PASS
+Accepted Normative Docs     : S5-A1    2303b4fc07b14869bb8c1e179bea01e68e1e9a24
+                              S5-A2-R2 8f8f31c0892e077919f23e79d0475c0d4573ae95
+```
+
+闭合链（真实历史，保留失败阶段）：
+
+| 坐标 | 内容 | 结论 |
+|---|---|---|
+| ab11be702be2c46698870404d843d9b6be0bc028 | S5 原始代码 | 复查未通过（引出 S5-A1、P4-C7-S5-R-01） |
+| 2303b4fc07b14869bb8c1e179bea01e68e1e9a24 | S5-A1 合同修订（已验证 effect、U1 / U7 post-mkdir 归属失败、同源竞争边界） | ACCEPTED AS NORMATIVE BASIS |
+| fb9d5726835c3abbb42156f29dd954c7519d7edb | S5-A2 初版（仅 U2 的传输占用） | REVIEWED-FAILED（不足以保证最多一个最终目标） |
+| acd7bcf8cc824ac4d40ac8eed56f722097b0b5e1 | S5-A2-R1（跨 checkpoint 链的源所有权占用） | REVIEWED-FAILED（`ACTIVE` token 所有者匹配遗漏） |
+| 8f8f31c0892e077919f23e79d0475c0d4573ae95 | S5-A2-R2（`ACTIVE` / `RESERVED` / `POISONED`、token 所有者匹配、ABA 防护、同进程源所有权占用、跨进程边界） | ACCEPTED AS NORMATIVE BASIS |
+| a62473f2bd2d25fe3e7bbe14cc93718f53bae788 | S5-R1 综合代码修复 | REVIEWED-FAILED（引出 P4-C7-S5-R1-01） |
+| 3a2d737286723ecc399813bb4da8dfb40ffbe104 | S5-R2 代码修复（RESUME 占用冲突保持类型化 `PARTIAL(SOURCE_CHANGED)`） | PASS -- S5 最终代码基线 |
+
+S5 findings 最终状态：P4-C7-S5-R-01、S5-A1-CARRIED-01、P4-C7-S5-A2-R-01、P4-C7-S5-A2-R-02、P4-C7-S5-A2-R-03、
+P4-C7-S5-A2-R1-01、P4-C7-S5-R1-01 全部 **CLOSED**。
+
+S5 最终代码基线为上述 Final Reviewed Code Head；本闭合记录所在的 docs-only 提交是 S5 Final Closure Docs Head，
+经独立 docs-only 闭合复查通过后才成为 S6 Frozen Base。S6 不修改 S5 代码，除非 S6 门槛发现新的真实生产缺陷，
+并按施工计划单独形成修复提交与独立复查。
 
 ## 33. 延续项处理
 
