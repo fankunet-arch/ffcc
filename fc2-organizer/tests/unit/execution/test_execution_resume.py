@@ -43,6 +43,7 @@ from ._helpers import (
     file_state,
     inject,
     inject_p4c6,
+    isolated_source_claims,  # noqa: F401 -- autouse fixture: per-test claim registry isolation
     trap_mutations_allowing_reads,
     tree_layout,
     use_strategy,

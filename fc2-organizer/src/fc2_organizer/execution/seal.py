@@ -16,6 +16,12 @@
   rewritten with ``object.__setattr__`` (also to an unencodable value) or a model
   from another process never verifies.
 * :func:`register_consumption` -- process-local, lock-protected one-shot registry.
+* Source ownership claims (contract section 15.6, S5-A2 / S5-A2-R1 / S5-A2-R2) -- a private, process-local,
+  lock-protected registry keyed by a frozen source identity ``(device, inode)`` with the states ACTIVE(token),
+  RESERVED(checkpoint_id) and POISONED. Every read-verify-transition happens in ONE critical section of one
+  lock; every ownership change of ACTIVE requires the exact current token, and a RESERVED hand-over the exact
+  current checkpoint id (wrong / stale / duplicate credentials are no-ops that return ``False``). Tokens and
+  states never leave this module's registry and the executing call; nothing is exported or persisted.
 
 Standard library (``hashlib``, ``hmac``, ``secrets``, ``threading``) and this package only.
 """
@@ -232,3 +238,123 @@ def register_consumption(ids: tuple[str, ...]) -> bool:
 def is_consumed(item: str) -> bool:
     with _CONSUMED_LOCK:
         return item in _CONSUMED
+
+
+# --------------------------------------------------------------------------- source ownership claims (15.6)
+
+_CLAIM_ACTIVE = "active"
+_CLAIM_RESERVED = "reserved"
+_CLAIM_POISONED = "poisoned"
+# (device, inode) -> (state, credential): credential is the ACTIVE token or the RESERVED checkpoint id.
+_CLAIMS: dict[tuple[int, int], tuple[str, str | None]] = {}
+_CLAIMS_LOCK = threading.Lock()
+
+
+class ClaimIntegrityError(Exception):
+    """Private: an ownership transition the executing call owed did not take effect (contract section 15.6,
+    owner authorization item 5). Fixed wording only -- never a token, key, path or seal."""
+
+    def __init__(self) -> None:
+        super().__init__("source ownership claim transition did not take effect; execution stopped (fail closed)")
+
+
+def _claim_key(identity: EntryIdentity) -> tuple[int, int]:
+    if type(identity) is not EntryIdentity:
+        raise ExecutionModelError("a source ownership claim is keyed by an EntryIdentity")
+    return identity.device, identity.inode
+
+
+def claim_acquire(identity: EntryIdentity) -> str | None:
+    """No entry -> ACTIVE(fresh token); returns the token, or ``None`` (conflict: any existing state)."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        if key in _CLAIMS:
+            return None
+        token = secrets.token_hex(16)
+        _CLAIMS[key] = (_CLAIM_ACTIVE, token)
+        return token
+
+
+def claim_take_over(identity: EntryIdentity, checkpoint_id: str) -> str | None:
+    """RESERVED(checkpoint_id) -> ACTIVE(fresh token) for the lineage whose input checkpoint is the current
+    reservation owner; ``None`` for any other state or owner."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        if _CLAIMS.get(key) != (_CLAIM_RESERVED, checkpoint_id):
+            return None
+        token = secrets.token_hex(16)
+        _CLAIMS[key] = (_CLAIM_ACTIVE, token)
+        return token
+
+
+def claim_release(identity: EntryIdentity, token: str) -> bool:
+    """ACTIVE(token) -> no entry; any other state or token is a no-op (``False``)."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        if _CLAIMS.get(key) != (_CLAIM_ACTIVE, token):
+            return False
+        del _CLAIMS[key]
+        return True
+
+
+def claim_reserve(identity: EntryIdentity, token: str, checkpoint_id: str) -> bool:
+    """ACTIVE(token) -> RESERVED(checkpoint_id); any other state or token is a no-op (``False``)."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        if _CLAIMS.get(key) != (_CLAIM_ACTIVE, token):
+            return False
+        _CLAIMS[key] = (_CLAIM_RESERVED, checkpoint_id)
+        return True
+
+
+def claim_hand_over(identity: EntryIdentity, old_checkpoint_id: str, new_checkpoint_id: str) -> str:
+    """RESERVED(old) -> RESERVED(new). Returns ``"handed_over"``, ``"poisoned"`` (the lineage no longer owns
+    the key: nothing to hand over) or ``"mismatch"`` (any other state: registry unchanged)."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        current = _CLAIMS.get(key)
+        if current == (_CLAIM_RESERVED, old_checkpoint_id):
+            _CLAIMS[key] = (_CLAIM_RESERVED, new_checkpoint_id)
+            return "handed_over"
+        if current is not None and current[0] == _CLAIM_POISONED:
+            return "poisoned"
+        return "mismatch"
+
+
+def claim_poison_active(identity: EntryIdentity, token: str) -> bool:
+    """ACTIVE(token) -> POISONED; any other state or token is a no-op (``False``)."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        if _CLAIMS.get(key) != (_CLAIM_ACTIVE, token):
+            return False
+        _CLAIMS[key] = (_CLAIM_POISONED, None)
+        return True
+
+
+def claim_poison_reserved(identity: EntryIdentity, checkpoint_id: str) -> bool:
+    """RESERVED(checkpoint_id) -> POISONED; any other state or owner is a no-op (``False``)."""
+    key = _claim_key(identity)
+    with _CLAIMS_LOCK:
+        if _CLAIMS.get(key) != (_CLAIM_RESERVED, checkpoint_id):
+            return False
+        _CLAIMS[key] = (_CLAIM_POISONED, None)
+        return True
+
+
+def _claim_state_for_tests(identity: EntryIdentity) -> tuple[str, str | None] | None:
+    """TESTS ONLY: the private state of one key (never used by production code)."""
+    with _CLAIMS_LOCK:
+        return _CLAIMS.get(_claim_key(identity))
+
+
+def _claim_keys_for_tests() -> frozenset[tuple[int, int]]:
+    """TESTS ONLY: the keys currently present (to discard exactly what one test created)."""
+    with _CLAIMS_LOCK:
+        return frozenset(_CLAIMS)
+
+
+def _claim_discard_for_tests(keys: frozenset[tuple[int, int]]) -> None:
+    """TESTS ONLY: forget exactly these keys (test isolation; production never clears the registry)."""
+    with _CLAIMS_LOCK:
+        for key in keys:
+            _CLAIMS.pop(key, None)

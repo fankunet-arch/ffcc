@@ -69,6 +69,14 @@ from fc2_organizer.execution.models import (
 )
 from fc2_organizer.execution.paths import same_entry_name
 from fc2_organizer.execution.seal import (
+    ClaimIntegrityError,
+    claim_acquire,
+    claim_hand_over,
+    claim_poison_active,
+    claim_poison_reserved,
+    claim_release,
+    claim_reserve,
+    claim_take_over,
     content_sha256,
     is_consumed,
     issue_checkpoint,
@@ -308,6 +316,9 @@ _BLOCKER_FAILURE = {
     PreflightBlockReason.SOURCE_SIZE_MISMATCH: _K.SOURCE_CHANGED,
     PreflightBlockReason.SOURCE_INACCESSIBLE: _K.SOURCE_CHANGED,
     PreflightBlockReason.SOURCE_CHANGED: _K.SOURCE_CHANGED,
+    # Only the source snapshot reaches _first() with this reason (an unusable library root returns
+    # LIBRARY_ROOT_CHANGED before): the source can no longer be proven to be the frozen one (fail closed).
+    PreflightBlockReason.IDENTITY_UNAVAILABLE: _K.SOURCE_CHANGED,
     PreflightBlockReason.TARGET_DIRECTORY_EXISTS: _K.TARGET_CONFLICT,
     PreflightBlockReason.TARGET_DIRECTORY_INACCESSIBLE: _K.TARGET_DIRECTORY_CHANGED,
     PreflightBlockReason.TARGET_DIRECTORY_CHANGED: _K.TARGET_DIRECTORY_CHANGED,
@@ -380,6 +391,16 @@ class _Run:
         self.initial_count = len(self.effects)
         self.u2_mode: TransferMode | None = self.mode if self._has(EffectKind.MEDIA_PUBLISHED) else None
         self.requests = {(r.kind, r.ordinal): r for r in preflight.artifacts}  # the manifest's own objects
+        # Source ownership claim (contract section 15.6): the ACTIVE token this call holds, and -- for a
+        # RESUME of a lineage that published the media but has not removed the source -- the reservation
+        # owner the consumed input checkpoint may hold until this call hands it over or takes it over.
+        self.claim_token: str | None = None
+        self.reserving_checkpoint_id: str | None = (
+            checkpoint.checkpoint_id if checkpoint is not None and self._source_retained() else None)
+
+    def _source_retained(self) -> bool:
+        """MEDIA_PUBLISHED is recorded but SOURCE_REMOVED is not (a published, source-retaining lineage)."""
+        return self._has(EffectKind.MEDIA_PUBLISHED) and not self._has(EffectKind.SOURCE_REMOVED)
 
     def _has(self, kind: EffectKind) -> bool:
         return any(effect.kind is kind for effect in self.effects)
@@ -387,14 +408,26 @@ class _Run:
     # ------------------------------------------------------------------ driver
 
     def execute(self) -> ExecutionResult:
-        units = self.preflight.pending_units
-        failure = self._revalidate(units[0].step)
-        if failure is None:
-            for unit in units:
-                failure = self._run_unit(unit)
-                if failure is not None:
-                    break  # first failure: nothing after it runs (forward-only, no rollback)
-        return self._result(failure)
+        try:
+            units = self.preflight.pending_units
+            failure = self._revalidate(units[0].step)
+            if failure is None:
+                for unit in units:
+                    failure = self._run_unit(unit)
+                    if failure is not None:
+                        break  # first failure: nothing after it runs (forward-only, no rollback)
+            return self._result(failure)
+        except BaseException:
+            # Section 15.6: whether the media was published can no longer be proven -> POISONED (owner-matched;
+            # a no-op when this call does not own the key), then the same exception object propagates.
+            self._poison()
+            raise
+
+    def _poison(self) -> None:
+        if self.claim_token is not None:
+            claim_poison_active(self.source_identity, self.claim_token)
+        elif self.reserving_checkpoint_id is not None:
+            claim_poison_reserved(self.source_identity, self.reserving_checkpoint_id)
 
     def _run_unit(self, unit: ExecutionUnit) -> ExecutionFailure | None:
         step = unit.step
@@ -422,8 +455,19 @@ class _Run:
         return None
 
     def _u2(self) -> ExecutionFailure | None:
-        phase = (ResumePhase.SOURCE_REMOVAL_ONLY if self._has(EffectKind.MEDIA_PUBLISHED)
-                 else ResumePhase.FULL)
+        tail = self._has(EffectKind.MEDIA_PUBLISHED)
+        phase = ResumePhase.SOURCE_REMOVAL_ONLY if tail else ResumePhase.FULL
+        # Section 15.6 acquisition, only now (after U1, immediately before U2): no entry -> ACTIVE, or the
+        # source-removal tail takes over RESERVED(input checkpoint) -> ACTIVE. Anything else is a conflict.
+        if tail:
+            token = (None if self.reserving_checkpoint_id is None
+                     else claim_take_over(self.source_identity, self.reserving_checkpoint_id))
+        else:
+            token = claim_acquire(self.source_identity)
+        if token is None:
+            return ExecutionFailure(step=ExecutionStep.MOVE_MEDIA, kind=_K.SOURCE_CHANGED)
+        self.claim_token = token
+        self.reserving_checkpoint_id = None  # taken over: ACTIVE(token) now protects the source
         outcome = transfer_media(self.plan, self.source_identity, self.target_identity, self.mode,
                                  resume_phase=phase)
         self.effects.extend(outcome.effects)  # every effect that really happened, even with a failure
@@ -507,7 +551,7 @@ class _Run:
             # recorded, and no checkpoint may claim it; a later fresh preflight fails closed
             # (TARGET_DIRECTORY_EXISTS).
             status, checkpoint = ExecutionStatus.FAILED, None
-        return ExecutionResult(
+        result = ExecutionResult(
             status=status,
             preflight_id=preflight.preflight_id,
             mode=preflight.mode,
@@ -520,6 +564,31 @@ class _Run:
             media_sha256=media_sha256,
             skipped_steps=preflight.skipped_steps,
         )
+        self._settle_claim(checkpoint)  # the result is delivered only after the claim transition took effect
+        return result
+
+    def _settle_claim(self, checkpoint: ExecutionCheckpoint | None) -> None:
+        """Section 15.6 after the units: a published, source-retaining state is never released -- it is handed to
+        the NEW checkpoint (ACTIVE(token) -> RESERVED, or RESERVED(input) -> RESERVED); otherwise an ACTIVE claim
+        is released. Every owed transition must take effect (owner-matched) or the call fails closed."""
+        identity = self.source_identity
+        if self._source_retained():
+            if self.claim_token is not None:
+                if checkpoint is None or not claim_reserve(identity, self.claim_token, checkpoint.checkpoint_id):
+                    raise ClaimIntegrityError()
+            elif self.reserving_checkpoint_id is not None:
+                if checkpoint is None:
+                    raise ClaimIntegrityError()
+                outcome = claim_hand_over(identity, self.reserving_checkpoint_id, checkpoint.checkpoint_id)
+                if outcome == "mismatch":
+                    raise ClaimIntegrityError()
+                # "poisoned": this lineage no longer owns the key; nothing to hand over (fail closed stays).
+            else:
+                raise ClaimIntegrityError()  # a published, retained source must be protected by this lineage
+        elif self.claim_token is not None and not claim_release(identity, self.claim_token):
+            raise ClaimIntegrityError()
+        self.claim_token = None
+        self.reserving_checkpoint_id = None
 
     def _checkpoint(self, effects: tuple[CompletedEffect, ...],
                     leftovers: tuple[LeftoverTemporary, ...]) -> ExecutionCheckpoint:

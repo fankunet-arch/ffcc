@@ -15,6 +15,7 @@ from fc2_organizer.execution import _fs, execute_filesystem, preflight_execution
 from fc2_organizer.execution.models import CompletedEffect, EffectKind, PathRole
 from fc2_organizer.execution.seal import issue_checkpoint, manifest_fingerprint, plan_fingerprint
 from fc2_organizer.execution import executor
+from fc2_organizer.execution import seal as seal_module
 from fc2_organizer.execution.directories import create_extrafanart_directory, create_target_directory
 from fc2_organizer.materialization import ArtifactKind
 from fc2_organizer.materialization import atomic as p4c6_atomic
@@ -593,3 +594,34 @@ def spawn_worker(args: tuple[str, str, int]) -> str:
     plan = make_plan(library_root, source_path, extension=os.path.splitext(source_path)[1], size=size)
     result = execute_filesystem(preflight_execution(plan, make_manifest(plan, extra=2)))
     return result.status.value
+
+
+# --------------------------------------------------------------------------- S5-R1 helpers (source ownership claim)
+
+
+@pytest.fixture(autouse=True)
+def isolated_source_claims():
+    """The claim registry is process-global: forget exactly the keys this test created (never others)."""
+    before = seal_module._claim_keys_for_tests()
+    yield
+    seal_module._claim_discard_for_tests(seal_module._claim_keys_for_tests() - before)
+
+
+def claim_state(identity):
+    """TESTS ONLY: the private claim state of a source identity (``None`` when there is no entry)."""
+    return seal_module._claim_state_for_tests(identity)
+
+
+class TransferSpy:
+    """Counts the executor's transfer_media calls (optionally per source path) and passes them through."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, replacement=None) -> None:
+        self.calls: list[str] = []
+        real = executor.transfer_media
+        inner = replacement or real
+
+        def spy(plan, *args, **kwargs):
+            self.calls.append(plan.target_directory.absolute_path)
+            return inner(plan, *args, **kwargs)
+
+        monkeypatch.setattr(executor, "transfer_media", spy)

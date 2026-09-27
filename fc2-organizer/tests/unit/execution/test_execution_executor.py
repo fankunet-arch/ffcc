@@ -22,6 +22,7 @@ from fc2_organizer.execution import (
     ExecutionStatus,
     ExecutionStep,
     PlanGraphError,
+    PreflightBlockReason,
     PreflightIntegrityError,
     PreflightIntegrityReason,
     PreflightMode,
@@ -31,7 +32,8 @@ from fc2_organizer.execution import (
     preflight_execution,
 )
 from fc2_organizer.execution import _fs, executor, transfer
-from fc2_organizer.execution.seal import is_consumed, sealed
+from fc2_organizer.execution import seal as seal_module
+from fc2_organizer.execution.seal import ClaimIntegrityError, is_consumed, sealed
 from fc2_organizer.execution.validation import expected_effects
 from fc2_organizer.materialization import ArtifactKind, ArtifactWriteError, ArtifactWriteStage, MaterializationError
 
@@ -45,6 +47,8 @@ from ._helpers import (
     failing,
     inject,
     inject_p4c6,
+    isolated_source_claims,  # noqa: F401 -- autouse fixture: per-test claim registry isolation
+    lstat_rewriting,
     sha256_of_file,
     trap_every_filesystem_access,
     tree_layout,
@@ -390,6 +394,36 @@ class _MutationTrap:
         return op
 
 
+def test_source_identity_unavailable_at_execution_is_failed_source_changed(tmp_path, monkeypatch):
+    # S5-R-01: the ready preflight snapshotted the source; at execution time the source is still a regular file
+    # but reports no usable identity (st_ino == 0 -> SnapshotRefused(REFUSED_IDENTITY_UNAVAILABLE)).
+    s, preflight = _ready(tmp_path, extra=1)
+    inject(monkeypatch, lstat=lstat_rewriting(s.source_path, st_ino=0))
+    assert isinstance(_fs.snapshot(s.source_path), _fs.SnapshotRefused)
+    trap = _MutationTrap(monkeypatch)
+    units = UnitInterrupter(monkeypatch)
+    result = execute_filesystem(preflight)  # a typed result, never a KeyError
+    assert result.status is ExecutionStatus.FAILED and result.failure is not None
+    assert result.failure.kind is F.SOURCE_CHANGED and result.failure.step is ExecutionStep.CREATE_DIRECTORY
+    assert result.completed_effects == () and result.new_effect_count == 0 and result.checkpoint is None
+    assert units.calls == [] and trap.calls == []  # no unit, no mkdir / rename / link / unlink / materialize
+    _untouched(s)
+    assert is_consumed(preflight.preflight_id)  # consumption happened before the revalidation; never undone
+    with pytest.raises(PreflightIntegrityError) as info:
+        execute_filesystem(preflight)
+    assert info.value.reason is PreflightIntegrityReason.CONSUMED
+    assert_source_not_lost(s.source_path, s.plan.target_media_path.absolute_path, _sha(MEDIA))
+
+
+def test_identity_unavailable_blocker_maps_to_source_changed_only():
+    mapping = executor._BLOCKER_FAILURE
+    assert mapping[PreflightBlockReason.IDENTITY_UNAVAILABLE] is F.SOURCE_CHANGED
+    assert set(mapping) == set(PreflightBlockReason)  # every blocker the revalidation can report is typed
+    assert mapping[PreflightBlockReason.SOURCE_MISSING] is F.SOURCE_MISSING
+    assert mapping[PreflightBlockReason.TARGET_DIRECTORY_EXISTS] is F.TARGET_CONFLICT
+    assert mapping[PreflightBlockReason.LIBRARY_ROOT_MISSING] is F.LIBRARY_ROOT_CHANGED
+
+
 def test_directory_create_failure_is_failed(tmp_path, monkeypatch):
     s, preflight = _ready(tmp_path)
     inject(monkeypatch, mkdir=failing(PermissionError(errno.EACCES, "denied")))
@@ -576,3 +610,70 @@ def test_s4r1_unknown_leftovers_oserror_propagates_without_a_result(tmp_path, mo
     assert info.value is exc
     assert is_consumed(preflight.preflight_id)
     assert_source_not_lost(s.source_path, s.plan.target_media_path.absolute_path, _sha(MEDIA))
+
+
+# --------------------------------------------------------------------------- S5-R1: ownership integrity (15.6 item 5)
+
+
+def _foreign_owner(key_identity, name):
+    """Wraps an executor claim transition so that, just before it runs, another owner holds the key: the
+    owner-matched primitive then really fails (a genuine token / lineage mismatch, not a stubbed False)."""
+    real = getattr(executor, name)
+    other = "f" * 32
+
+    def transition(identity, *args):
+        with seal_module._CLAIMS_LOCK:
+            seal_module._CLAIMS[(identity.device, identity.inode)] = ("active", other)
+        return real(identity, *args)
+
+    return transition, other
+
+
+def _link_unlink_failing(monkeypatch, source):
+    monkeypatch.setattr(transfer, "_SAME_VOLUME_STRATEGY", "link")
+    real = _fs._FS.unlink
+    inject(monkeypatch, unlink=lambda p: (_ for _ in ()).throw(PermissionError(errno.EACCES, "busy"))
+           if p == source else real(p))
+
+
+def test_reserve_that_does_not_take_effect_fails_closed(tmp_path, monkeypatch):
+    s, preflight = _ready(tmp_path)
+    _link_unlink_failing(monkeypatch, s.source_path)
+    transition, other = _foreign_owner(preflight.source_identity, "claim_reserve")
+    monkeypatch.setattr(executor, "claim_reserve", transition)
+    with pytest.raises(ClaimIntegrityError):
+        execute_filesystem(preflight)  # never a PARTIAL whose reservation silently failed
+    key = (preflight.source_identity.device, preflight.source_identity.inode)
+    assert seal_module._CLAIMS[key] == ("active", other)  # registry unchanged by our (stale) poison attempt
+    assert_source_not_lost(s.source_path, s.plan.target_media_path.absolute_path, _sha(MEDIA))
+
+
+def test_release_that_does_not_take_effect_fails_closed(tmp_path, monkeypatch):
+    s, preflight = _ready(tmp_path)
+    transition, other = _foreign_owner(preflight.source_identity, "claim_release")
+    monkeypatch.setattr(executor, "claim_release", transition)
+    with pytest.raises(ClaimIntegrityError) as info:
+        execute_filesystem(preflight)  # never claims SUCCESS when its release did not happen
+    assert "f" * 32 not in str(info.value) and s.source_path not in str(info.value)
+    key = (preflight.source_identity.device, preflight.source_identity.inode)
+    assert seal_module._CLAIMS[key] == ("active", other)
+
+
+def test_reservation_hand_over_that_does_not_take_effect_fails_closed(tmp_path, monkeypatch):
+    s, preflight = _ready(tmp_path)
+    _link_unlink_failing(monkeypatch, s.source_path)
+    first = execute_filesystem(preflight)
+    cp1 = first.checkpoint
+    Path(s.plan.target_directory.absolute_path, "late").write_bytes(b"x")
+    resume = preflight_execution(s.plan, s.artifacts, cp1)
+    assert not resume.ready
+    Path(s.plan.target_directory.absolute_path, "late").unlink()
+    resume = preflight_execution(s.plan, s.artifacts, cp1)
+    Path(s.plan.target_directory.absolute_path, "late").write_bytes(b"x")  # revalidation will fail (PARTIAL)
+    transition, other = _foreign_owner(cp1.source_identity, "claim_hand_over")
+    monkeypatch.setattr(executor, "claim_hand_over", transition)
+    with pytest.raises(ClaimIntegrityError):
+        execute_filesystem(resume)
+    key = (cp1.source_identity.device, cp1.source_identity.inode)
+    assert seal_module._CLAIMS[key] == ("active", other)
+    assert is_consumed(cp1.checkpoint_id)

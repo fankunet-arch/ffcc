@@ -9,9 +9,12 @@
   used by RESUME preflight (contract section 14.3).
 
 Returned values, never raised: ``(EntryIdentity, None)`` on success, ``(None, ExecutionFailure)`` otherwise.
-A failure with ``stage is TransferStage.PUBLISH_VERIFY`` means the exclusive ``mkdir`` itself SUCCEEDED
-(the directory now exists: a final effect happened) but its post-``mkdir`` snapshot is not a real, owned
-directory; every other failure means nothing was created. Nothing here ever deletes, renames or adopts an
+A failure with ``stage is TransferStage.PUBLISH_VERIFY`` means the exclusive ``mkdir`` syscall returned
+success but the post-``mkdir`` ownership verification could not establish a trusted identity (not a real,
+non-link directory with a usable identity). Contract sections 8 / 21 / 22 (S5-A1): no
+``TARGET_DIRECTORY_CREATED`` / ``EXTRAFANART_DIRECTORY_CREATED`` effect is recorded and no identity is forged;
+at U1 there is then no verified effect (``FAILED``), at U7 the earlier verified prefix makes it ``PARTIAL``.
+Every other failure means the ``mkdir`` did not succeed. Nothing here ever deletes, renames or adopts an
 existing entry: ownership grants no removal right (contract section 21).
 
 ``mkdir`` is reached only through :func:`_mkdir_exclusive` (architecture test). Standard library ``os``
@@ -99,7 +102,7 @@ def _create_exclusive(path: str, step: ExecutionStep,
 
     created = _fs.snapshot(path)
     if isinstance(created, OSError) or created.entry_type is not EntryType.DIRECTORY:
-        # mkdir succeeded (effect happened) but the entry is no longer an owned real directory.
+        # The mkdir syscall succeeded but ownership cannot be verified: no effect is recordable (S5-A1).
         return _failure(step, ExecutionFailureKind.TARGET_DIRECTORY_CHANGED, stage=TransferStage.PUBLISH_VERIFY)
     return created, None
 

@@ -557,7 +557,18 @@ def test_executor_reaches_only_read_only_seam_helpers():
 def test_executor_translates_only_materialization_errors_and_never_chains():
     tree = _tree(EXEC_SRC_ROOT / "executor.py")
     handlers = [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]
-    assert handlers and all(isinstance(h.type, ast.Name) and h.type.id == "MaterializationError" for h in handlers)
+    materialization = [h for h in handlers if isinstance(h.type, ast.Name) and h.type.id == "MaterializationError"]
+    fatal = [h for h in handlers if isinstance(h.type, ast.Name) and h.type.id == "BaseException"]
+    assert materialization and len(materialization) + len(fatal) == len(handlers)
+    # S5-R1 (contract section 15.6): exactly one `except BaseException`, in _Run.execute, that only poisons the
+    # owned source claim and re-raises the same object (bare `raise`); it never builds a result or checkpoint.
+    execute = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "execute"
+                   and any(h in fatal for h in ast.walk(n)))
+    assert len(fatal) == 1 and fatal[0].name is None
+    body = fatal[0].body
+    assert len(body) == 2 and isinstance(body[1], ast.Raise) and body[1].exc is None
+    assert isinstance(body[0], ast.Expr) and getattr(body[0].value.func, "attr", None) == "_poison"
+    assert execute is not None
     for node in ast.walk(tree):
         if isinstance(node, ast.Raise):
             assert node.cause is None, node.lineno
