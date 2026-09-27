@@ -8,7 +8,11 @@ Branch         = claude/phase4-c8-batch-orchestration
 规范合同       = docs/specifications/PHASE4_BATCH_ORCHESTRATION_CONTRACT.md
 E0 建立时状态 = P4-C8 E0 ESTABLISHED — INDEPENDENT REVIEW REQUIRED；S1-S6 NOT STARTED（历史快照，非当前状态）
 当前状态       = 以合同第 38 节“实现状态”为准
+E0-R1          = 闭合 P4-C8-E0-R-01 / R-02 / R-03（批级 BatchOutcome、资源硬限制、S1 治理特例）；REMEDIATED — INDEPENDENT REVIEW REQUIRED
 ```
+
+E0-R1 修订范围（本计划）：第 0.4 节状态行规则（S1 特例 + S2-S6 通用模板）；E0 表；S1、S2、S4、S5、S6 的交付 / 测试 /
+门槛中与批级结果和资源硬限制直接相关的条目；最终 integrated gate；附录 A、B。S1-S6 的总体功能分工不变，没有新增批次。
 
 本计划在 E0 一次性冻结 P4-C8 的全部施工批次。之后的开发**只能执行本计划**：不得重新设计下一批，不得调整批次边界，
 不得把本计划或合同中的任何设计项推迟到“开发时再决定”。凡本计划或合同未写明的实现细节（内部 helper 命名、测试 fixture、
@@ -23,8 +27,8 @@ E0 建立时状态 = P4-C8 E0 ESTABLISHED — INDEPENDENT REVIEW REQUIRED；S1-S
 
 ### 0.1 Git 纪律
 
-* 每一批开始前验证：`HEAD == origin/claude/phase4-c8-batch-orchestration == 上一批被复查接受的 Head`（S1 的输入是 E0 被复查
-  接受的 Head），工作区干净（只允许未跟踪的 `.claude/`）。
+* 每一批开始前验证：`HEAD == origin/claude/phase4-c8-batch-orchestration == 上一批被复查接受的 Head`（S1 的输入是 E0-R1
+  或其后续修复轮次被复查接受的 Head，即 E0 Final Accepted Docs Head），工作区干净（只允许未跟踪的 `.claude/`）。
 * 禁止 rebase、amend、squash、force push、改写已复查的历史。只追加新提交。
 * 每一批结束时 push，并记录 Head SHA。
 * 除本计划明确列出的文件外，不得修改任何文件。
@@ -74,8 +78,19 @@ Co-Authored-By: ...
 S6 另有一个 docs 提交（HANDOFF）。批次内修正缺陷只能作为新提交 `fix(orchestration): ... (P4-C8 S<n>)` 追加并在 message 中说明；
 复查 FAIL 后的修复轮次为 `fix(orchestration): ... (P4-C8 S<n>-R<k>)`。
 
-合同第 38 节状态行的更新规则：每一批的提交把**上一批**的行改为 `S<n-1> ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD <sha>`
-（SHA 来自其独立复查结论），把**本批**的行改为 `S<n> IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`；除此之外不改动合同。
+合同第 38 节状态行的更新规则（E0-R1 冻结；除此之外任何批次都不改动合同）：
+
+* **S1 特例（只适用于 S1）**：S1 的输入是 E0-R1（或其后续修复轮次）被独立复查 ACCEPTED 的 Head。S1 的代码提交恰好修改
+  第 38 节的两行：
+  1. `E0` 行改为 `E0 ACCEPTED / CLOSED — FINAL REVIEWED DOCS HEAD <E0-R1 被接受的 SHA>`（SHA 来自 E0-R1 closure review 结论）；
+  2. `S1` 行改为 `S1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`；
+  并同步第 38 节末尾状态块中与之直接对应的行（`P4-C8 E0` 改为 `ACCEPTED / CLOSED`、`P4-C8 S1 Input` 改为该 SHA、
+  `P4-C8 Implementation` 改为 `IN PROGRESS`；三个 E0 finding 行改为 `CLOSED`——仅当 closure review 结论已如此判定）。
+  不存在 “S0”：S1 不写、不创建任何 `S0` 行或引用。
+* **S2-S6 通用模板（只适用于 S2-S6）**：S<n> 的代码提交把**上一批**的行改为
+  `S<n-1> ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD <sha>`（SHA 来自其独立复查结论），把**本批**的行改为
+  `S<n> IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`。
+* 任何批次都不得把本批写成 ACCEPTED / CLOSED；复查修复轮次（`S<n>-R<k>`）只更新本批行的文字（例如注明 R<k>），不改动其他行。
 
 ### 0.5 通用测试辅助（S1 创建，之后各批只追加）
 
@@ -124,7 +139,19 @@ tests/unit/orchestration/_helpers.py
 | 测试 | 无新增测试；运行 `tests/contract` 与全量一次以证明 docs-only（`177 passed` / `5227 passed, 40 skipped`）；`git diff --check` 干净 |
 | 验收标准 | `git diff --name-status 586f92f..HEAD` 恰好两行 `A`；正文简体中文；无未决技术决策；状态为 `P4-C8 E0: ESTABLISHED — INDEPENDENT REVIEW REQUIRED` |
 | commit | `docs(orchestration): establish P4-C8 batch orchestration contract and construction plan`（父提交 = Frozen Base） |
-| 复查 | P4-C8 E0 Independent Architecture / Contract Review；PASS 后 E0 Head 成为 S1 输入 |
+| 复查 | P4-C8 E0 Independent Architecture / Contract Review：原始候选 `0f2188f` 结论 FAIL（P4-C8-E0-R-01、R-02、R-03） |
+
+E0-R1（docs-only remediation）：
+
+| 项 | 内容 |
+|---|---|
+| 输入 / 父提交 | `0f2188f5444b0f7c6293607db0132dae0297ee34` |
+| 允许改动文件 | 同上两份文档（只修改，`M`） |
+| 交付 | 合同：批级 `BatchOutcome`（第 11.5 节）、资源硬限制（第 19.6 节）及其直接受影响的 API / 错误 / 配置 / 测试章节；本计划：第 0.4 节治理规则与各批直接受影响的条目 |
+| 测试 | `tests/contract` 与全量各一次（`177 passed` / `5227 passed, 40 skipped, 0 failed`）；`git diff --check 0f2188f..HEAD` 干净 |
+| 验收标准 | `git diff --name-status 0f2188f..HEAD` 恰好两行 `M`；其余已 PASS 的设计不变；三个 finding 状态为 `REMEDIATED — REVIEW REQUIRED` |
+| commit | `docs(orchestration): close P4-C8 E0 architecture findings (P4-C8 E0-R1)` |
+| 复查 | P4-C8 E0-R1 Incremental Architecture / Contract Closure Review；PASS 后该 E0-R1 Head 成为 E0 Final Accepted Docs Head 与 S1 输入 |
 
 ---
 
@@ -132,7 +159,8 @@ tests/unit/orchestration/_helpers.py
 
 ### 输入
 
-E0 被接受的 Head；合同第 4-14、20.1、25.1、34 节。
+E0-R1（或其后续修复轮次）被独立复查 ACCEPTED 的 Head（E0 Final Accepted Docs Head）；合同第 4-14（含 11.5）、19.6.1、
+20.1、25.1、34 节。
 
 ### 允许改动文件
 
@@ -156,6 +184,7 @@ tests/unit/orchestration/test_orchestration_retry_kind_table.py
 tests/unit/orchestration/test_orchestration_cancellation_token.py
 tests/unit/orchestration/test_orchestration_consumption.py
 tests/unit/orchestration/test_orchestration_recognition.py
+tests/unit/orchestration/test_orchestration_batch_outcome.py
 ```
 
 修改（合同第 34.3 节授权的最小守卫更新，每处只改所列内容）：
@@ -167,25 +196,30 @@ tests/contract/test_publication_architecture.py     顶层 package 集合 + "orc
 tests/contract/test_nfo_architecture.py             顶层 package 集合 + "orchestration"（一行）
 tests/contract/test_execution_architecture.py       反向依赖守卫豁免 orchestration 目录；新增 test_orchestration_consumes_only_the_bare_execution_package
 tests/contract/test_materialization_architecture.py 反向依赖守卫豁免 orchestration 目录；新增 test_orchestration_consumes_only_bare_materialization_and_mapping
-合同第 38 节 S1 状态行
+合同第 38 节 E0 状态行 + S1 状态行（及末尾状态块中对应行），按第 0.4 节 S1 特例
 ```
 
 ### 禁止范围
 
-`stages.py`、`preview.py`、`execute.py`、`retry.py`、`orchestrator.py`（后续批次创建）；任何网络 / 文件系统访问；summary 模型（S5）。
+`stages.py`、`preview.py`、`execute.py`、`retry.py`、`orchestrator.py`（后续批次创建）；任何网络 / 文件系统访问；summary 模型（S5）；
+创建或引用任何 `S0` 状态行。
 
 ### 接口范围（本批导出）
 
 `OrchestrationConfig`、`CancellationToken`、`BatchPreview`、`ItemPreview`、`PreviewState`、`BatchExecutionResult`、`ItemExecution`、
-`ExecutionDisposition`、`RetryMaterial`、`RetryKind`、`OrchestrationStage`、`IssueReason`、`ItemIssue`、`ItemWarning`、四个常量、
-八个错误类。
+`ExecutionDisposition`、`BatchOutcome`、`RetryMaterial`、`RetryKind`、`OrchestrationStage`、`IssueReason`、`ItemIssue`、`ItemWarning`、
+`ResourceLimitReason`、八个常量（`DEFAULT_IMAGE_IN_FLIGHT_ITEMS`、`MAX_IMAGE_IN_FLIGHT_ITEMS`、`DEFAULT_FILESYSTEM_WORKERS`、
+`MAX_FILESYSTEM_WORKERS`、`MAX_BATCH_ITEMS`、`MAX_ITEM_IMAGE_BYTES`、`DEFAULT_MAX_RETAINED_ARTIFACT_BYTES`、
+`MAX_RETAINED_ARTIFACT_BYTES_LIMIT`）、九个错误类（含 `OrchestrationResourceLimitError`）。
 
 ### 实现要求
 
-1. `errors.py`：合同第 7.4 节层次；固定措辞；只 import `__future__`。
+1. `errors.py`：合同第 7.4 节层次（含 `OrchestrationResourceLimitError` 与其 `.reason`、固定消息格式）；固定措辞；
+   只 import `__future__`（`ResourceLimitReason` 由 `models.py` 定义；`errors.py` 只保存传入的 reason 对象，不 import models）。
 2. `models.py`：
-   * 第 10.1 节全部枚举（成员名与值逐字一致）；
-   * `OrchestrationConfig`（第 9 节）；
+   * 第 10.1 节全部枚举（成员名与值逐字一致，含 `BatchOutcome`、`ResourceLimitReason`）；
+   * `OrchestrationConfig`（第 9 节，含 `max_retained_artifact_bytes`）与第 9 节全部常量；
+   * `BatchExecutionResult.outcome`：第 11.5 节算法的只读派生属性（不存储字段）；
    * `ItemIssue` 与第 10.2 节组合表（逐行强制）；
    * `ItemPreview`、`BatchPreview`、`RetryMaterial`、`ItemExecution`、`BatchExecutionResult` 与第 10.3-10.7 节全部不变量、
      派生显示属性、三种结果形态；`preview_id` / `result_id` 只能是 32 位小写 hex，`repr=False`；
@@ -195,7 +229,8 @@ tests/contract/test_materialization_architecture.py 反向依赖守卫豁免 orc
 3. `cancellation.py`：第 10.8 节；只 import `__future__`、`threading`。
 4. `_consumption.py`：三个进程内一次性登记表（preview 执行、结果重试、重试结果合并），各自一个 `threading.Lock` 保护的
    `set[str]`，提供原子的 check-and-register 与只读查询；不导出；不持久化。
-5. `recognition.py`：输入容器与元素校验 + 快照（第 8 节，至多 10 个下标 + 总数）；番号识别（第 14.1 节，
+5. `recognition.py`：输入容器与元素校验 + 快照（第 8 节，至多 10 个下标 + 总数；快照后、元素校验前的
+   `MAX_BATCH_ITEMS` 检查 -> `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)`，第 19.6.1 节）；番号识别（第 14.1 节，
    `os.path.basename` + `normalize_fc2_number`）；Phase A 冲突分组（第 14.2 节，输出按 index 升序，`conflict_with` 为升序并集，
    同源优先）。纯函数，零网络、零文件系统。
 6. 架构测试（第 34.1 节中适用于本批模块的全部条目，模块集合 = 本批六个模块）与六处守卫更新（第 34.3 节）。
@@ -204,20 +239,22 @@ tests/contract/test_materialization_architecture.py 反向依赖守卫豁免 orc
 
 | 文件 | 覆盖 |
 |---|---|
-| `test_orchestration_errors.py` | 层次与基类；消息固定、不含敏感文本；不链接 |
-| `test_orchestration_config.py` | 默认值；范围边界（0 / 1 / 上限 / 上限 + 1）；`bool`、`float`、`int` 子类、`BatchConfig` 子类被拒绝；不可变 |
+| `test_orchestration_errors.py` | 层次与基类；消息固定、不含敏感文本；不链接；`OrchestrationResourceLimitError` 的 `.reason` 与两种固定消息 |
+| `test_orchestration_config.py` | 默认值；范围边界（0 / 1 / 上限 / 上限 + 1）；`bool`、`float`、`int` 子类、`BatchConfig` 子类被拒绝；不可变；`max_retained_artifact_bytes` 的 0 / 1 / `MAX_RETAINED_ARTIFACT_BYTES_LIMIT` / 上限 + 1 / `bool`；八个常量的冻结值（`MAX_BATCH_ITEMS == 2000 >= 500`、`MAX_ITEM_IMAGE_BYTES == 64 MiB`、默认 2 GiB、上限 16 GiB） |
+| `test_orchestration_batch_outcome.py` | 合同第 11.5 节真值表逐行：每种条目类别单独成批、“全部为某类”九种、空结果、`S` 与每种非 `S` 类混合、`P` 与每种类别混合、`ABORTED` 与 `S` 混合；三种结果形态；纯函数（重复求值相等、相同条目序列的不同结果对象相等）；`outcome` 不是 dataclass 字段 |
 | `test_orchestration_models.py` | 第 10.2 节组合表逐行正反例；`ItemPreview` / `BatchPreview` / `ItemExecution` / `BatchExecutionResult` 每条不变量一正一反；显示属性（有 / 无 plan、有 / 无 preflight、manifest 缺 poster 等）；三种结果形态互斥；`object.__setattr__` 改写后的对象能被第 18.1 节第 3 步重新检查识别（提供 `revalidate()` 形式的内部校验入口并测试）；类名提取对恶意 metaclass / `__name__` / 非标识符 / 超长名称返回 `"UnknownType"` 且不运行其代码 |
 | `test_orchestration_retry_kind_table.py` | 第 25.1 节判定表逐行（含 `PREFLIGHT_REJECTED`、`CHECKPOINT_REJECTED`、冲突 -> `NONE`）；`retry_material` 存在性与 checkpoint 身份规则 |
 | `test_orchestration_cancellation_token.py` | 单向、幂等；多线程并发 `cancel()` / 读取；不是 asyncio 取消 |
 | `test_orchestration_consumption.py` | 每个登记表：首次登记成功、重复登记失败；多线程竞争恰好一个成功；查询不登记 |
-| `test_orchestration_recognition.py` | 容器规则（list / tuple 接受；str / bytes / set / frozenset / dict / 生成器 / 迭代器 / `None` 拒绝）；元素严格类型（子类、钩子零调用）；快照；空输入；Phase 1 语法用例（`FC2-PPV-1234567`、`FC2PPV1234567`、`[广告]FC2PPV-1234567.mp4`、`xxx@FC2PPV-1234567.mkv`、无番号、父目录有番号而文件名无番号 -> 不识别、两个番号取第一个）；Phase A：同番号不同文件、同一对象两次、Windows 大小写不同的同一路径（仅 `os.name == "nt"`）、三方组、同时属于同源与同目标组、`conflict_with` 升序并集 |
-| `test_orchestration_architecture.py` | 第 34.1 节适用条目；本批公开导出集合精确相等；六处守卫更新后的既有测试全部通过 |
+| `test_orchestration_recognition.py` | 容器规则（list / tuple 接受；str / bytes / set / frozenset / dict / 生成器 / 迭代器 / `None` 拒绝）；元素严格类型（子类、钩子零调用）；快照；空输入；Phase 1 语法用例（`FC2-PPV-1234567`、`FC2PPV1234567`、`[广告]FC2PPV-1234567.mp4`、`xxx@FC2PPV-1234567.mkv`、无番号、父目录有番号而文件名无番号 -> 不识别、两个番号取第一个）；Phase A：同番号不同文件、同一对象两次、Windows 大小写不同的同一路径（仅 `os.name == "nt"`）、三方组、同时属于同源与同目标组、`conflict_with` 升序并集；条目数：`MAX_BATCH_ITEMS` 个（直接构造的极小 `DiscoveredMediaItem`，不申请大内存）接受、`MAX_BATCH_ITEMS + 1` -> `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)` 且先于元素校验 |
+| `test_orchestration_architecture.py` | 第 34.1 节适用条目（含 E0-R1 资源常量 / `outcome` 规则）；本批公开导出集合精确相等；六处守卫更新后的既有测试全部通过 |
 
 ### 验收标准（gate）
 
 * 目标测试、`tests/contract`、全量均 `0 failed`；全量 passed 数高于基线 `5227`。
 * 新 package 的静态扫描：零私有下层模块引用、零文件系统 / 网络 / 持久化 import。
 * 既有测试除六处授权守卫外零改动（`git diff --name-status` 核对）。
+* 合同只改动第 38 节 E0 行、S1 行及末尾状态块对应行（第 0.4 节 S1 特例）；没有 `S0`。
 * `git diff --check` 干净。
 
 ### commit
@@ -226,7 +263,8 @@ tests/contract/test_materialization_architecture.py 反向依赖守卫豁免 orc
 
 ### 复查
 
-S1 Independent Review（范围 E0 Head..S1 Head）；重点：模型不变量完整性、`ItemIssue` 组合表、`retry_kind` 表、守卫更新的最小性。
+S1 Independent Review（范围 E0 Final Accepted Docs Head..S1 Head）；重点另含：`BatchOutcome` 真值表、资源常量与条目数上限、
+S1 治理特例的执行；重点：模型不变量完整性、`ItemIssue` 组合表、`retry_kind` 表、守卫更新的最小性。
 
 ---
 
@@ -234,7 +272,7 @@ S1 Independent Review（范围 E0 Head..S1 Head）；重点：模型不变量完
 
 ### 输入
 
-S1 被接受的 Head；合同第 7.2、7.3、12-17、19.1、19.2、20.2、21、22 节。
+S1 被接受的 Head；合同第 7.2、7.3、12-17、19.1、19.2、19.6、20.2、21、22 节。
 
 ### 允许改动文件
 
@@ -250,6 +288,7 @@ tests/unit/orchestration/test_orchestration_preview.py
 tests/unit/orchestration/test_orchestration_preview_no_mutation.py
 tests/unit/orchestration/test_orchestration_preview_concurrency.py
 tests/unit/orchestration/test_orchestration_preview_fatal.py
+tests/unit/orchestration/test_orchestration_preview_resources.py
 ```
 
 修改：
@@ -272,7 +311,8 @@ tests/unit/orchestration/_fakes.py、_helpers.py（追加）
 
 ### 实现要求
 
-1. `orchestrator.py`：构造校验（第 7.2 节；`BatchConfigError` 翻译为 `OrchestrationConfigError`，不链接）；构造一个复用的
+1. `orchestrator.py`：构造校验（第 7.2 节；`BatchConfigError` 翻译为 `OrchestrationConfigError`，不链接；E0-R1：解析后的
+   `image_policy.max_total_bytes > MAX_ITEM_IMAGE_BYTES` -> `OrchestrationConfigError`）；构造一个复用的
    `BatchScheduler`；忙碌守卫（第 7.3 节，`threading.Lock` + 标志，busy-first，`finally` 释放）；`preview` 委托 `preview.py`。
 2. `stages.py`：第 15.2 节六个阶段各一个同步函数，返回“成功产物或 `ItemIssue`”；普通 `Exception` -> 对应原因
    （`error_type` 用 S1 的类名 helper，`detail` 用 S1 的 `.reason` helper）；非 `Exception` 的 `BaseException` 不捕获；
@@ -280,7 +320,11 @@ tests/unit/orchestration/_fakes.py、_helpers.py（追加）
 3. `preview.py`：第 15.1 节九步顺序；metadata 阶段只调用 `scheduler.run(numbers)`（即使为空）；第 11.3 节映射；图片阶段
    `min(K, n)` 个 worker（第 19.2 节，准入检查 `stopping` 与驱动任务的新取消请求；私有、不读取元数据的致命载体；
    `asyncio.TaskGroup`）；第 5、7 步同步内联；组装 generation 0 的 `BatchPreview`。
-4. 公开 `BatchOrchestrator` 之后，`__init__` 导出集合 = S1 集合 + `BatchOrchestrator`。
+4. （E0-R1）`preview.py` 中调用局部的保留预算账本（合同第 19.6.2-19.6.6 节）：第 5 步每个 NFO 立即计入 `4 * len(nfo_text)`；
+   第 6 步经串行化准入门（`asyncio.Condition`）按 index 升序预约 `R`、完成时转为实际 `images.total_bytes`；无进行中调用仍不满足
+   -> 停止准入、取消并 await 全部 worker、抛出 `OrchestrationResourceLimitError(RETAINED_BYTES_LIMIT)`；`total_bytes > R` 的违约
+   结果按第 19.6.4 节处理；账本对象可由测试替身只读观测（私有属性，不导出）。preview 的其余语义（第 15-17 节）不变。
+5. 公开 `BatchOrchestrator` 之后，`__init__` 导出集合 = S1 集合 + `BatchOrchestrator`。
 
 ### 测试矩阵
 
@@ -292,10 +336,12 @@ tests/unit/orchestration/_fakes.py、_helpers.py（追加）
 | `test_orchestration_preview_no_mutation.py` | 第 16 节：全部修改性 API 拦截（含 `execute_filesystem` / `materialize_*`）命中 0 次 + 正向对照证明拦截有效 + 前后树快照相等；覆盖 READY / 阻断 / 冲突 / 各阶段失败混合的批次 |
 | `test_orchestration_preview_concurrency.py` | metadata 峰值 ≤ M 且足够条目时 == M；图片峰值 ≤ K 且 == K；`K = 1` 严格串行；存活图片任务 `O(K)`（对照：朴素“每条一任务”实现被检测出）；以事件反转 engine / 图片完成顺序后确定性投影相等 |
 | `test_orchestration_preview_fatal.py` | 调用方取消（metadata 阶段、图片阶段）：`CancelledError` 传播、worker 被 await、无孤儿任务、零修改；engine / 图片 client / 同步阶段抛出 `KeyboardInterrupt`、`SystemExit`、`GeneratorExit`、自定义 `BaseException`、自行 `CancelledError` -> 原始对象（身份）、不返回 preview、此后不再准入、orchestrator 恢复空闲；恶意元数据致命异常不被读取 |
+| `test_orchestration_preview_resources.py`（E0-R1） | 合同第 35 节 “resource limits” 行中适用于 preview 的全部条目：构造时 `image_policy.max_total_bytes` 等于 / 超过 `MAX_ITEM_IMAGE_BYTES`；`MAX_BATCH_ITEMS` / `+ 1` 经 `preview` 端到端（engine / client 调用 0 次、零修改）；小预算 `B_exact` 接受、`B_exact - 1` -> `RETAINED_BYTES_LIMIT`；NFO 计量超限时图片请求 0 次；`K = 4` 而 `B` 只容纳 2 个预约时峰值 `<= 2`、观测账本始终 `<= B`；失败 index 在反转完成顺序与 `K ∈ {1, 2, 4}` 下相同；无进行中调用时立即失败（不挂起，看门狗）；违约替身 `total_bytes > R` -> `IMAGE_ACQUISITION_ERROR`；超限后不返回 preview、orchestrator 恢复空闲、错误不链接且消息不含路径 / URL；全部使用小配置，不申请大内存 |
 
 ### 验收标准（gate）
 
 * 目标 / contract / 全量 `0 failed`，passed 数不低于 S1。
+* （E0-R1）资源测试全部通过：条目数与字节预算边界精确、预约准入下账本从不超过 `B`、结论与完成顺序无关。
 * 零修改测试：拦截命中 0、正向对照命中 > 0、树快照相等。
 * 结构性：`execute_filesystem` / `materialize_*` 名称在 package 中出现 0 次（S2 尚无 `execute.py`）。
 * 并发峰值与对照测试通过。
@@ -421,7 +467,9 @@ summary（S5）。
 
 ### 实现要求
 
-1. 第 25.4 节十二步顺序；登记在最后（原子 check-and-register；已登记则丢弃产物并抛 `OrchestrationConsumedError`）。
+1. 第 25.4 节顺序（含 E0-R1 第 7a 步：按合同第 19.6.7 节计入保留材料字节，超限 -> `OrchestrationResourceLimitError`、不登记
+   previous；`METADATA_REFETCH` 恢复的条目复用 `preview.py` 的账本与准入门）；登记在最后（原子 check-and-register；已登记则丢弃
+   产物并抛 `OrchestrationConsumedError`）。
 2. 第 25.3 节 metadata 重试：`scheduler.retry_failed` + `apply_retry`；`retry.indices` 与 `METADATA_REFETCH` 条目位置集合的一致性检查；
    对恢复的条目从 PLANNING 重新执行第 15.2 节阶段（复用 `preview.py` 的图片阶段与组合 helper）。
 3. 保留材料条目：按第 25.1 节表调用 `preflight_execution(plan, artifacts, checkpoint=...)`（经 `stages.py`）；
@@ -434,7 +482,7 @@ summary（S5）。
 
 | 文件 | 覆盖 |
 |---|---|
-| `test_orchestration_preview_retry.py` | 五种 `RetryKind` 各自的 preview_retry 产物（retry_origin、preflight mode：`RESUME` 为 RESUME 模式、其余为 FRESH / 原 checkpoint）；scope：`None`（解析后存储）、单一种类、组合、空集合、含 `NONE` / 非 frozenset / 子类 -> `OrchestrationInputError`；`previous` 非完整结果（重试轮结果）-> `OrchestrationInputError`；配置不一致；从同一结果第二次 `preview_retry` -> `OrchestrationConsumedError`；preview_retry 中途致命 / 取消后同一结果仍可重试（登记在最后）；零修改（第 16 节拦截 + 树快照）；metadata 重试一致性被破坏（伪造账本）-> `OrchestrationIntegrityError`；保留材料条目零网络调用（engine / client 计数为 0）；D 类：已消费 checkpoint -> `CHECKPOINT_REJECTED`（`detail CONSUMED`）且之后 `NONE` |
+| `test_orchestration_preview_retry.py` | 五种 `RetryKind` 各自的 preview_retry 产物（retry_origin、preflight mode：`RESUME` 为 RESUME 模式、其余为 FRESH / 原 checkpoint）；scope：`None`（解析后存储）、单一种类、组合、空集合、含 `NONE` / 非 frozenset / 子类 -> `OrchestrationInputError`；`previous` 非完整结果（重试轮结果）-> `OrchestrationInputError`；配置不一致；从同一结果第二次 `preview_retry` -> `OrchestrationConsumedError`；preview_retry 中途致命 / 取消后同一结果仍可重试（登记在最后）；零修改（第 16 节拦截 + 树快照）；metadata 重试一致性被破坏（伪造账本）-> `OrchestrationIntegrityError`；保留材料条目零网络调用（engine / client 计数为 0）；D 类：已消费 checkpoint -> `CHECKPOINT_REJECTED`（`detail CONSUMED`）且之后 `NONE`；（E0-R1）保留材料计量：小预算下恰好容纳时接受、少 1 字节 -> `RETAINED_BYTES_LIMIT`、previous 未被登记、放宽预算的新 orchestrator（配置其余部分相等）可再次 `preview_retry`；`METADATA_REFETCH` 条目的 NFO / 图片计量与 preview 相同；重试轮结果与合并结果的 `outcome` 与合同第 11.5 节一致 |
 | `test_orchestration_merge.py` | 合法合并：被重试 index 替换、其余同一对象、generation、新 `result_id`、metadata 账本；拒绝：类型错误、previous 非完整、retry 非重试轮、`base_result_id` 不符（包括形状完全相同的另一结果）、lineage 不符、generation 过期 / 重放、index 集合不符（多 / 少 / 顺序）、`media_item` 不是同一对象、配置不符、metadata 账本 lineage / generation 不符 -> `OrchestrationRetryError` / `OrchestrationIntegrityError`，均不返回内容；第二次合并同一重试结果 -> `OrchestrationConsumedError` |
 | `test_orchestration_retry_chain.py` | 合同第 25.1 节 A-E：A `FAILED`（U1 前注入）-> 清除注入 -> `FRESH_REEXECUTE` -> `SUCCESS`；A' 窄例外（替身模拟 mkdir 后归属校验失败留下目录）-> fresh preflight `TARGET_DIRECTORY_EXISTS` -> 如实报告、不删除；B `PARTIAL`（`SOURCE_UNLINK_FAILED`、artifact 写入失败、`TARGET_DIRECTORY_FSYNC_FAILED` 策略接缝）-> `RESUME` -> `SUCCESS`，已完成 artifact 的 inode / mtime 不变、媒体未被重新移动、effect 单调增长；C preflight 阻断 -> 测试移除阻断物 -> `PREFLIGHT_RECHECK` -> `SUCCESS`，阻断未移除时继续 `PREFLIGHT_BLOCKED` 且阻断物字节不变；D checkpoint 已被别处消费 -> `CHECKPOINT_REJECTED`；E 模拟“进程退出”（丢弃全部结果、新 orchestrator 对同一文件重新 preview）-> 带部分 effect 的条目为 `PREFLIGHT_BLOCKED` / `PREFLIGHT_REJECTED`，零修改；metadata：失败 -> 重试成功 -> 执行 `SUCCESS`，重试仍失败 -> 可再次重试，Phase 3 账本 generation 与失败下标一致；`DEFERRED`：`NOT_SELECTED` 与 `CANCELLED`（含 RESUME 模式的未执行 preflight，用原 checkpoint 重新 preflight）-> `SUCCESS`；多代链 g0 -> g1 -> g2 -> g3，每代 `merge_retry`；“未执行即重试”组合路径（第 25.5 节） |
 
@@ -494,7 +542,9 @@ tests/unit/orchestration/test_orchestration_fault_injection.py
 ### 实现要求
 
 1. 第 28 节全部字段与恒等式；`stage_counts` 按 `OrchestrationStage` 声明顺序列出全部阶段。
-2. `__init__.__all__` 与合同第 7.1 节逐项相等。
+2. `__init__.__all__` 与合同第 7.1 节逐项相等（含 E0-R1 新增的 `BatchOutcome`、`ResourceLimitReason`、四个资源常量、
+   `OrchestrationResourceLimitError`）。
+3. （E0-R1）`BatchExecutionResult.outcome` 已在 S1 实现；本批以第 28.4 节恒等式把它与 summary 交叉验证（不改变其算法）。
 3. 若本批测试发现 S1-S4 的生产缺陷：按 0.4 节以 `fix(orchestration): ... (P4-C8 S5)` 独立提交，只改相关文件 + 回归测试，
    不改变合同语义，并在 commit message 与 S6 HANDOFF 中记录。
 
@@ -502,7 +552,7 @@ tests/unit/orchestration/test_orchestration_fault_injection.py
 
 | 文件 | 覆盖 |
 |---|---|
-| `test_orchestration_summary.py` | 每个字段的定义；第 28.2 节全部恒等式在所有 disposition × `ExecutionStatus` × `RetryKind` 组合的生成批次（确定性枚举，而非随机）上成立；`PARTIAL` 永不计入 `success`；`ABORTED` 永不计入 `success` / `failed` / `retryable`；preview summary 恒等式；`stage_counts` 顺序与总和 |
+| `test_orchestration_summary.py` | 每个字段的定义；第 28.2 节全部恒等式在所有 disposition × `ExecutionStatus` × `RetryKind` 组合的生成批次（确定性枚举，而非随机）上成立；`PARTIAL` 永不计入 `success`；`ABORTED` 永不计入 `success` / `failed` / `retryable`；preview summary 恒等式；`stage_counts` 顺序与总和；（E0-R1）同一批生成批次上第 28.4 节 `outcome` ⇔ summary 三条恒等式全部成立，并覆盖主结果、重试轮结果、合并结果三种形态；公开 API 精确集合含 E0-R1 新增名称 |
 | `test_orchestration_determinism.py` | 同一混合批次（全部阶段的成功与失败）运行两次、以事件反转 engine / 图片 / 执行完成顺序、`M/K/W` 取不同值：确定性投影与 summary 逐项相等；重试集合顺序；`warnings` / `conflict_with` 顺序 |
 | `test_orchestration_race.py` | 同一 preview 两个线程同时 `execute`（barrier）-> 恰好一个运行、另一个 `OrchestrationConsumedError`、零重复 `execute_filesystem`；两个 orchestrator 在同一进程并发执行重叠条目（各自的 preview）-> 每个源最多一个 `SUCCESS`、失败者为 P4-C7 类型化失败 / 阻断、源不丢失、非本执行条目不变；hardlink / 同文件两次 / 重叠根目录（同一目录经两个根发现）-> 冲突阻断；preview 之后 execute 之前：源改写 / 删除 / 目标被植入 / library root 被替换为 junction -> 类型化失败或阻断，从不执行另一件事；两个线程同时对同一结果 `preview_retry`（不同 orchestrator）-> 恰好一个成功；同一重试结果并发 `merge_retry` -> 恰好一个成功 |
 | `test_orchestration_integration.py` | 真实 `discover_media` 扫描脏目录（嵌套、Unicode、大小写扩展名、伴随文件）-> preview -> execute -> 最终库目录精确列举与字节、NFO 与 P4-C4 渲染一致、图片与 P4-C5 结果一致、extrafanart 命名；library root 缺失 / 是 junction；运行时阻断 `amane` / `requests` / `sqlite3` / `shelve` / `dbm` / `pickle` 下的端到端运行 |
@@ -559,7 +609,12 @@ tests/unit/orchestration/_fakes.py、_helpers.py（追加）
    H 10 / I 10，组成静态断言）；主轮与 g1-g4 的全部期望计数（由分组表静态推导）；`M = K = W = 4` 的峰值断言；每次 preview /
    preview_retry 的零修改；每轮后全部 500 条的核心不变量；RESUME 不重写已完成 effect；最终库目录精确列举；无临时残留
    （leftover 名称精确）；全新 `tmp_path` 中以反转完成顺序重跑一次，投影与每轮 summary 相等。
-2. 非空洞性检查（不提交）：合同第 35.1 节 (a)-(e) 五种生产变异，每种都必须使门槛失败；记录失败用例数后撤销，工作区恢复干净
+   （E0-R1）另含：合同第 35.1 节 `outcome` 表的九个断言（主结果 `PARTIAL`；g1 / g3 重试轮 `SUCCESS`；g2 重试轮 `PARTIAL`；
+   g4 重试轮 `FAILED`；g1-g4 合并结果与最终结果均为 `PARTIAL`）；门槛在默认资源配置下运行（只覆盖 `W = 4`），主 preview 与
+   每个 `preview_retry` 都不得触发 `OrchestrationResourceLimitError`；资源边界子门槛（`MAX_BATCH_ITEMS` / `+ 1`、`B_exact` /
+   `B_exact - 1`、并发预约峰值与账本 `<= B`、完成顺序无关），全部使用小配置。
+2. 非空洞性检查（不提交）：合同第 35.1 节 (a)-(h) 八种生产变异（其中 (f)(g) 为资源控制变异、(h) 为 outcome 变异，必须在行为层
+   而不是只靠 AST 使门槛失败），每种都必须使门槛失败；记录失败用例数后撤销，工作区恢复干净
    （恢复后以 `git hash-object --no-filters` 与 HEAD blob 比对确认）。
 3. `docs/review/P4_C8_HANDOFF.md`（简体中文）：坐标（Frozen Base、E0 Head、S1-S6 Heads、Code Review Candidate、Docs Head、
    Code Review Range 与 Docs Review Range）；变更文件清单；合同各节 -> 实现 / 测试映射；测试数字（目标 / contract / 全量 / skip
@@ -576,7 +631,8 @@ tests/unit/orchestration/_fakes.py、_helpers.py（追加）
 ### 验收标准（gate）
 
 * 门槛、contract、全量 `0 failed`；skip 逐项说明。
-* 五种变异全部被门槛杀死（失败用例数记录在 HANDOFF）。
+* 八种变异（(a)-(h)）全部被门槛在行为层杀死（失败用例数记录在 HANDOFF）。
+* （E0-R1）九个 `outcome` 断言与资源边界子门槛全部通过；默认资源配置下 500-item 门槛完整运行。
 * Code Review Candidate（测试提交）与 Docs Head（HANDOFF 提交，只含 HANDOFF 与合同第 38 节状态行）分离。
 
 ### commit
@@ -598,7 +654,8 @@ P4-C8 的闭合门槛 = 以下全部同时成立：
 
 1. S1-S6 每一批都有独立复查 PASS 结论（合同第 38 节逐行 `ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD <sha>`）；
 2. 合同第 35 节测试矩阵的每一类都有对应测试文件且在 S6 Head 上 `0 failed`；
-3. 第 35.1 节 500-item 门槛全部断言通过，五种变异全部被杀死；
+3. 第 35.1 节 500-item 门槛全部断言通过（含 E0-R1 的 `outcome` 断言与资源边界子门槛，默认资源配置），(a)-(h) 八种变异
+   全部被杀死；
 4. 全量测试 `0 failed`，passed 数不低于 S5；
 5. 生产代码对下层私有模块零引用、零直接文件系统修改、零持久化 / 诊断输出（架构测试）；
 6. P4-C1..P4-C7 的生产代码、合同、HANDOFF 零改动（`git diff --name-status 586f92f..<S6 Docs Head>` 核对：只有
@@ -635,17 +692,18 @@ S6 的 Code Review Candidate 与 Docs Head 都**不是** P4-C9 Frozen Base。P4-
 | 5-6 模块与依赖 | S1（守卫 + 部分模块），S2-S5 追加 |
 | 7 公开 API | S1（部分）、S2（`BatchOrchestrator.preview`）、S3（`execute`）、S4（`preview_retry`、`merge_retry`）、S5（最终集合） |
 | 8-10 类型 / 配置 / 模型 | S1（summary 在 S5） |
-| 11 状态映射 | S1（枚举与不变量）、S2（metadata 映射）、S3（disposition） |
+| 11 状态映射 | S1（枚举与不变量；E0-R1 11.5 `BatchOutcome` 与 `outcome` 属性）、S2（metadata 映射）、S3（disposition）、S5（outcome × summary 恒等式）、S6（outcome 门槛断言） |
 | 12-14 身份 / 顺序 / 识别与冲突 | S1（Phase A）、S2（Phase B） |
 | 15-17 preview / 零修改 / 与 preflight 的关系 | S2 |
 | 18 execution | S3 |
 | 19 并发 | S2（图片）、S3（执行）、S5（回归） |
+| 19.6 资源硬限制（E0-R1） | S1（常量、配置、条目数上限、错误）、S2（构造时单条上限、保留预算账本与预约准入）、S4（preview_retry 计量）、S6（资源边界子门槛与变异 (f)(g)） |
 | 20 隔离与致命 | S2（preview）、S3（execute） |
 | 21-22 失败映射 / 图片部分获取 | S2、S3 |
 | 23-24 PARTIAL / checkpoint | S3（产生）、S4（重试） |
 | 25-26 retry / merge | S1（判定表）、S4 |
 | 27 取消 | S2（asyncio）、S3（token） |
-| 28 汇总 | S5 |
+| 28 汇总 | S5（含 28.4 outcome 一致性） |
 | 29 确定性 | S2-S5（逐批），S5（集中），S6（门槛） |
 | 30-33 安全 / P4-C7 委托 / P4-C9 边界 / 持久化 | S1（AST），S2-S6（行为） |
 | 34 架构测试 | S1-S5 |
@@ -663,5 +721,8 @@ S6 的 Code Review Candidate 与 Docs Head 都**不是** P4-C9 Frozen Base。P4-
 | P3 | 守卫更新集中在 S1 | 第一批就引入对 execution / materialization 的依赖，后续批次不再触碰既有测试 |
 | P4 | 每批更新合同第 38 节状态行（上一批 ACCEPTED + 本批 IMPLEMENTED） | 治理状态始终单一来源 |
 | P5 | S6 禁止生产改动，缺陷修复必须独立提交 | Code Review Candidate 与门槛证据可分离审计 |
+| P6 | （E0-R1）S1 状态行治理特例：更新 E0 行（FINAL REVIEWED DOCS HEAD）+ S1 行；S2-S6 使用通用模板；不存在 S0 | 消除通用模板在 S1 上产生的不存在的 “S0”，并授权 S1 修改 E0 行 |
+| P7 | （E0-R1）`outcome` 在 S1 实现（模型属性），S5 交叉验证，S6 门槛断言 | 它只依赖 S1 已有的条目模型；不新增批次 |
+| P8 | （E0-R1）资源常量 / 配置 / 条目数上限归 S1，账本与预约准入归 S2（`preview.py`），重试计量归 S4 | 按现有模块职责归属，不新增模块或批次 |
 
 无需项目所有者决定的外部业务问题。
