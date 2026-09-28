@@ -23,6 +23,7 @@ from fc2_organizer.orchestration import (
     IssueReason as R_,
     OrchestrationConfig,
     OrchestrationConfigError,
+    OrchestrationIntegrityError,
     OrchestrationResourceLimitError,
     PreviewState as S,
     ResourceLimitReason,
@@ -443,3 +444,154 @@ def test_caller_cancellation_releases_every_reservation(tmp_path, monkeypatch):
     ledger = _TransitionLedger.instances[-1]
     assert ledger.reserved == 0 and [e[0] for e in ledger.events] == ["release", "release"]
     assert orchestrator._busy is False
+
+
+# =========================================================================== S2-R2: ledger "always" invariant
+
+
+class _LedgerTracer:
+    """Test-only ``sys.settrace`` observer: inside every ``_Ledger`` method it records the ledger state after
+    each executed line (and at return), i.e. every state the object ever holds mid-transition."""
+
+    def __init__(self) -> None:
+        self.states: list[tuple[int, int, int]] = []  # (charged, reserved, limit)
+        functions = [v for v in vars(preview_module._Ledger).values() if callable(v)]
+        functions += [v.fget for v in vars(preview_module._Ledger).values() if isinstance(v, property)]
+        self.codes = {f.__code__ for f in functions if hasattr(f, "__code__")}
+
+    def _record(self, frame) -> None:
+        ledger = frame.f_locals.get("self")
+        if isinstance(ledger, preview_module._Ledger):
+            try:
+                state = object.__getattribute__(ledger, "_state")
+            except AttributeError:
+                return  # inside __init__, before the first state exists
+            charged, reserved = state
+            self.states.append((charged, reserved, ledger.limit))
+
+    def _local(self, frame, event, arg):
+        if event in ("line", "return"):
+            self._record(frame)
+        return self._local
+
+    def _global(self, frame, event, arg):
+        if event == "call" and frame.f_code in self.codes:
+            return self._local
+        return None
+
+    def __enter__(self):
+        import sys
+
+        self._previous = sys.gettrace()
+        sys.settrace(self._global)
+        return self
+
+    def __exit__(self, *exc):
+        import sys
+
+        sys.settrace(self._previous)
+        return False
+
+    def assert_always_within_limit(self) -> None:
+        assert self.states, "the tracer observed nothing"
+        for charged, reserved, limit in self.states:
+            assert charged >= 0 and reserved >= 0 and charged + reserved <= limit, (charged, reserved, limit)
+
+
+def _ledger(limit: int, charged: int = 0, reserved: int = 0):
+    ledger = preview_module._Ledger(limit)
+    if charged:
+        assert ledger.charge(charged)
+    if reserved:
+        assert ledger.try_reserve(reserved)
+    return ledger
+
+
+def test_ledger_state_is_one_indivisible_pair_with_read_only_views():
+    ledger = _ledger(100, 10, 20)
+    assert preview_module._Ledger.__slots__ == ("limit", "_state")
+    assert type(ledger._state) is tuple and ledger._state == (10, 20)
+    assert (ledger.charged, ledger.reserved) == (10, 20)
+    for name in ("charged", "reserved"):
+        descriptor = vars(preview_module._Ledger)[name]
+        assert isinstance(descriptor, property) and descriptor.fset is None
+        with pytest.raises(AttributeError):
+            setattr(ledger, name, 0)
+    assert ledger._state == (10, 20)
+
+
+def test_reserve_success_and_failure_leave_valid_states():
+    ledger = _ledger(100, 30)
+    with _LedgerTracer() as tracer:
+        assert ledger.try_reserve(70) is True  # exactly at the limit
+        assert ledger.try_reserve(1) is False  # does not fit: unchanged
+        assert ledger.try_reserve(0) is False and ledger.try_reserve(True) is False
+    assert ledger._state == (30, 70)
+    tracer.assert_always_within_limit()
+
+
+def test_nfo_charge_success_and_over_limit_leave_the_state_unchanged():
+    ledger = _ledger(100)
+    with _LedgerTracer() as tracer:
+        assert ledger.charge(60) is True
+        assert ledger.charge(41) is False  # would exceed: refused, nothing written
+        assert ledger.charge(-1) is False
+    assert ledger._state == (60, 0)
+    tracer.assert_always_within_limit()
+
+
+def test_release_transition():
+    ledger = _ledger(100, 10, 50)
+    with _LedgerTracer() as tracer:
+        ledger.release(50)
+    assert ledger._state == (10, 0)
+    tracer.assert_always_within_limit()
+
+
+def test_convert_at_a_full_ledger_is_one_step_without_over_limit_or_uncovered_states():
+    r, actual, charged = 40, 25, 60
+    ledger = _ledger(charged + r, charged, r)  # L == limit before the conversion
+    before = ledger._state
+    with _LedgerTracer() as tracer:
+        ledger.convert(r, actual)
+    after = ledger._state
+    assert before == (charged, r) and after == (charged + actual, 0)
+    tracer.assert_always_within_limit()
+    # every state the object held during the transition is the complete old one or the complete new one
+    assert {(c, res) for c, res, _ in tracer.states} <= {before, after}
+
+
+def test_double_release_fails_closed():
+    ledger = _ledger(100, 0, 30)
+    ledger.release(30)
+    with pytest.raises(OrchestrationIntegrityError) as info:
+        ledger.release(30)
+    assert info.value.__context__ is None and ledger._state == (0, 0)
+
+
+def test_actual_above_the_reservation_fails_closed():
+    ledger = _ledger(100, 0, 30)
+    with pytest.raises(OrchestrationIntegrityError):
+        ledger.convert(30, 31)
+    assert ledger._state == (0, 30)
+
+
+def test_converting_more_than_is_reserved_fails_closed():
+    ledger = _ledger(100, 0, 20)
+    with pytest.raises(OrchestrationIntegrityError):
+        ledger.convert(30, 10)
+    with pytest.raises(OrchestrationIntegrityError):
+        ledger.release(30)
+    assert ledger._state == (0, 20)
+
+
+def test_every_ledger_state_of_a_tight_preview_stays_within_the_budget(tmp_path, monkeypatch):
+    corpus = Corpus(tmp_path, _films(4))
+    nfo = _nfo_charges(corpus, monkeypatch)
+    r = 3 * A
+    budget = sum(nfo) + 2 * r  # two reservations fit at a time
+    with _LedgerTracer() as tracer:
+        preview = run(corpus.orchestrator(image_policy=_policy(r), config=_config(budget, k=4)).preview(corpus.items))
+    assert all(i.state is S.READY for i in preview.items)
+    tracer.assert_always_within_limit()
+    assert max(c + res for c, res, _ in tracer.states) <= budget

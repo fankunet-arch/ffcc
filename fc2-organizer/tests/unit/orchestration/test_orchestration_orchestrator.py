@@ -392,22 +392,172 @@ def test_hostile_metaclass_never_runs():
     assert hooks.calls == []
 
 
-def test_non_function_shapes_are_rejected():
-    class StaticGet:
-        get = staticmethod(_async_get)
+def test_shapes_that_are_not_provably_callable_are_rejected():
+    class NotCallable:
+        pass
 
-    class CallableGet:
-        get = ScriptedImageClient()  # a callable object, not a function
+    class ObjectGet:
+        get = NotCallable()  # an object without __call__
 
     class SyncAggregate:
         def aggregate(self, number):  # pragma: no cover
             return None
 
-    for client in (StaticGet(), CallableGet()):
+    class SyncCallable:
+        def __call__(self, number):  # pragma: no cover
+            return None
+
+    class SyncCallableAggregate:
+        def __init__(self) -> None:
+            self.aggregate = SyncCallable()
+
+    class UnboundClassmethod:
+        def __init__(self) -> None:
+            self.get = classmethod(_async_get)  # a classmethod object in the instance dict is not callable
+
+    for client in (ObjectGet(), UnboundClassmethod(), type("IntGet", (), {"get": 3})()):
         with pytest.raises(OrchestrationConfigError):
             BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
+    for engine in (SyncAggregate(), SyncCallableAggregate()):
+        with pytest.raises(OrchestrationConfigError):
+            BatchOrchestrator(engine, ScriptedImageClient(), LIBRARY)
+
+
+def test_call_behind_a_custom_descriptor_is_rejected_unrun():
+    hooks = _Hooks()
+
+    class CallAsDescriptor:
+        __call__ = _CountingDescriptor("__call__", hooks)
+
+    client = type("C", (), {})()
+    client.get = CallAsDescriptor()
+    engine = type("E", (), {})()
+    engine.aggregate = CallAsDescriptor()
     with pytest.raises(OrchestrationConfigError):
-        BatchOrchestrator(SyncAggregate(), ScriptedImageClient(), LIBRARY)
+        BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
+    with pytest.raises(OrchestrationConfigError):
+        BatchOrchestrator(engine, ScriptedImageClient(), LIBRARY)
+    assert hooks.calls == []
+
+
+# ---- S2-R2 (P4-C8-S2-R1-01): every contract-legal callable shape is accepted, and first runs in preview
+
+
+def _delegating_engines(inner):
+    """Engines whose ``aggregate`` is each legal shape, all delegating to ``inner.aggregate``."""
+    calls: list[str] = []
+
+    async def record(number):
+        calls.append(number)
+        return await inner.aggregate(number)
+
+    class MethodEngine:
+        async def aggregate(self, number):
+            return await record(number)
+
+    class StaticEngine:
+        @staticmethod
+        async def aggregate(number):
+            return await record(number)
+
+    class ClassEngine:
+        @classmethod
+        async def aggregate(cls, number):
+            return await record(number)
+
+    class AsyncCallable:
+        async def __call__(self, number):
+            return await record(number)
+
+    class CallableEngine:
+        def __init__(self) -> None:
+            self.aggregate = AsyncCallable()
+
+    class InstanceFunctionEngine:
+        def __init__(self) -> None:
+            self.aggregate = record
+
+    return calls, {"method": MethodEngine(), "staticmethod": StaticEngine(), "classmethod": ClassEngine(),
+                   "async callable object": CallableEngine(), "instance function": InstanceFunctionEngine()}
+
+
+def _delegating_clients(inner):
+    calls: list[str] = []
+
+    def record(url, **kwargs):
+        calls.append(url)
+        return inner.get(url, **kwargs)  # a coroutine: acquire_images awaits it
+
+    class MethodClient:
+        async def get(self, url, **kwargs):
+            return await record(url, **kwargs)
+
+    class StaticClient:
+        @staticmethod
+        def get(url, **kwargs):
+            return record(url, **kwargs)
+
+    class ClassClient:
+        @classmethod
+        def get(cls, url, **kwargs):
+            return record(url, **kwargs)
+
+    class SyncCallable:
+        def __call__(self, url, **kwargs):
+            return record(url, **kwargs)
+
+    class CallableClient:
+        def __init__(self) -> None:
+            self.get = SyncCallable()
+
+    return calls, {"method": MethodClient(), "staticmethod": StaticClient(), "classmethod": ClassClient(),
+                   "callable object": CallableClient()}
+
+
+@pytest.mark.parametrize("shape", ["method", "staticmethod", "classmethod", "async callable object",
+                                   "instance function"])
+def test_every_legal_aggregate_shape_is_accepted_and_runs_only_in_preview(tmp_path, shape):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    calls, engines = _delegating_engines(corpus.engine)
+    orchestrator = BatchOrchestrator(engines[shape], corpus.client, str(corpus.library))
+    assert calls == [] and corpus.engine.calls == []  # construction ran no engine code
+    preview = run(orchestrator.preview(corpus.items))
+    assert calls == ["FC2-1000001"] and preview.items[0].issue is None
+
+
+@pytest.mark.parametrize("shape", ["method", "staticmethod", "classmethod", "callable object"])
+def test_every_legal_get_shape_is_accepted_and_runs_only_in_preview(tmp_path, shape):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    calls, clients = _delegating_clients(corpus.client)
+    orchestrator = BatchOrchestrator(corpus.engine, clients[shape], str(corpus.library))
+    assert calls == [] and corpus.client.calls == []  # construction ran no client code
+    preview = run(orchestrator.preview(corpus.items))
+    assert calls and calls == corpus.client.calls and preview.items[0].issue is None
+
+
+def test_builtin_callable_get_is_accepted():
+    class BuiltinGet:
+        get = len  # a builtin function: callable, never bound
+
+    assert BatchOrchestrator(ScriptedEngine(), BuiltinGet(), LIBRARY).library_root == LIBRARY
+
+
+def test_callable_object_with_hostile_getattribute_runs_no_hook():
+    hooks = _Hooks()
+
+    class Hostile:
+        async def __call__(self, number):  # pragma: no cover
+            return None
+
+        def __getattribute__(self, attribute):
+            hooks.calls.append(attribute)
+            return object.__getattribute__(self, attribute)
+
+    engine = type("E", (), {})()
+    engine.aggregate = Hostile()
+    hooks.calls.clear()
+    BatchOrchestrator(engine, ScriptedImageClient(), LIBRARY)
+    assert hooks.calls == []
 
 
 class _CountingEngine(ScriptedEngine):

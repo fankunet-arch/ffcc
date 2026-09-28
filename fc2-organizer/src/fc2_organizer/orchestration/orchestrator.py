@@ -8,9 +8,11 @@ orchestrator's lifetime; the engine and the image client belong to the caller (n
 Constructor shape checks never run caller code (S2-R1, finding P4-C8-S2-R-01): ``engine.aggregate`` and
 ``image_client.get`` are resolved *statically* (the class namespaces along the C-level MRO and the instance
 ``__dict__`` read through the standard getset descriptor only; no ``getattr`` / ``hasattr``, so no property,
-descriptor ``__get__``, ``__getattr__`` or ``__getattribute__`` hook runs) and must be a plain function or a
-bound method (``aggregate`` a coroutine function). Anything else -- a property, a custom descriptor, a
-``__getattr__``-only attribute -- is an ``OrchestrationConfigError``. The caller's engine is then wrapped in a
+descriptor ``__get__``, ``__getattr__`` or ``__getattribute__`` hook runs) and classified statically: a
+function / method, ``staticmethod`` / ``classmethod``, a builtin, or a callable object (its type's static
+``__call__``) is accepted (``aggregate`` must be provably async, as the Phase 3 boundary requires; S2-R2,
+finding P4-C8-S2-R1-01). A property, a custom descriptor or a ``__getattr__``-only attribute cannot be
+classified without running it and is an ``OrchestrationConfigError``. The caller's engine is then wrapped in a
 private adapter, so the Phase 3 ``BatchScheduler`` inspects P4-C8's own ``aggregate`` and the caller's code
 first runs inside ``scheduler.run`` (the metadata stage); ``image_client.get`` first runs inside
 ``acquire_images`` (the image stage).
@@ -38,6 +40,8 @@ _TYPE_MRO = type.__dict__["__mro__"]  # C-level getters: never consult a metacla
 _TYPE_NAMESPACE = type.__dict__["__dict__"]
 _GETSET_DESCRIPTOR = type(_TYPE_NAMESPACE)
 _CO_COROUTINE = 0x80  # code flag of an ``async def``
+_COROUTINE_MARKER = "_is_coroutine_marker"  # set by inspect.markcoroutinefunction (Python 3.12)
+_MAX_DEPTH = 4
 
 
 def _plain_function() -> None:
@@ -51,6 +55,9 @@ class _BoundProbe:
 
 _FUNCTION = type(_plain_function)
 _BOUND_METHOD = type(_BoundProbe().method)
+_BUILTIN_FUNCTION = type(len)  # also the type of a bound builtin method (e.g. ``[].append``)
+_SLOT_WRAPPER = type(_TYPE_NAMESPACE.__get__(object, type)["__init__"])  # C-level ``__call__`` of builtin types
+_FUNCTION_DICT = _TYPE_NAMESPACE.__get__(_FUNCTION, type)["__dict__"]
 
 
 def _class_attribute(cls: type, name: str) -> object:
@@ -61,37 +68,82 @@ def _class_attribute(cls: type, name: str) -> object:
     return _MISSING
 
 
-def _static_attribute(obj: object, name: str) -> object:
-    """``obj.<name>`` resolved without running any caller code (the non-executing equivalent of
-    ``inspect.getattr_static`` for the two shapes accepted here). Returns ``_MISSING`` when the attribute
-    exists only through a hook, and the raw class attribute (never its ``__get__`` result) otherwise."""
+def _has_class_attribute(cls: type, name: str) -> bool:
+    return _class_attribute(cls, name) is not _MISSING
+
+
+def _static_attribute(obj: object, name: str) -> tuple[object, bool]:
+    """``obj.<name>`` resolved without running any caller code -- the non-executing equivalent of
+    ``inspect.getattr_static`` (contract section 6 allows no ``inspect`` import). Returns ``(raw, bound)``:
+    ``raw`` is the stored object (never a ``__get__`` result), ``bound`` tells whether normal attribute access
+    would bind it (it came from the class) or not (the instance ``__dict__``). ``(_MISSING, False)`` when the
+    attribute exists only through a hook (``__getattr__`` / ``__getattribute__``) or the instance dict itself
+    sits behind an untrusted hook. Precedence follows normal lookup: class data descriptor, instance
+    ``__dict__``, class attribute."""
     cls = type(obj)
     class_value = _class_attribute(cls, name)
-    if class_value is not _MISSING and type(class_value) is not _FUNCTION:
-        return class_value  # property / descriptor / other object: returned raw, rejected by the caller
+    if class_value is not _MISSING and (_has_class_attribute(type(class_value), "__set__")
+                                        or _has_class_attribute(type(class_value), "__delete__")):
+        return class_value, True  # a data descriptor (e.g. a property) always wins
     dict_slot = _class_attribute(cls, "__dict__")
     if dict_slot is not _MISSING:
         owner = dict_slot.__objclass__ if type(dict_slot) is _GETSET_DESCRIPTOR else None
         if owner is None or not any(klass is owner for klass in _TYPE_MRO.__get__(cls, type)):
-            return _MISSING  # a hand-made / foreign ``__dict__`` hook: not inspected, not trusted
+            return _MISSING, False  # a hand-made / foreign ``__dict__`` hook: not inspected, not trusted
         instance_dict = dict_slot.__get__(obj, cls)  # the C-level instance dict getter
         if type(instance_dict) is dict and name in instance_dict:
-            return instance_dict[name]
-    return class_value
+            return instance_dict[name], False
+    return class_value, True
 
 
-def _function_of(value: object) -> object:
-    """The plain function behind an accepted shape (a function or a bound method), else ``None``."""
-    if type(value) is _FUNCTION:
-        return value
-    if type(value) is _BOUND_METHOD and type(value.__func__) is _FUNCTION:
-        return value.__func__
+def _is_coroutine_function(function: object) -> bool:
+    """An exact plain function that is ``async def`` (or carries the 3.12 coroutine marker)."""
+    if bool(function.__code__.co_flags & _CO_COROUTINE):
+        return True
+    namespace = _FUNCTION_DICT.__get__(function, _FUNCTION)
+    return type(namespace) is dict and _COROUTINE_MARKER in namespace
+
+
+def _callable_shape(raw: object, bound: bool, depth: int = 0) -> tuple[bool, bool] | None:
+    """Static callable classification: ``(True, is_async)`` or ``None`` (not provably callable without
+    running caller code). Reads only exact builtin types and their C-level members; never calls, binds or
+    ``getattr``s the candidate.
+
+    Accepted: a plain function (a method when ``bound``), a bound method, ``staticmethod`` /
+    ``classmethod`` (their ``__func__``), a builtin function / method, and a callable object whose type
+    defines ``__call__`` statically. Any other descriptor (``property``, a custom ``__get__``) is ``None``.
+    """
+    if depth > _MAX_DEPTH or raw is _MISSING:
+        return None
+    kind = type(raw)
+    if kind is _FUNCTION:
+        return True, _is_coroutine_function(raw)
+    if kind is _BOUND_METHOD:
+        return _callable_shape(raw.__func__, False, depth + 1)
+    if kind is staticmethod:
+        return _callable_shape(raw.__func__, False, depth + 1)
+    if kind is classmethod:
+        return _callable_shape(raw.__func__, False, depth + 1) if bound else None  # unbound: not callable
+    if kind is _BUILTIN_FUNCTION:
+        return True, False
+    if bound and _has_class_attribute(kind, "__get__"):
+        return None  # a custom (non-data) descriptor: only its ``__get__`` could tell, and it is not run
+    call = _class_attribute(kind, "__call__")
+    if call is _MISSING:
+        return None
+    call_kind = type(call)
+    if call_kind is _FUNCTION:
+        return True, _is_coroutine_function(call)
+    if call_kind is staticmethod or call_kind is classmethod:
+        return _callable_shape(call.__func__, False, depth + 1)
+    if call_kind is _SLOT_WRAPPER:
+        return True, False  # a builtin type's C-level ``__call__``
     return None
 
 
-def _is_async_function(value: object) -> bool:
-    function = _function_of(value)
-    return function is not None and bool(function.__code__.co_flags & _CO_COROUTINE)
+def _shape_of(obj: object, name: str) -> tuple[bool, bool] | None:
+    raw, bound = _static_attribute(obj, name)
+    return _callable_shape(raw, bound)
 
 
 class _EngineAdapter:
@@ -132,9 +184,10 @@ class BatchOrchestrator:
             raise OrchestrationConfigError("image_policy must be None or an exact ImageAcquisitionPolicy")
         if image_policy.max_total_bytes > MAX_ITEM_IMAGE_BYTES:
             raise OrchestrationConfigError("image_policy.max_total_bytes must be <= MAX_ITEM_IMAGE_BYTES")
-        if _function_of(_static_attribute(image_client, "get")) is None:
-            raise OrchestrationConfigError("image_client must provide a plain get method (ImageHttpClient)")
-        if not _is_async_function(_static_attribute(engine, "aggregate")):
+        if _shape_of(image_client, "get") is None:
+            raise OrchestrationConfigError("image_client must provide a callable get (ImageHttpClient)")
+        aggregate = _shape_of(engine, "aggregate")
+        if aggregate is None or aggregate[1] is not True:
             raise OrchestrationConfigError("engine must provide an async aggregate(number) (AggregationEngine)")
         scheduler = None
         try:

@@ -27,7 +27,7 @@ import secrets
 from dataclasses import dataclass, field
 
 from fc2_organizer.images.acquisition import acquire_images
-from fc2_organizer.orchestration.errors import OrchestrationResourceLimitError
+from fc2_organizer.orchestration.errors import OrchestrationIntegrityError, OrchestrationResourceLimitError
 from fc2_organizer.orchestration.models import (
     BatchPreview,
     IssueReason,
@@ -57,30 +57,60 @@ _BLOCKING_PHASE_A = frozenset({IssueReason.DUPLICATE_SOURCE_IN_BATCH, IssueReaso
 
 class _Ledger:
     """Call-local retention ledger ``L = charged + reserved`` (contract section 19.6.2); ``L <= limit`` always.
-    Private: tests may observe it (read only) by substituting this class."""
 
-    __slots__ = ("limit", "charged", "reserved")
+    The state is ONE immutable pair ``_state = (charged, reserved)``; ``charged`` / ``reserved`` are read-only
+    views of it. Every transition computes the complete prospective pair, validates it and then commits it with
+    a single attribute store, so no observable state is ever half-applied: neither "reservation released but
+    payload not yet charged" nor "payload charged while its reservation is still held" (S2-R2, finding
+    P4-C8-S2-R1-02). A rejected ``charge`` / ``try_reserve`` leaves the state unchanged; a misuse of
+    ``release`` / ``convert`` fails closed (``OrchestrationIntegrityError``) without changing it.
+    Private: tests may observe it by substituting this class."""
+
+    __slots__ = ("limit", "_state")
 
     def __init__(self, limit: int) -> None:
         self.limit = limit
-        self.charged = 0
-        self.reserved = 0
+        self._state = (0, 0)
+
+    @property
+    def charged(self) -> int:
+        return self._state[0]
+
+    @property
+    def reserved(self) -> int:
+        return self._state[1]
+
+    def _commit(self, charged: int, reserved: int) -> bool:
+        if charged < 0 or reserved < 0 or charged + reserved > self.limit:
+            return False
+        self._state = (charged, reserved)
+        return True
 
     def charge(self, amount: int) -> bool:
-        """Add ``amount`` to ``charged``; ``False`` if the ledger now exceeds its limit."""
-        self.charged += amount
-        return self.charged + self.reserved <= self.limit
+        """Charge ``amount`` (an NFO); ``False`` -- and no change -- if the limit would be exceeded."""
+        charged, reserved = self._state
+        return type(amount) is int and amount >= 0 and self._commit(charged + amount, reserved)
+
+    def try_reserve(self, reservation: int) -> bool:
+        """Reserve ``reservation`` for one image call; ``False`` -- and no change -- if it does not fit."""
+        charged, reserved = self._state
+        return type(reservation) is int and reservation > 0 and self._commit(charged, reserved + reservation)
 
     def release(self, reservation: int) -> None:
         """Drop one reservation whose payload is gone (failure / fatal / cancellation / rejected result)."""
-        self.reserved -= reservation
+        charged, reserved = self._state
+        if not (type(reservation) is int and 0 < reservation <= reserved
+                and self._commit(charged, reserved - reservation)):
+            raise OrchestrationIntegrityError("retention ledger release rejected")
 
     def convert(self, reservation: int, actual: int) -> None:
-        """One synchronous step: a reservation becomes the ``actual`` bytes of the payload it covered
-        (``actual <= reservation``). ``charged`` grows before ``reserved`` shrinks, so the payload is covered
-        at every instant (never "released but not yet charged")."""
-        self.charged += actual
-        self.reserved -= reservation
+        """A reservation becomes the ``actual`` bytes of the payload it covered (``0 <= actual <= reservation``),
+        committed as one new state: before it the payload is covered by the reservation, after it by
+        ``charged``."""
+        charged, reserved = self._state
+        if not (type(reservation) is int and type(actual) is int and 0 < reservation <= reserved
+                and 0 <= actual <= reservation and self._commit(charged + actual, reserved - reservation)):
+            raise OrchestrationIntegrityError("retention ledger conversion rejected")
 
 
 class _FatalCarrier(Exception):
@@ -145,10 +175,9 @@ async def _admit(run: _ImageRun) -> _Slot | None:
         while True:
             if not run.admission_open() or run.cursor >= len(run.targets):
                 return None
-            if ledger.charged + ledger.reserved + run.reservation <= ledger.limit:
+            if ledger.try_reserve(run.reservation):  # check + reserve: one state transition
                 slot = run.targets[run.cursor]
                 run.cursor += 1
-                ledger.reserved += run.reservation
                 return slot
             if ledger.reserved == 0:
                 run.exhausted = True
