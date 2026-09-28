@@ -260,3 +260,189 @@ def test_guard_is_released_after_every_exit_path(tmp_path, monkeypatch):
     corpus.engine.gates.clear()
     assert type(run(orchestrator.preview(corpus.items))) is BatchPreview  # normal return
     assert orchestrator._busy is False
+
+
+# =========================================================================== S2-R1: constructor shape checks run no caller code
+
+
+class _Hooks:
+    """Counts every caller-controlled attribute hook that runs."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+
+async def _async_get(*_args, **_kwargs):  # pragma: no cover - never awaited here
+    return None
+
+
+async def _async_aggregate(number):  # pragma: no cover - never awaited here
+    return None
+
+
+def _property_holder(name: str, hooks: _Hooks):
+    def getter(self):
+        hooks.calls.append(f"property {name}")
+        return _async_get
+
+    return type(f"Property_{name}", (), {name: property(getter)})()
+
+
+class _CountingDescriptor:
+    def __init__(self, name: str, hooks: _Hooks) -> None:
+        self.name, self.hooks = name, hooks
+
+    def __get__(self, instance, owner=None):
+        self.hooks.calls.append(f"descriptor {self.name}")
+        return _async_get
+
+
+def _descriptor_holder(name: str, hooks: _Hooks):
+    return type(f"Descriptor_{name}", (), {name: _CountingDescriptor(name, hooks)})()
+
+
+def _getattr_holder(name: str, hooks: _Hooks):
+    def __getattr__(self, attribute):
+        hooks.calls.append(f"__getattr__ {attribute}")
+        if attribute == name:
+            return _async_get
+        raise AttributeError(attribute)
+
+    return type(f"GetAttr_{name}", (), {"__getattr__": __getattr__})()
+
+
+def _getattribute_holder(name: str, hooks: _Hooks):
+    async def method(self, *_args, **_kwargs):  # pragma: no cover
+        return None
+
+    def __getattribute__(self, attribute):
+        hooks.calls.append(f"__getattribute__ {attribute}")
+        return object.__getattribute__(self, attribute)
+
+    return type(f"GetAttribute_{name}", (), {name: method, "__getattribute__": __getattribute__})()
+
+
+_HOSTILE_BUILDERS = {"property": _property_holder, "descriptor": _descriptor_holder,
+                     "__getattr__": _getattr_holder}
+
+
+@pytest.mark.parametrize("kind", list(_HOSTILE_BUILDERS))
+def test_hostile_image_client_get_is_rejected_without_running_its_hook(kind):
+    hooks = _Hooks()
+    client = _HOSTILE_BUILDERS[kind]("get", hooks)
+    with pytest.raises(OrchestrationConfigError) as info:
+        BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
+    assert hooks.calls == []
+    assert info.value.__context__ is None and info.value.__cause__ is None
+
+
+@pytest.mark.parametrize("kind", list(_HOSTILE_BUILDERS))
+def test_hostile_engine_aggregate_is_rejected_without_running_its_hook(kind):
+    hooks = _Hooks()
+    engine = _HOSTILE_BUILDERS[kind]("aggregate", hooks)
+    with pytest.raises(OrchestrationConfigError) as info:
+        BatchOrchestrator(engine, ScriptedImageClient(), LIBRARY)
+    assert hooks.calls == []
+    assert info.value.__context__ is None and info.value.__cause__ is None
+
+
+@pytest.mark.parametrize("name", ["get", "aggregate"])
+def test_getattribute_hook_never_runs_during_construction(name):
+    hooks = _Hooks()
+    holder = _getattribute_holder(name, hooks)
+    engine = holder if name == "aggregate" else ScriptedEngine()
+    client = holder if name == "get" else ScriptedImageClient()
+    BatchOrchestrator(engine, client, LIBRARY)  # a plain method: accepted...
+    assert hooks.calls == []  # ...and still no hook ran
+
+
+def test_data_descriptor_shadowing_an_instance_function_is_rejected_unrun():
+    hooks = _Hooks()
+    client = _property_holder("get", hooks)
+    client.__dict__["get"] = _async_get  # the class property wins in normal lookup
+    with pytest.raises(OrchestrationConfigError):
+        BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
+    assert hooks.calls == []
+
+
+def test_hostile_metaclass_never_runs():
+    hooks = _Hooks()
+
+    class Meta(type):
+        def __getattribute__(cls, attribute):
+            hooks.calls.append(f"meta {attribute}")
+            return type.__getattribute__(cls, attribute)
+
+        def __eq__(cls, other):  # pragma: no cover - must never run
+            hooks.calls.append("meta __eq__")
+            return type.__eq__(cls, other)
+
+        __hash__ = type.__hash__
+
+    class Engine(metaclass=Meta):
+        async def aggregate(self, number):  # pragma: no cover
+            return None
+
+    class Client(metaclass=Meta):
+        async def get(self, url, **kwargs):  # pragma: no cover
+            return None
+
+    hooks.calls.clear()
+    BatchOrchestrator(Engine(), Client(), LIBRARY)
+    assert hooks.calls == []
+
+
+def test_non_function_shapes_are_rejected():
+    class StaticGet:
+        get = staticmethod(_async_get)
+
+    class CallableGet:
+        get = ScriptedImageClient()  # a callable object, not a function
+
+    class SyncAggregate:
+        def aggregate(self, number):  # pragma: no cover
+            return None
+
+    for client in (StaticGet(), CallableGet()):
+        with pytest.raises(OrchestrationConfigError):
+            BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
+    with pytest.raises(OrchestrationConfigError):
+        BatchOrchestrator(SyncAggregate(), ScriptedImageClient(), LIBRARY)
+
+
+class _CountingEngine(ScriptedEngine):
+    def __getattribute__(self, attribute):
+        if attribute == "aggregate":
+            object.__getattribute__(self, "reads").append(attribute)
+        return object.__getattribute__(self, attribute)
+
+
+class _CountingClient(ScriptedImageClient):
+    def __getattribute__(self, attribute):
+        if attribute == "get":
+            object.__getattribute__(self, "reads").append(attribute)
+        return object.__getattribute__(self, attribute)
+
+
+def test_normal_objects_are_accepted_and_first_called_only_by_preview(tmp_path):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    engine = _CountingEngine(corpus.engine.script, fields=corpus.engine.fields)
+    engine.reads = []
+    client = _CountingClient(corpus.client.script)
+    client.reads = []
+    orchestrator = BatchOrchestrator(engine, client, str(corpus.library))
+    assert engine.reads == [] and client.reads == [] and engine.calls == [] and client.calls == []
+    preview = run(orchestrator.preview(corpus.items))
+    assert type(preview) is BatchPreview
+    assert engine.reads and engine.calls == ["FC2-1000001"]  # the caller engine runs in the metadata stage
+    assert client.reads and client.calls  # the caller client runs in the image stage
+
+
+def test_instance_attribute_functions_and_bound_methods_are_accepted(tmp_path):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    engine = ScriptedEngine()
+    other = ScriptedEngine({"FC2-1000001": "success"})
+    engine.aggregate = other.aggregate  # a bound method in the instance dict
+    orchestrator = BatchOrchestrator(engine, corpus.client, str(corpus.library))
+    run(orchestrator.preview(corpus.items))
+    assert other.calls == ["FC2-1000001"] and engine.calls == []

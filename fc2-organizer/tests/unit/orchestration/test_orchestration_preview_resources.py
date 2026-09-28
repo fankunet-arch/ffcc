@@ -263,3 +263,183 @@ def test_resource_failure_is_read_only_and_leaves_the_orchestrator_idle(tmp_path
     assert tree_snapshot(tmp_path) == before
     roomy = corpus.orchestrator(image_policy=_policy(A))
     assert run(roomy.preview(corpus.items)).retention_budget_bytes == roomy.config.max_retained_artifact_bytes
+
+
+# =========================================================================== S2-R1: payload lifetime vs. ledger transitions
+
+
+def _held_by_a_coroutine(obj: object) -> bool:
+    """``True`` while a suspended or running coroutine (e.g. the image worker) still references ``obj``."""
+    import gc
+
+    return any(type(referrer).__name__ == "coroutine" for referrer in gc.get_referrers(obj))
+
+
+class _TransitionLedger(preview_module._Ledger):
+    """Records every reservation release / conversion with the ledger state and the liveness of the payload
+    the image worker is settling (the last object ``acquire_images`` returned)."""
+
+    instances: list["_TransitionLedger"] = []
+    produced: list[object] = []
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(limit)
+        self.events: list[tuple] = []
+        _TransitionLedger.instances.append(self)
+
+    def _settling_alive(self) -> bool:
+        return bool(self.produced) and _held_by_a_coroutine(self.produced[-1])
+
+    def release(self, reservation: int) -> None:
+        self.events.append(("release", self.reserved, self.charged, self._settling_alive()))
+        super().release(reservation)
+
+    def convert(self, reservation: int, actual: int) -> None:
+        before = (self.reserved, self.charged)
+        super().convert(reservation, actual)
+        self.events.append(("convert", before, (self.reserved, self.charged), actual))
+
+
+def _instrument(monkeypatch, overrides: dict[str, object] | None = None):
+    """Spy ledger + an ``acquire_images`` substitute that records every returned payload (and can replace or
+    fail it per number) + a classification probe recording the reservation held at that moment."""
+    _TransitionLedger.instances.clear()
+    _TransitionLedger.produced.clear()
+    monkeypatch.setattr(preview_module, "_Ledger", _TransitionLedger)
+    overrides = overrides or {}
+    real_acquire = preview_module.acquire_images
+    admissions: list[bool] = []
+
+    async def acquire(record, client, *, policy=None):
+        # entering a new admission: no earlier rejected payload may still be held by a worker
+        admissions.append(any(_held_by_a_coroutine(p) for p in _TransitionLedger.produced
+                              if type(p) is not ImageAcquisitionResult or p.total_bytes > policy.max_total_bytes))
+        override = overrides.get(record.plan.canonical_number)
+        if isinstance(override, BaseException):
+            raise override
+        result = override if override is not None else await real_acquire(record, client, policy=policy)
+        _TransitionLedger.produced.append(result)
+        return result
+
+    real_outcome = preview_module.image_outcome
+    classified: list[int] = []
+
+    def outcome(result, failure_type, reservation):
+        classified.append(_TransitionLedger.instances[-1].reserved)
+        return real_outcome(result, failure_type, reservation)
+
+    monkeypatch.setattr(preview_module, "acquire_images", acquire)
+    monkeypatch.setattr(preview_module, "image_outcome", outcome)
+    return admissions, classified
+
+
+def _oversized(size: int) -> ImageAcquisitionResult:
+    content = minimal_jpeg(pad=size)
+    image = AcquiredImage(role=ImageRole.POSTER, candidate_index=0, content=content, width=16, height=16,
+                          size_bytes=len(content), sha256=hashlib.sha256(content).hexdigest())
+    return ImageAcquisitionResult(poster=image)
+
+
+def test_success_payload_stays_reserved_until_converted_in_one_step(tmp_path, monkeypatch):
+    corpus = Corpus(tmp_path, _films(3))
+    r = 2 * A
+    admissions, classified = _instrument(monkeypatch)
+    preview = run(corpus.orchestrator(image_policy=_policy(r), config=_config(10 ** 9, k=1)).preview(corpus.items))
+    assert all(i.state is S.READY for i in preview.items)
+    assert classified == [r, r, r]  # classification happens while the reservation is still held
+    ledger = _TransitionLedger.instances[-1]
+    assert [e[0] for e in ledger.events] == ["convert"] * 3  # never "released but not yet charged"
+    for _, (reserved_before, charged_before), (reserved_after, charged_after), actual in ledger.events:
+        assert actual == A and reserved_before == r and reserved_after == 0
+        assert charged_after == charged_before + actual
+    assert admissions == [False, False, False]
+    assert ledger.reserved == 0
+
+
+@pytest.mark.parametrize("invalid", ["oversized", "wrong-type"])
+def test_rejected_payload_is_dropped_before_its_reservation_is_released(tmp_path, monkeypatch, invalid):
+    corpus = Corpus(tmp_path, _films(3))
+    r = 2 * A
+    bad = _oversized(3 * A) if invalid == "oversized" else {"poster": b"x" * (3 * A)}
+    assert invalid != "oversized" or bad.total_bytes > r
+    admissions, classified = _instrument(monkeypatch, {"FC2-1000001": bad})
+    preview = run(corpus.orchestrator(image_policy=_policy(r), config=_config(10 ** 9, k=1)).preview(corpus.items))
+    first = preview.items[0]
+    assert first.state is S.UNPREPARED and first.issue.reason is R_.IMAGE_ACQUISITION_ERROR
+    assert first.preflight is None
+    ledger = _TransitionLedger.instances[-1]
+    kind, reserved_before, _charged_before, alive = ledger.events[0]
+    assert kind == "release" and reserved_before == r and alive is False  # dropped first, then released
+    assert [e[0] for e in ledger.events[1:]] == ["convert", "convert"]
+    assert classified[0] == r
+    assert admissions == [False, False, False]  # never alive across the next admission
+    assert not _held_by_a_coroutine(bad)
+    assert preview.retained_artifact_bytes == sum(len(a.content) for i in preview.items[1:]
+                                                  for a in i.preflight.artifacts)
+
+
+def test_ordinary_image_failure_releases_its_reservation(tmp_path, monkeypatch):
+    corpus = Corpus(tmp_path, _films(2))
+    r = 2 * A
+    _instrument(monkeypatch, {"FC2-1000001": RuntimeError("scripted")})
+    preview = run(corpus.orchestrator(image_policy=_policy(r), config=_config(10 ** 9, k=1)).preview(corpus.items))
+    assert preview.items[0].issue.reason is R_.IMAGE_ACQUISITION_ERROR
+    assert preview.items[0].issue.error_type == "RuntimeError" and preview.items[1].state is S.READY
+    ledger = _TransitionLedger.instances[-1]
+    assert [e[0] for e in ledger.events] == ["release", "convert"]
+    assert ledger.events[0][1] == r and ledger.reserved == 0
+
+
+@pytest.mark.parametrize("fatal", [KeyboardInterrupt(), SystemExit(1), asyncio.CancelledError()],
+                         ids=["KeyboardInterrupt", "SystemExit", "self-cancelled"])
+def test_fatal_releases_every_reservation(tmp_path, monkeypatch, fatal):
+    corpus = Corpus(tmp_path, _films(3))
+    r = 2 * A
+    _instrument(monkeypatch)
+    orchestrator = corpus.orchestrator(image_policy=_policy(r), config=_config(10 ** 9, k=2))
+    failing, sibling = image_url("FC2-1000001", "poster"), image_url("FC2-1000002", "poster")
+    corpus.client.script[failing] = fatal
+
+    observed: list[int] = []
+
+    async def scenario():
+        release = corpus.client.gate(failing)
+        corpus.client.gate(sibling)
+
+        async def controller():
+            await until(lambda: corpus.client.active == 2)
+            observed.append(_TransitionLedger.instances[-1].reserved)
+            release.set()
+
+        control = asyncio.ensure_future(controller())
+        # awaited in this task (never a separate one): the fatal object must reach pytest.raises here
+        with pytest.raises(BaseException) as info:
+            await orchestrator.preview(corpus.items)
+        await control
+        assert info.value is fatal
+
+    run(scenario())
+    assert observed == [2 * r]  # both reservations held while both calls were in flight
+    ledger = _TransitionLedger.instances[-1]
+    assert ledger.reserved == 0 and [e[0] for e in ledger.events] == ["release", "release"]
+
+
+def test_caller_cancellation_releases_every_reservation(tmp_path, monkeypatch):
+    corpus = Corpus(tmp_path, _films(3))
+    r = 2 * A
+    _instrument(monkeypatch)
+    orchestrator = corpus.orchestrator(image_policy=_policy(r), config=_config(10 ** 9, k=2))
+
+    async def scenario():
+        for number in _numbers(2):
+            corpus.client.gate(image_url(number, "poster"))
+        task = asyncio.ensure_future(orchestrator.preview(corpus.items))
+        await until(lambda: corpus.client.active == 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    run(scenario())
+    ledger = _TransitionLedger.instances[-1]
+    assert ledger.reserved == 0 and [e[0] for e in ledger.events] == ["release", "release"]
+    assert orchestrator._busy is False

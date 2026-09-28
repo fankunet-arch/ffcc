@@ -71,6 +71,17 @@ class _Ledger:
         self.charged += amount
         return self.charged + self.reserved <= self.limit
 
+    def release(self, reservation: int) -> None:
+        """Drop one reservation whose payload is gone (failure / fatal / cancellation / rejected result)."""
+        self.reserved -= reservation
+
+    def convert(self, reservation: int, actual: int) -> None:
+        """One synchronous step: a reservation becomes the ``actual`` bytes of the payload it covered
+        (``actual <= reservation``). ``charged`` grows before ``reserved`` shrinks, so the payload is covered
+        at every instant (never "released but not yet charged")."""
+        self.charged += actual
+        self.reserved -= reservation
+
 
 class _FatalCarrier(Exception):
     """Carries a fatal ``BaseException`` out of an image worker without ``BaseExceptionGroup`` wrapping.
@@ -168,20 +179,30 @@ async def _image_worker(run: _ImageRun, image_client, image_policy) -> None:
                 fatal = exc  # the client cancelled itself: fatal control flow, never an item failure
         except BaseException as exc:  # KeyboardInterrupt, SystemExit, GeneratorExit, custom
             fatal = exc
-        finally:
-            run.ledger.reserved -= run.reservation  # released on every path (no await here)
-        if cancelled is not None:
+        if cancelled is not None or fatal is not None:
+            run.ledger.release(run.reservation)  # no payload was returned
             run.stopping = True
-            raise cancelled
-        if fatal is not None:
-            run.stopping = True
+            if cancelled is not None:
+                raise cancelled
             raise _FatalCarrier(fatal)
-        outcome = image_outcome(result, failure_type, run.reservation)
-        if type(outcome) is not ItemIssue:
-            run.ledger.charged += outcome.total_bytes  # reservation becomes the actual bytes (<= R)
+        # A returned payload stays covered by its reservation until it is either charged or dropped
+        # (contract section 19.6.4; no await between the return above and the ledger step below).
+        settled = False
+        try:
+            outcome = image_outcome(result, failure_type, run.reservation)
+            if type(outcome) is ItemIssue:
+                result = None  # an invalid / oversized payload is dropped before its reservation goes
+                run.ledger.release(run.reservation)
+            else:
+                run.ledger.convert(run.reservation, outcome.total_bytes)  # R -> actual (<= R), one step
+            settled = True
+        finally:
+            if not settled:  # only an unexpected failure of the classification itself
+                result = None
+                run.ledger.release(run.reservation)
         run.results[slot.index] = outcome
         async with run.gate:
-            run.gate.notify_all()
+            run.gate.notify_all()  # only after the accounting above
 
 
 async def _image_stage(targets: list[_Slot], image_client, image_policy, workers: int, ledger: _Ledger) -> None:

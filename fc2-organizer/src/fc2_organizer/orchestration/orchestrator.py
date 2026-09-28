@@ -5,6 +5,16 @@ S2 provides the constructor, the read-only properties and ``async preview(items)
 filesystem access. One ``BatchScheduler(engine, config.metadata)`` is created here and reused for the
 orchestrator's lifetime; the engine and the image client belong to the caller (never built or closed here).
 
+Constructor shape checks never run caller code (S2-R1, finding P4-C8-S2-R-01): ``engine.aggregate`` and
+``image_client.get`` are resolved *statically* (the class namespaces along the C-level MRO and the instance
+``__dict__`` read through the standard getset descriptor only; no ``getattr`` / ``hasattr``, so no property,
+descriptor ``__get__``, ``__getattr__`` or ``__getattribute__`` hook runs) and must be a plain function or a
+bound method (``aggregate`` a coroutine function). Anything else -- a property, a custom descriptor, a
+``__getattr__``-only attribute -- is an ``OrchestrationConfigError``. The caller's engine is then wrapped in a
+private adapter, so the Phase 3 ``BatchScheduler`` inspects P4-C8's own ``aggregate`` and the caller's code
+first runs inside ``scheduler.run`` (the metadata stage); ``image_client.get`` first runs inside
+``acquire_images`` (the image stage).
+
 Busy-first (section 7.3): one flag guarded by a ``threading.Lock`` is claimed as the very first step of every
 operation, before any argument is looked at; a rejected call never releases the holder's claim, and the claim
 is released in ``finally`` on every exit path (return, error, resource limit, cancellation, fatal).
@@ -22,6 +32,80 @@ from fc2_organizer.orchestration.preview import build_preview
 from fc2_organizer.planning import OutputPolicy
 
 __all__ = ["BatchOrchestrator"]
+
+_MISSING = object()
+_TYPE_MRO = type.__dict__["__mro__"]  # C-level getters: never consult a metaclass attribute
+_TYPE_NAMESPACE = type.__dict__["__dict__"]
+_GETSET_DESCRIPTOR = type(_TYPE_NAMESPACE)
+_CO_COROUTINE = 0x80  # code flag of an ``async def``
+
+
+def _plain_function() -> None:
+    return None
+
+
+class _BoundProbe:
+    def method(self) -> None:
+        return None
+
+
+_FUNCTION = type(_plain_function)
+_BOUND_METHOD = type(_BoundProbe().method)
+
+
+def _class_attribute(cls: type, name: str) -> object:
+    for klass in _TYPE_MRO.__get__(cls, type):
+        namespace = _TYPE_NAMESPACE.__get__(klass, type)
+        if name in namespace:
+            return namespace[name]
+    return _MISSING
+
+
+def _static_attribute(obj: object, name: str) -> object:
+    """``obj.<name>`` resolved without running any caller code (the non-executing equivalent of
+    ``inspect.getattr_static`` for the two shapes accepted here). Returns ``_MISSING`` when the attribute
+    exists only through a hook, and the raw class attribute (never its ``__get__`` result) otherwise."""
+    cls = type(obj)
+    class_value = _class_attribute(cls, name)
+    if class_value is not _MISSING and type(class_value) is not _FUNCTION:
+        return class_value  # property / descriptor / other object: returned raw, rejected by the caller
+    dict_slot = _class_attribute(cls, "__dict__")
+    if dict_slot is not _MISSING:
+        owner = dict_slot.__objclass__ if type(dict_slot) is _GETSET_DESCRIPTOR else None
+        if owner is None or not any(klass is owner for klass in _TYPE_MRO.__get__(cls, type)):
+            return _MISSING  # a hand-made / foreign ``__dict__`` hook: not inspected, not trusted
+        instance_dict = dict_slot.__get__(obj, cls)  # the C-level instance dict getter
+        if type(instance_dict) is dict and name in instance_dict:
+            return instance_dict[name]
+    return class_value
+
+
+def _function_of(value: object) -> object:
+    """The plain function behind an accepted shape (a function or a bound method), else ``None``."""
+    if type(value) is _FUNCTION:
+        return value
+    if type(value) is _BOUND_METHOD and type(value.__func__) is _FUNCTION:
+        return value.__func__
+    return None
+
+
+def _is_async_function(value: object) -> bool:
+    function = _function_of(value)
+    return function is not None and bool(function.__code__.co_flags & _CO_COROUTINE)
+
+
+class _EngineAdapter:
+    """P4-C8's own ``async aggregate(number)`` handed to the Phase 3 scheduler: the scheduler's construction
+    checks inspect this method, never the caller's. Awaiting the caller's engine only in ``aggregate`` keeps
+    every metadata semantic (results, exceptions, cancellation, concurrency) the scheduler's."""
+
+    __slots__ = ("_engine",)
+
+    def __init__(self, engine: object) -> None:
+        self._engine = engine
+
+    async def aggregate(self, number: str):
+        return await self._engine.aggregate(number)
 
 
 class BatchOrchestrator:
@@ -48,11 +132,13 @@ class BatchOrchestrator:
             raise OrchestrationConfigError("image_policy must be None or an exact ImageAcquisitionPolicy")
         if image_policy.max_total_bytes > MAX_ITEM_IMAGE_BYTES:
             raise OrchestrationConfigError("image_policy.max_total_bytes must be <= MAX_ITEM_IMAGE_BYTES")
-        if image_client is None or not callable(getattr(image_client, "get", None)):
-            raise OrchestrationConfigError("image_client must provide a callable get (ImageHttpClient)")
+        if _function_of(_static_attribute(image_client, "get")) is None:
+            raise OrchestrationConfigError("image_client must provide a plain get method (ImageHttpClient)")
+        if not _is_async_function(_static_attribute(engine, "aggregate")):
+            raise OrchestrationConfigError("engine must provide an async aggregate(number) (AggregationEngine)")
         scheduler = None
         try:
-            scheduler = BatchScheduler(engine, config.metadata)
+            scheduler = BatchScheduler(_EngineAdapter(engine), config.metadata)
         except BatchConfigError:
             pass  # translated below, outside the handler (never chained)
         if scheduler is None:
