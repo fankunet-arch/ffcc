@@ -19,6 +19,7 @@ Branch         ：claude/phase4-c8-batch-orchestration
 |---|---|---|
 | E0-R1 | 闭合独立 E0 Review 的三个 finding：P4-C8-E0-R-01（新增派生的批级最终结果 `BatchOutcome` 及完整真值表）；P4-C8-E0-R-02（批量条目数硬上限 `MAX_BATCH_ITEMS`、preview 保留 artifact 字节预算、单条图片预算上限、确定性的预约 / 准入规则、`OrchestrationResourceLimitError`）；P4-C8-E0-R-03（S1 的 E0 / S1 状态行治理特例）。其余已 PASS 的设计不变 | 第 5、7.1、7.2、7.4、8、9、10.1、10.7、11.1、11.4、11.5、15.1、19.1、19.5、19.6、25.4、28.3、28.4、34.1、35、35.1、37、38 节；附录 A 第 21-24 条 |
 | E0-R2 | 只闭合 E0-R1 复查的两个资源 finding（因而 P4-C8-E0-R-02 仍 OPEN）：P4-C8-E0-R1-01（输入条目数上限改为**快照之前**的有界迭代准入，不信任 `__len__`）；P4-C8-E0-R1-02（lineage 固定的保留预算 `retention_budget_bytes`；当前完整结果保留不变量；`preview_retry` 以 `B - base_retained` 为可用额度；`merge_retry` 纵深防御；多代归纳证明）。P4-C8-E0-R-01、R-03 已 CLOSED，未改动；资源常量数值不变 | 第 5、8、10.4、10.7、18.1、19.6.1、19.6.2、19.6.6、19.6.7、19.6.8、19.6.10、25.4、26、34.1、35、35.1、37、38 节；附录 A 第 25-28 条 |
+| S2-A1 | S2 实施中发现的架构依赖遗漏（architecture dependency omission）：第 7.2 节冻结的构造语义要求构造校验既不执行调用方控制的属性钩子（property、描述符、`__getattr__`、`__getattribute__`、元类钩子），又不得比 Phase 3 冻结边界 `inspect.iscoroutinefunction(candidate)` 的 async 判定更窄（含 `functools.partial(async_fn)` 与运行时标准库正式认可的 coroutine 标记语义），且不得自行复制 `inspect` 的内部 coroutine 规则；而原第 6 节的生产标准库集合不含 `inspect`、`functools`，二者无法同时满足。本轮只把 `inspect`、`functools` 加入生产标准库依赖，并严格限定：只有 `orchestrator.py` 可以 import；`inspect` 只用于 `inspect.iscoroutinefunction`（Phase 3 兼容的 async 可调用判定），`functools` 只用于 `functools.partial`（识别精确的标准库 partial 及其包装的 coroutine 语义，服务于安全的静态可调用形态分类）。不改变公开 API、构造接受的语义边界（只是实现已冻结的边界）、preview / 资源 / 重试 / 文件系统 / 网络 / 持久化语义以及任何 S1 / S2 模型 | 第 6、34.1 节 |
 
 基线状态（E0 建立时）：
 
@@ -198,8 +199,20 @@ fc2_organizer.orchestration
 ```
 
 * 允许的标准库（生产）：`__future__`、`asyncio`、`collections.abc`、`dataclasses`、`enum`、`ntpath`、`os`、
-  `posixpath`、`re`、`secrets`、`threading`、`typing`。`os` 只允许两种使用：`os.name`、`os.path.basename`
-  （AST 强制）。
+  `posixpath`、`re`、`secrets`、`threading`、`typing`；（S2-A1）以及 `inspect`、`functools`。`os` 只允许两种使用：
+  `os.name`、`os.path.basename`（AST 强制）。
+* （S2-A1）`inspect` 与 `functools` 只允许 `src/fc2_organizer/orchestration/orchestrator.py` 直接 import，其它
+  orchestration 生产模块一律不得 import 它们。用途严格限定为第 7.2 节构造校验：
+  * `inspect`：只用于 `inspect.iscoroutinefunction`，且只作用于构造校验已经以零钩子静态方式解析出的精确标准对象
+    （函数、函数的绑定方法、精确 `functools.partial` 链），使 `engine.aggregate` 的 async 判定与 Phase 3
+    冻结边界及当前 Python runtime 的标准库语义一致；不授权 `inspect` 的其它任何接口（例如 `getattr_static`、
+    `getmembers`、`stack`、`currentframe`、源码读取、帧遍历）；
+  * `functools`：只用于 `functools.partial`（以 `type(x) is functools.partial` 识别精确的标准库 partial，并经其 C 层
+    `func` 成员做安全的包装可调用分类）；不授权 `functools` 的其它任何接口。
+  * 本授权不放宽零钩子约束：构造校验仍不得执行调用方控制的钩子（不得 `getattr(engine, "aggregate")` /
+    `getattr(image_client, "get")` 或任何会执行调用方描述符的检查）。P4-C8 不定义自己的 coroutine 标记语义：
+    调用方自行设置的 `_is_coroutine_marker` 键不因“键存在”而被视为 async，async 判定只跟随当前 runtime 标准库的
+    正式语义。
 * **生产代码禁止 import**（静态 AST + 运行时）：
   * P4-C7 私有模块与任何子模块：`fc2_organizer.execution._fs`、`fc2_organizer.execution.seal`、
     `fc2_organizer.execution.{models,errors,paths,validation,directories,transfer,preflight,executor}`；
@@ -1648,7 +1661,8 @@ P4-C8 不把 P4-C7 变成批量 API：P4-C7 的公开 API、模块与语义在 P
   import `execute_filesystem` 的模块；`preview.py` 是唯一 import `acquire_images` 的模块；`retry.py` 与 `preview.py`
   可以 import `stages`，`retry.py` 可以 import `preview`（复用其图片阶段与组合 helper，从不自行 import `acquire_images`）；
   `orchestrator.py` 只 import 本 package 模块、`fc2_metadata_core.batch`、`fc2_organizer.planning`（`OutputPolicy`）与
-  `fc2_organizer.images`（`ImageAcquisitionPolicy`）；`stages.py` 是唯一 import `build_organize_plan`、`prepare_publication`、`render_movie_nfo`、
+  `fc2_organizer.images`（`ImageAcquisitionPolicy`），（S2-A1）以及第 6 节只授权给它的标准库 `inspect`、`functools`；
+  其它模块的允许清单不含 `inspect`、`functools`；`stages.py` 是唯一 import `build_organize_plan`、`prepare_publication`、`render_movie_nfo`、
   `build_artifact_requests`、`preflight_execution` 的模块。
 * 禁止 import 清单（第 6 节）逐项断言；私有模块（`_fs`、`seal`、`atomic` 等）零引用。
 * 禁止调用：任何 `os.*` 属性访问中除 `os.name`、`os.path.basename` 以外的名称；`open`、`eval`、`exec`、`compile`、
