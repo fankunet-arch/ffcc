@@ -43,7 +43,8 @@ _STAGE_APIS = {"build_organize_plan", "prepare_publication", "render_movie_nfo",
                "preflight_execution"}
 
 _ALLOWED_STDLIB = {"__future__", "asyncio", "collections.abc", "dataclasses", "enum", "ntpath", "os", "posixpath",
-                   "re", "secrets", "threading", "typing"}
+                   "re", "secrets", "threading", "typing",
+                   "functools", "inspect"}  # S2-R3: orchestrator.py only (its per-module allow-list above)
 _ALLOWED_LOWER = {
     "fc2_metadata_core.batch", "fc2_metadata_core.normalize", "fc2_metadata_core.aggregation",
     "fc2_organizer.discovery", "fc2_organizer.planning", "fc2_organizer.publication", "fc2_organizer.nfo",
@@ -67,7 +68,8 @@ _ALLOWED = {
                   "fc2_organizer.planning", "fc2_organizer.publication", f"{_PKG}.models"},
     "preview.py": {"__future__", "asyncio", "dataclasses", "secrets", "fc2_organizer.images.acquisition",
                    f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.recognition", f"{_PKG}.stages"},
-    "orchestrator.py": {"__future__", "threading", "fc2_metadata_core.batch", "fc2_organizer.images",
+    "orchestrator.py": {"__future__", "functools", "inspect", "threading", "fc2_metadata_core.batch",
+                        "fc2_organizer.images",
                         "fc2_organizer.planning", f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.preview"},
 }
 _FORBIDDEN_MODULES = (

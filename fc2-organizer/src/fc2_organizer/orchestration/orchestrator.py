@@ -9,9 +9,10 @@ Constructor shape checks never run caller code (S2-R1, finding P4-C8-S2-R-01): `
 ``image_client.get`` are resolved *statically* (the class namespaces along the C-level MRO and the instance
 ``__dict__`` read through the standard getset descriptor only; no ``getattr`` / ``hasattr``, so no property,
 descriptor ``__get__``, ``__getattr__`` or ``__getattribute__`` hook runs) and classified statically: a
-function / method, ``staticmethod`` / ``classmethod``, a builtin, or a callable object (its type's static
-``__call__``) is accepted (``aggregate`` must be provably async, as the Phase 3 boundary requires; S2-R2,
-finding P4-C8-S2-R1-01). A property, a custom descriptor or a ``__getattr__``-only attribute cannot be
+function / method, ``staticmethod`` / ``classmethod``, a builtin, an exact ``functools.partial`` or a
+callable object (its type's static ``__call__``) is accepted. ``aggregate`` must be async by the Phase 3
+boundary's own rule, ``inspect.iscoroutinefunction``, evaluated only on a probe built from exact standard
+objects (S2-R2 / S2-R3, findings P4-C8-S2-R1-01, R2-01, R2-02). A property, a custom descriptor or a ``__getattr__``-only attribute cannot be
 classified without running it and is an ``OrchestrationConfigError``. The caller's engine is then wrapped in a
 private adapter, so the Phase 3 ``BatchScheduler`` inspects P4-C8's own ``aggregate`` and the caller's code
 first runs inside ``scheduler.run`` (the metadata stage); ``image_client.get`` first runs inside
@@ -24,6 +25,8 @@ is released in ``finally`` on every exit path (return, error, resource limit, ca
 
 from __future__ import annotations
 
+import functools
+import inspect
 import threading
 
 from fc2_metadata_core.batch import BatchConfigError, BatchScheduler
@@ -39,9 +42,7 @@ _MISSING = object()
 _TYPE_MRO = type.__dict__["__mro__"]  # C-level getters: never consult a metaclass attribute
 _TYPE_NAMESPACE = type.__dict__["__dict__"]
 _GETSET_DESCRIPTOR = type(_TYPE_NAMESPACE)
-_CO_COROUTINE = 0x80  # code flag of an ``async def``
-_COROUTINE_MARKER = "_is_coroutine_marker"  # set by inspect.markcoroutinefunction (Python 3.12)
-_MAX_DEPTH = 4
+_MAX_DEPTH = 8
 
 
 def _plain_function() -> None:
@@ -57,7 +58,8 @@ _FUNCTION = type(_plain_function)
 _BOUND_METHOD = type(_BoundProbe().method)
 _BUILTIN_FUNCTION = type(len)  # also the type of a bound builtin method (e.g. ``[].append``)
 _SLOT_WRAPPER = type(_TYPE_NAMESPACE.__get__(object, type)["__init__"])  # C-level ``__call__`` of builtin types
-_FUNCTION_DICT = _TYPE_NAMESPACE.__get__(_FUNCTION, type)["__dict__"]
+_PARTIAL = functools.partial
+_PARTIAL_FUNC = _TYPE_NAMESPACE.__get__(_PARTIAL, type)["func"]  # the C-level member of exact partials
 
 
 def _class_attribute(cls: type, name: str) -> object:
@@ -96,36 +98,50 @@ def _static_attribute(obj: object, name: str) -> tuple[object, bool]:
     return class_value, True
 
 
-def _is_coroutine_function(function: object) -> bool:
-    """An exact plain function that is ``async def`` (or carries the 3.12 coroutine marker)."""
-    if bool(function.__code__.co_flags & _CO_COROUTINE):
-        return True
-    namespace = _FUNCTION_DICT.__get__(function, _FUNCTION)
-    return type(namespace) is dict and _COROUTINE_MARKER in namespace
+def _is_trusted_terminal(value: object) -> bool:
+    """An exact plain function, or an exact bound method of one: objects the standard library can inspect
+    without running any caller code."""
+    return type(value) is _FUNCTION or (type(value) is _BOUND_METHOD and type(value.__func__) is _FUNCTION)
 
 
-def _callable_shape(raw: object, bound: bool, depth: int = 0) -> tuple[bool, bool] | None:
-    """Static callable classification: ``(True, is_async)`` or ``None`` (not provably callable without
-    running caller code). Reads only exact builtin types and their C-level members; never calls, binds or
+def _partial_probe(value: object) -> object | None:
+    """``value`` itself when it is a chain of exact ``functools.partial`` objects (read through the C-level
+    ``func`` member) ending in a trusted terminal; ``None`` otherwise (never inspected further)."""
+    current = value
+    for _ in range(_MAX_DEPTH):
+        if type(current) is not _PARTIAL:
+            return value if _is_trusted_terminal(current) else None
+        current = _PARTIAL_FUNC.__get__(current, _PARTIAL)
+    return None
+
+
+def _callable_shape(raw: object, bound: bool, depth: int = 0) -> tuple[bool, object | None] | None:
+    """Static callable-shape classification (S2-R3). ``None``: not provably callable without running caller
+    code. Otherwise ``(True, probe)``: ``probe`` is an object built only from exact standard types (function,
+    bound method, ``functools.partial`` chain) whose async-ness the standard library decides
+    (``_is_async``), or ``None`` when the callable is not provably async (builtin, C-level ``__call__``, a
+    partial of a non-standard object).
+
+    Shapes: a function (a method when ``bound``), a bound method, ``staticmethod`` / ``classmethod`` (their
+    ``__func__``), a builtin, an exact ``functools.partial``, and a callable object via its type's static
+    ``__call__``. Any other descriptor (``property``, a custom ``__get__``) is ``None``. Never calls, binds or
     ``getattr``s the candidate.
-
-    Accepted: a plain function (a method when ``bound``), a bound method, ``staticmethod`` /
-    ``classmethod`` (their ``__func__``), a builtin function / method, and a callable object whose type
-    defines ``__call__`` statically. Any other descriptor (``property``, a custom ``__get__``) is ``None``.
     """
     if depth > _MAX_DEPTH or raw is _MISSING:
         return None
     kind = type(raw)
     if kind is _FUNCTION:
-        return True, _is_coroutine_function(raw)
+        return True, raw
     if kind is _BOUND_METHOD:
-        return _callable_shape(raw.__func__, False, depth + 1)
+        return (True, raw) if type(raw.__func__) is _FUNCTION else _callable_shape(raw.__func__, False, depth + 1)
     if kind is staticmethod:
         return _callable_shape(raw.__func__, False, depth + 1)
     if kind is classmethod:
         return _callable_shape(raw.__func__, False, depth + 1) if bound else None  # unbound: not callable
     if kind is _BUILTIN_FUNCTION:
-        return True, False
+        return True, None
+    if kind is _PARTIAL:
+        return True, _partial_probe(raw)
     if bound and _has_class_attribute(kind, "__get__"):
         return None  # a custom (non-data) descriptor: only its ``__get__`` could tell, and it is not run
     call = _class_attribute(kind, "__call__")
@@ -133,15 +149,21 @@ def _callable_shape(raw: object, bound: bool, depth: int = 0) -> tuple[bool, boo
         return None
     call_kind = type(call)
     if call_kind is _FUNCTION:
-        return True, _is_coroutine_function(call)
+        return True, call
     if call_kind is staticmethod or call_kind is classmethod:
         return _callable_shape(call.__func__, False, depth + 1)
     if call_kind is _SLOT_WRAPPER:
-        return True, False  # a builtin type's C-level ``__call__``
+        return True, None  # a builtin type's C-level ``__call__``
     return None
 
 
-def _shape_of(obj: object, name: str) -> tuple[bool, bool] | None:
+def _is_async(probe: object | None) -> bool:
+    """The Phase 3 boundary's own rule (``inspect.iscoroutinefunction``), applied only to a probe made of
+    exact standard objects, so the standard library runs no caller code while deciding."""
+    return probe is not None and inspect.iscoroutinefunction(probe) is True
+
+
+def _shape_of(obj: object, name: str) -> tuple[bool, object | None] | None:
     raw, bound = _static_attribute(obj, name)
     return _callable_shape(raw, bound)
 
@@ -187,7 +209,7 @@ class BatchOrchestrator:
         if _shape_of(image_client, "get") is None:
             raise OrchestrationConfigError("image_client must provide a callable get (ImageHttpClient)")
         aggregate = _shape_of(engine, "aggregate")
-        if aggregate is None or aggregate[1] is not True:
+        if aggregate is None or not _is_async(aggregate[1]):
             raise OrchestrationConfigError("engine must provide an async aggregate(number) (AggregationEngine)")
         scheduler = None
         try:

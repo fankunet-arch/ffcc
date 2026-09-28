@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import functools as _functools
+import inspect as _inspect
 import threading
 
 import pytest
 
 from fc2_metadata_core.batch import BatchConfig
+from fc2_metadata_core.batch.scheduler import _is_async_callable as _phase3_is_async_callable  # parity oracle
 from fc2_organizer.images import ImageAcquisitionPolicy
 from fc2_organizer.orchestration import (
     MAX_ITEM_IMAGE_BYTES,
@@ -596,3 +599,181 @@ def test_instance_attribute_functions_and_bound_methods_are_accepted(tmp_path):
     orchestrator = BatchOrchestrator(engine, corpus.client, str(corpus.library))
     run(orchestrator.preview(corpus.items))
     assert other.calls == ["FC2-1000001"] and engine.calls == []
+
+
+# =========================================================================== S2-R3: async shapes follow Phase 3 (inspect)
+
+async def _async_impl(number):  # pragma: no cover - only classified here
+    return None
+
+
+def _sync_impl(number):  # pragma: no cover - only classified here
+    return None
+
+
+def _fake_marked(value):
+    def sync_fn(number):  # pragma: no cover - never awaited
+        return None
+
+    sync_fn._is_coroutine_marker = value
+    return sync_fn
+
+
+class _AsyncCall:
+    async def __call__(self, number):  # pragma: no cover
+        return None
+
+
+class _SyncCall:
+    def __call__(self, number):  # pragma: no cover
+        return None
+
+
+class _Methods:
+    async def async_method(self, number):  # pragma: no cover
+        return None
+
+    def sync_method(self, number):  # pragma: no cover
+        return None
+
+
+def _parity_candidates() -> dict[str, object]:
+    candidates = {
+        "async function": _async_impl,
+        "sync function": _sync_impl,
+        "partial(async)": _functools.partial(_async_impl),
+        "partial(async, bound argument)": _functools.partial(_async_impl, "FC2-1000001"),
+        "partial(partial(async))": _functools.partial(_functools.partial(_async_impl)),
+        "partial(sync)": _functools.partial(_sync_impl),
+        "fake marker False": _fake_marked(False),
+        "fake marker True": _fake_marked(True),
+        "fake marker object": _fake_marked(object()),
+        "fake marker string": _fake_marked("fake"),
+        "bound async method": _Methods().async_method,
+        "bound sync method": _Methods().sync_method,
+        "async callable object": _AsyncCall(),
+        "sync callable object": _SyncCall(),
+    }
+    if hasattr(_inspect, "markcoroutinefunction"):
+        candidates["official marker"] = _inspect.markcoroutinefunction(_fake_marked(None))
+    return candidates
+
+
+def _engine_with(aggregate):
+    engine = type("Engine", (), {})()
+    engine.aggregate = aggregate
+    return engine
+
+
+def _accepted(engine) -> bool:
+    try:
+        BatchOrchestrator(engine, ScriptedImageClient(), LIBRARY)
+    except OrchestrationConfigError:
+        return False
+    return True
+
+
+@pytest.mark.parametrize("name", list(_parity_candidates()))
+def test_aggregate_acceptance_matches_phase3_inspect_semantics(name):
+    candidate = _parity_candidates()[name]
+    expected = _phase3_is_async_callable(candidate)  # the Phase 3 boundary's own rule
+    assert _accepted(_engine_with(candidate)) is expected, name
+
+
+def test_parity_expectations_are_the_standard_library_verdicts():
+    candidates = _parity_candidates()
+    assert _inspect.iscoroutinefunction(candidates["partial(async)"]) is True
+    assert _inspect.iscoroutinefunction(candidates["partial(partial(async))"]) is True
+    for fake in ("fake marker False", "fake marker True", "fake marker object", "fake marker string"):
+        assert _inspect.iscoroutinefunction(candidates[fake]) is False, fake
+        assert _accepted(_engine_with(candidates[fake])) is False, fake
+    if "official marker" in candidates:
+        assert _inspect.iscoroutinefunction(candidates["official marker"]) is True
+        assert _accepted(_engine_with(candidates["official marker"])) is True
+
+
+def _runtime_aggregates(inner):
+    """Legal aggregate shapes (partials, nested partials, the official marker when available), each
+    delegating to ``inner.aggregate`` and counting its calls."""
+    calls: list[str] = []
+
+    async def impl(number):
+        calls.append(number)
+        return await inner.aggregate(number)
+
+    def sync_returning_coroutine(number):
+        return impl(number)
+
+    shapes = {"partial(async)": _functools.partial(impl),
+              "partial(partial(async))": _functools.partial(_functools.partial(impl))}
+    if hasattr(_inspect, "markcoroutinefunction"):
+        shapes["official marker"] = _inspect.markcoroutinefunction(sync_returning_coroutine)
+    return calls, shapes
+
+
+@pytest.mark.parametrize("shape", ["partial(async)", "partial(partial(async))", "official marker"])
+def test_partial_and_marked_aggregates_run_only_in_preview(tmp_path, shape):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    calls, shapes = _runtime_aggregates(corpus.engine)
+    if shape not in shapes:  # the runtime has no inspect.markcoroutinefunction: nothing to accept
+        assert not hasattr(_inspect, "markcoroutinefunction")
+        return
+    orchestrator = BatchOrchestrator(_engine_with(shapes[shape]), corpus.client, str(corpus.library))
+    assert calls == [] and corpus.engine.calls == []  # construction ran no engine code
+    preview = run(orchestrator.preview(corpus.items))
+    assert calls == ["FC2-1000001"] and preview.items[0].issue is None
+
+
+def test_partial_image_client_get_is_accepted_and_used(tmp_path):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    calls: list[str] = []
+
+    def get_impl(url, **kwargs):
+        calls.append(url)
+        return corpus.client.get(url, **kwargs)
+
+    client = type("Client", (), {})()
+    client.get = _functools.partial(get_impl)
+    orchestrator = BatchOrchestrator(corpus.engine, client, str(corpus.library))
+    assert calls == []
+    preview = run(orchestrator.preview(corpus.items))
+    assert calls and preview.items[0].issue is None
+
+
+def test_objects_that_only_look_like_partials_run_no_hook():
+    hooks = _Hooks()
+
+    class FakePartial:
+        @property
+        def func(self):
+            hooks.calls.append("func")
+            return _async_impl
+
+    class PartialSubclass(_functools.partial):
+        @property
+        def func(self):
+            hooks.calls.append("subclass func")
+            return _async_impl
+
+    class HostileTarget:
+        async def __call__(self, number):  # pragma: no cover
+            return None
+
+        @property
+        def __class__(self):
+            hooks.calls.append("__class__")
+            return _functools.partial
+
+        def __getattribute__(self, attribute):
+            hooks.calls.append(attribute)
+            return object.__getattribute__(self, attribute)
+
+    for candidate in (FakePartial(), PartialSubclass(_async_impl), _functools.partial(HostileTarget())):
+        hooks.calls.clear()
+        assert _accepted(_engine_with(candidate)) is False  # not provably async without running code
+        assert hooks.calls == []
+    client = type("Client", (), {})()
+    client.get = _functools.partial(HostileTarget())  # a partial is callable: accepted for get, still no hook
+    hooks.calls.clear()
+    BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
+    assert hooks.calls == []
