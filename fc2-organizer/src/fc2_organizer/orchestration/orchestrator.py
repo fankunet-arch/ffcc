@@ -42,7 +42,7 @@ _MISSING = object()
 _TYPE_MRO = type.__dict__["__mro__"]  # C-level getters: never consult a metaclass attribute
 _TYPE_NAMESPACE = type.__dict__["__dict__"]
 _GETSET_DESCRIPTOR = type(_TYPE_NAMESPACE)
-_MAX_DEPTH = 8
+_CYCLE = object()  # a wrapper chain that returns to an object already visited: not a finite callable
 
 
 def _plain_function() -> None:
@@ -104,57 +104,77 @@ def _is_trusted_terminal(value: object) -> bool:
     return type(value) is _FUNCTION or (type(value) is _BOUND_METHOD and type(value.__func__) is _FUNCTION)
 
 
-def _partial_probe(value: object) -> object | None:
-    """``value`` itself when it is a chain of exact ``functools.partial`` objects (read through the C-level
-    ``func`` member) ending in a trusted terminal; ``None`` otherwise (never inspected further)."""
+def _partial_terminal(value: object) -> object:
+    """Follow a chain of exact ``functools.partial`` objects (through the C-level ``func`` member only) to its
+    first non-partial object, however long the (finite) chain is. Returns ``_CYCLE`` when the chain returns
+    to a partial already visited (identity only: no caller ``__eq__`` / ``__hash__`` runs)."""
+    visited: set[int] = set()
     current = value
-    for _ in range(_MAX_DEPTH):
-        if type(current) is not _PARTIAL:
-            return value if _is_trusted_terminal(current) else None
+    while type(current) is _PARTIAL:
+        if id(current) in visited:
+            return _CYCLE
+        visited.add(id(current))
         current = _PARTIAL_FUNC.__get__(current, _PARTIAL)
-    return None
+    return current
 
 
-def _callable_shape(raw: object, bound: bool, depth: int = 0) -> tuple[bool, object | None] | None:
-    """Static callable-shape classification (S2-R3). ``None``: not provably callable without running caller
-    code. Otherwise ``(True, probe)``: ``probe`` is an object built only from exact standard types (function,
-    bound method, ``functools.partial`` chain) whose async-ness the standard library decides
-    (``_is_async``), or ``None`` when the callable is not provably async (builtin, C-level ``__call__``, a
-    partial of a non-standard object).
+def _callable_shape(raw: object, bound: bool) -> tuple[bool, object | None] | None:
+    """Static callable-shape classification. ``None``: not provably callable without running caller code.
+    Otherwise ``(True, probe)``: ``probe`` is an object built only from exact standard types (function,
+    bound method, finite ``functools.partial`` chain ending in one of those) whose async-ness the standard
+    library decides (``_is_async``), or ``None`` when the callable is not provably async (builtin, C-level
+    ``__call__``, a partial of a non-standard object).
 
     Shapes: a function (a method when ``bound``), a bound method, ``staticmethod`` / ``classmethod`` (their
-    ``__func__``), a builtin, an exact ``functools.partial``, and a callable object via its type's static
-    ``__call__``. Any other descriptor (``property``, a custom ``__get__``) is ``None``. Never calls, binds or
-    ``getattr``s the candidate.
+    ``__func__``), a builtin, an exact ``functools.partial`` chain of any finite length, and a callable
+    object via its type's static ``__call__``. Any other descriptor (``property``, a custom ``__get__``) and
+    any wrapper cycle is ``None``. Wrapper layers are unwrapped iteratively with an identity ``visited``
+    set -- no depth cap. Never calls, binds or ``getattr``s the candidate.
     """
-    if depth > _MAX_DEPTH or raw is _MISSING:
+    visited: set[int] = set()
+    current, current_bound = raw, bound
+    while True:
+        if current is _MISSING or id(current) in visited:
+            return None
+        visited.add(id(current))
+        kind = type(current)
+        if kind is _FUNCTION:
+            return True, current
+        if kind is _BOUND_METHOD:
+            function = current.__func__
+            if type(function) is _FUNCTION:
+                return True, current
+            current, current_bound = function, False
+            continue
+        if kind is staticmethod:
+            current, current_bound = current.__func__, False
+            continue
+        if kind is classmethod:
+            if not current_bound:
+                return None  # a classmethod object outside a class namespace is not callable
+            current, current_bound = current.__func__, False
+            continue
+        if kind is _BUILTIN_FUNCTION:
+            return True, None
+        if kind is _PARTIAL:
+            terminal = _partial_terminal(current)
+            if terminal is _CYCLE:
+                return None
+            return True, (current if _is_trusted_terminal(terminal) else None)
+        if current_bound and _has_class_attribute(kind, "__get__"):
+            return None  # a custom (non-data) descriptor: only its ``__get__`` could tell, and it is not run
+        call = _class_attribute(kind, "__call__")
+        if call is _MISSING:
+            return None
+        call_kind = type(call)
+        if call_kind is _FUNCTION:
+            return True, call
+        if call_kind is staticmethod or call_kind is classmethod:
+            current, current_bound = call.__func__, False
+            continue
+        if call_kind is _SLOT_WRAPPER:
+            return True, None  # a builtin type's C-level ``__call__``
         return None
-    kind = type(raw)
-    if kind is _FUNCTION:
-        return True, raw
-    if kind is _BOUND_METHOD:
-        return (True, raw) if type(raw.__func__) is _FUNCTION else _callable_shape(raw.__func__, False, depth + 1)
-    if kind is staticmethod:
-        return _callable_shape(raw.__func__, False, depth + 1)
-    if kind is classmethod:
-        return _callable_shape(raw.__func__, False, depth + 1) if bound else None  # unbound: not callable
-    if kind is _BUILTIN_FUNCTION:
-        return True, None
-    if kind is _PARTIAL:
-        return True, _partial_probe(raw)
-    if bound and _has_class_attribute(kind, "__get__"):
-        return None  # a custom (non-data) descriptor: only its ``__get__`` could tell, and it is not run
-    call = _class_attribute(kind, "__call__")
-    if call is _MISSING:
-        return None
-    call_kind = type(call)
-    if call_kind is _FUNCTION:
-        return True, call
-    if call_kind is staticmethod or call_kind is classmethod:
-        return _callable_shape(call.__func__, False, depth + 1)
-    if call_kind is _SLOT_WRAPPER:
-        return True, None  # a builtin type's C-level ``__call__``
-    return None
 
 
 def _is_async(probe: object | None) -> bool:

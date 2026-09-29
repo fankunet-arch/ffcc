@@ -777,3 +777,146 @@ def test_objects_that_only_look_like_partials_run_no_hook():
     hooks.calls.clear()
     BatchOrchestrator(ScriptedEngine(), client, LIBRARY)
     assert hooks.calls == []
+
+
+# =========================================================================== S2-R4: finite exact partial chains of any depth
+
+_DEPTHS = [1, 2, 7, 8, 9, 16, 32]
+
+
+def _deep_partial(terminal, depth: int):
+    """A real chain of ``depth`` exact ``functools.partial`` nodes ending in ``terminal``. Built through the
+    standard partial state mechanism (``__setstate__``): the ordinary constructor flattens nested partials,
+    so ``partial(partial(fn))`` is a single node."""
+    current = terminal
+    for _ in range(depth):
+        node = _functools.partial(terminal)
+        node.__setstate__((current, (), {}, None))
+        current = node
+    return current
+
+
+def _chain_depth(candidate, terminal) -> int:
+    """Assert the node-by-node structure (every node an exact partial whose stdlib ``func`` member is the
+    next node) and return the number of partial nodes."""
+    depth, node = 0, candidate
+    while type(node) is _functools.partial:
+        depth += 1
+        node = node.func  # exact partial: the C-level member, no caller code
+    assert node is terminal
+    return depth
+
+
+def test_the_ordinary_partial_constructor_flattens_so_deep_chains_need_the_state_builder():
+    flattened = _functools.partial(_functools.partial(_async_impl))
+    assert _chain_depth(flattened, _async_impl) == 1
+    assert _chain_depth(_deep_partial(_async_impl, 8), _async_impl) == 8
+
+
+@pytest.mark.parametrize("depth", _DEPTHS)
+def test_finite_exact_partial_chain_of_any_depth_matches_inspect(depth):
+    candidate = _deep_partial(_async_impl, depth)
+    assert _chain_depth(candidate, _async_impl) == depth
+    assert _inspect.iscoroutinefunction(candidate) is True  # standard-library oracle
+    assert _phase3_is_async_callable(candidate) is True
+    assert _accepted(_engine_with(candidate)) is True
+
+
+@pytest.mark.parametrize("depth", [1, 8, 16])
+def test_deep_partial_of_a_sync_terminal_is_rejected(depth):
+    candidate = _deep_partial(_sync_impl, depth)
+    assert _chain_depth(candidate, _sync_impl) == depth
+    assert _inspect.iscoroutinefunction(candidate) is False
+    assert _accepted(_engine_with(candidate)) is False
+
+
+@pytest.mark.parametrize("depth", [8, 16])
+def test_deep_partial_aggregate_is_called_only_in_preview(tmp_path, depth):
+    corpus = Corpus(tmp_path, [Film("FC2-PPV-1000001.mp4")])
+    calls: list[str] = []
+
+    async def impl(number):
+        calls.append(number)
+        return await corpus.engine.aggregate(number)
+
+    candidate = _deep_partial(impl, depth)
+    assert _chain_depth(candidate, impl) == depth and _inspect.iscoroutinefunction(candidate) is True
+    orchestrator = BatchOrchestrator(_engine_with(candidate), corpus.client, str(corpus.library))
+    assert calls == [] and corpus.engine.calls == []  # construction ran no engine code
+    preview = run(orchestrator.preview(corpus.items))
+    assert calls == ["FC2-1000001"] and corpus.engine.calls == ["FC2-1000001"]
+    assert preview.items[0].issue is None
+
+
+def test_deep_partial_image_client_get_is_accepted():
+    client = type("Client", (), {})()
+    client.get = _deep_partial(_async_get, 16)
+    assert BatchOrchestrator(ScriptedEngine(), client, LIBRARY).library_root == LIBRARY
+
+
+def test_exact_partial_never_extends_trust_to_a_partial_subclass_node():
+    hooks = _Hooks()
+
+    class PartialSubclass(_functools.partial):
+        @property
+        def func(self):
+            hooks.calls.append("subclass func")
+            return _async_impl
+
+    middle = PartialSubclass(_async_impl)
+    outer = _functools.partial(_sync_impl)
+    outer.__setstate__((middle, (), {}, None))  # exact partial -> partial subclass -> async function
+    hooks.calls.clear()
+    assert _accepted(_engine_with(outer)) is False  # the subclass node is not trusted: fail closed
+    chain = _functools.partial(_sync_impl)
+    chain.__setstate__((outer, (), {}, None))  # two exact nodes above the subclass
+    assert _accepted(_engine_with(chain)) is False
+    assert hooks.calls == []
+
+
+def _run_with_watchdog(function, seconds: float = 10.0):
+    """Run ``function`` in a daemon thread; a hang fails the test instead of the session (no sleep)."""
+    outcome: list[object] = []
+
+    def target():
+        try:
+            outcome.append(("returned", function()))
+        except BaseException as error:  # noqa: BLE001 - recorded for the assertion below
+            outcome.append(("raised", error))
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    assert not thread.is_alive(), "constructor did not terminate on a partial cycle"
+    return outcome[0]
+
+
+def _cycles():
+    self_cycle = _functools.partial(_async_impl)
+    self_cycle.__setstate__((self_cycle, (), {}, None))
+    first, second = _functools.partial(_async_impl), _functools.partial(_async_impl)
+    first.__setstate__((second, (), {}, None))
+    second.__setstate__((first, (), {}, None))
+    long_cycle = _deep_partial(_async_impl, 12)
+    tail = long_cycle
+    for _ in range(11):
+        tail = tail.func
+    tail.__setstate__((long_cycle, (), {}, None))  # the last node points back to the head
+    return {"self": self_cycle, "two nodes": first, "twelve nodes": long_cycle}
+
+
+@pytest.mark.parametrize("name", ["self", "two nodes", "twelve nodes"])
+def test_partial_cycles_fail_closed_in_finite_time(name):
+    cycle = _cycles()[name]
+    node, seen = cycle, set()
+    while type(node) is _functools.partial and id(node) not in seen:  # the object really is a cycle
+        seen.add(id(node))
+        node = node.func
+    assert type(node) is _functools.partial and id(node) in seen
+
+    kind, value = _run_with_watchdog(lambda: BatchOrchestrator(_engine_with(cycle), ScriptedImageClient(), LIBRARY))
+    assert kind == "raised" and type(value) is OrchestrationConfigError
+    client = type("Client", (), {})()
+    client.get = cycle
+    kind, value = _run_with_watchdog(lambda: BatchOrchestrator(ScriptedEngine(), client, LIBRARY))
+    assert kind == "raised" and type(value) is OrchestrationConfigError
