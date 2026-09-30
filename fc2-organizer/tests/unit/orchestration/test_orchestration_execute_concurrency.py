@@ -172,3 +172,111 @@ def test_concurrent_items_reach_their_own_targets(tmp_path, monkeypatch):
         assert executed.disposition is D.EXECUTED and executed.execution_status is ExecutionStatus.SUCCESS
         assert os.path.isfile(source.final_media_path) and not os.path.exists(source.source_path)
     assert len(os.listdir(corpus.library)) == 8
+
+
+# --------------------------------------------------------------------------- S3-R1 (P4-C8-S3-R-01)
+
+
+class _FixedSlots(list):
+    """Stands in for the run's result slots: positional item assignment is the only permitted write; any
+    structural change (append / insert / delete / resize) is recorded as a violation and refused."""
+
+    def __init__(self, initial, owner) -> None:
+        super().__init__(initial)
+        self.owner = owner
+        self.writes: list[tuple[int, int]] = []
+        self.violations: list[str] = []
+
+    def __setitem__(self, position, value):
+        if type(position) is not int or not 0 <= position < len(self) or self[position] is not None:
+            self.violations.append(f"setitem {position!r}")
+        with self.owner:
+            self.writes.append((position, threading.get_ident()))
+        super().__setitem__(position, value)
+
+    def _structural(name):
+        def refuse(self, *args, **kwargs):
+            self.violations.append(name)
+            raise AssertionError(f"structural result-slot mutation: {name}")
+        return refuse
+
+    append = _structural("append")
+    extend = _structural("extend")
+    insert = _structural("insert")
+    pop = _structural("pop")
+    remove = _structural("remove")
+    clear = _structural("clear")
+    __delitem__ = _structural("__delitem__")
+    __iadd__ = _structural("__iadd__")
+    __imul__ = _structural("__imul__")
+    del _structural
+
+
+@pytest.mark.parametrize("workers", [2, 4, 8])
+def test_result_slots_are_preallocated_positional_and_independent_of_completion(tmp_path, monkeypatch, workers):
+    """R-01: before any worker exists the run holds a fixed-length list of empty slots, one per selected item;
+    each worker writes only the position it was admitted for (selection position, not ``item.index``);
+    reversed completion over a non-contiguous selection gives the same result as the inline run."""
+    selection = tuple(range(0, 2 * workers, 2))  # non-contiguous: position p holds item index 2p
+    corpus_a, orchestrator_a, preview_a = _prepared(tmp_path / "a", 2 * workers, 1)
+    baseline = _projection(orchestrator_a.execute(preview_a, selection=selection))
+
+    corpus_b, orchestrator_b, preview_b = _prepared(tmp_path / "b", 2 * workers, workers)
+    by_id = {item.preflight.preflight_id: item.index for item in preview_b.items}
+    lock = threading.Lock()
+    runs: list[object] = []
+    real_thread = threading.Thread
+
+    class Inspecting(real_thread):
+        def __init__(self, *args, **kwargs):
+            if not runs:  # the first thread object: no worker exists yet
+                run = kwargs["args"][0]
+                slots = run.slots
+                assert type(slots) is list and len(slots) == len(selection) and all(s is None for s in slots)
+                run.slots = _FixedSlots(slots, lock)
+                runs.append(run)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(execute_module.threading, "Thread", Inspecting)
+    executing: dict[int, int] = {}  # worker ident -> item index it is executing
+    gates = {index: threading.Event() for index in selection}
+    done = {index: threading.Event() for index in selection}
+    arrived = threading.Barrier(len(selection) + 1)
+
+    def gated(preflight):
+        index = by_id[preflight.preflight_id]
+        with lock:
+            executing[threading.get_ident()] = index
+        arrived.wait(WAIT)
+        assert gates[index].wait(WAIT)
+        try:
+            return execute_filesystem(preflight)
+        finally:
+            done[index].set()
+
+    monkeypatch.setattr(execute_module, "execute_filesystem", gated)
+    finished: list[int] = []
+
+    def controller():
+        arrived.wait(WAIT)  # every selected item is in flight
+        for index in reversed(selection):
+            gates[index].set()
+            assert done[index].wait(WAIT)
+            finished.append(index)
+
+    control = real_thread(target=controller)
+    control.start()
+    result = orchestrator_b.execute(preview_b, selection=selection)
+    control.join()
+    assert len(runs) == 1 and finished == list(reversed(selection))  # completions really reversed
+    slots = runs[0].slots
+    assert type(slots) is _FixedSlots and len(slots) == len(selection) and slots.violations == []
+    assert sorted(p for p, _ in slots.writes) == list(range(len(selection)))  # each position written once
+    main = threading.get_ident()
+    for position, ident in slots.writes:
+        assert ident != main  # written by the worker that executed it ...
+        assert executing[ident] == selection[position]  # ... into the selection position of its item
+    assert _projection(result) == baseline
+    by_index = {i.index: i.disposition for i in result.items}
+    assert [k for k, v in by_index.items() if v is D.EXECUTED] == list(selection)
+    assert all(by_index[k] is D.NOT_SELECTED for k in by_index if k not in selection)

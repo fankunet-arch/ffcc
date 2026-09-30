@@ -17,13 +17,18 @@ creates threads; it performs no filesystem access of its own -- all of it is P4-
 Workers (section 19.3): ``W_eff = min(W, selected READY items)``; ``W_eff <= 1`` runs inline in the calling
 thread, otherwise exactly ``W_eff`` non-daemon threads take the next item in index order from a cursor
 guarded by one lock, checking ``stopping`` and ``cancel.cancelled`` under that lock before every admission.
-Results land in per-index slots, so the output never depends on completion order.
+The cursor hands out ``(position, item)``; results land in a fixed-length list of positional slots
+allocated before any thread exists (one slot per selected item, position = place in the selected tuple,
+not ``item.index``), so workers never change the structure of any shared container and the output never
+depends on completion order. The ``index -> outcome`` mapping is built by the calling thread after the drain.
 
 Cancellation (section 27) only stops admission; an item inside ``execute_filesystem`` always runs to its
 end. A non-``Exception`` ``BaseException`` (section 20.3) from a worker, or one delivered to the calling
-thread while it waits, is recorded once (the first object wins, none of its metadata is read), stops
-admission, every thread is joined, and the same object is re-raised -- never an item result, never a
-partial ``BatchExecutionResult``. No exception is raised from inside an ``except`` block.
+thread while it starts or waits, is recorded once (the first object wins, none of its metadata is read),
+stops admission, every thread that actually started is joined, and the same object is re-raised -- never an
+item result, never a partial ``BatchExecutionResult``. A thread is tracked for the drain *before*
+``start()`` is called, because ``start()`` can raise after the worker already runs. No exception is raised
+from inside an ``except`` block.
 """
 
 from __future__ import annotations
@@ -166,19 +171,22 @@ def _selected_items(preview: BatchPreview, selection: object) -> tuple[ItemPrevi
 
 
 class _Run:
-    """Shared state of one threaded execution: the admission cursor, the stop flag, the first fatal object
-    and the per-index result slots. Guarded by ``lock`` (never published)."""
+    """Shared state of one threaded execution: the admission cursor, the stop flag, the first fatal object,
+    the positional result slots and one entry event per worker. Guarded by ``lock`` (never published)."""
 
-    __slots__ = ("lock", "items", "cancel", "cursor", "stopping", "fatal", "outcomes")
+    __slots__ = ("lock", "items", "cancel", "cursor", "stopping", "fatal", "slots", "entered")
 
-    def __init__(self, items: tuple[ItemPreview, ...], cancel: CancellationToken | None) -> None:
+    def __init__(self, selected: tuple[ItemPreview, ...], cancel: CancellationToken | None, workers: int) -> None:
         self.lock = threading.Lock()
-        self.items = items
+        self.items = selected
         self.cancel = cancel
         self.cursor = 0
         self.stopping = False
         self.fatal: list[BaseException] = []  # at most one element: the first fatal object
-        self.outcomes: dict[int, _Outcome] = {}
+        # fixed length before any worker exists; slot ``p`` belongs to ``items[p]`` and is written once,
+        # by the worker that admitted position ``p`` (an item assignment, never a structural change)
+        self.slots: list[_Outcome | None] = [None] * len(selected)
+        self.entered = tuple(threading.Event() for _ in range(workers))  # set by each worker on entry
 
     def record_fatal(self, fatal: BaseException) -> None:
         """Keep the first fatal object only (identity; no metadata read) and stop admission."""
@@ -187,50 +195,66 @@ class _Run:
                 self.fatal.append(fatal)
             self.stopping = True
 
-    def admit(self) -> ItemPreview | None:
+    def admit(self) -> tuple[int, ItemPreview] | None:
         with self.lock:
             if self.stopping or (self.cancel is not None and self.cancel.cancelled):
                 return None
             if self.cursor >= len(self.items):
                 return None
-            item = self.items[self.cursor]
+            position = self.cursor
             self.cursor += 1
-            return item
+            return position, self.items[position]
 
 
-def _worker(run: _Run) -> None:
+def _worker(run: _Run, number: int) -> None:
+    run.entered[number].set()  # first statement: this thread really runs and will end (drain handshake)
     try:
         while True:
-            item = run.admit()
-            if item is None:
+            admitted = run.admit()
+            if admitted is None:
                 return
-            run.outcomes[item.index] = _execute_one(item)
+            position, item = admitted
+            run.slots[position] = _execute_one(item)  # own fixed position only
     except BaseException as fatal:  # fatal control flow (or a defect): recorded, re-raised by the caller
         run.record_fatal(fatal)
 
 
+def _never_started(thread: threading.Thread) -> bool:
+    """True only when ``start()`` failed before any thread of control existed: no ident and not known to
+    ``threading`` (a thread that is starting is already listed; one that ran has an ident)."""
+    return thread.ident is None and thread not in threading.enumerate()
+
+
+def _drain(run: _Run, thread: threading.Thread, number: int) -> None:
+    joined = False
+    while not joined:
+        try:
+            if _never_started(thread):
+                return  # nothing to join; joining it would raise and is never attempted
+            run.entered[number].wait()  # it runs: ``join`` is legal once the worker has entered
+            thread.join()
+            joined = True
+        except BaseException as fatal:  # KeyboardInterrupt / SystemExit delivered to the caller
+            run.record_fatal(fatal)
+
+
 def _execute_threaded(items: tuple[ItemPreview, ...], cancel: CancellationToken | None,
                       workers: int) -> dict[int, _Outcome]:
-    run = _Run(items, cancel)
-    threads = [threading.Thread(target=_worker, args=(run,), daemon=False) for _ in range(workers)]
-    started: list[threading.Thread] = []
+    run = _Run(items, cancel, workers)  # slots allocated here, before any thread is created
+    threads = [threading.Thread(target=_worker, args=(run, number), daemon=False) for number in range(workers)]
+    launched: list[threading.Thread] = []
     try:
         for thread in threads:
+            launched.append(thread)  # tracked before start(): start() may raise after the worker began
             thread.start()
-            started.append(thread)
     except BaseException as failure:  # cannot start (or interrupted while starting): stop, drain, re-raise
         run.record_fatal(failure)
-    for thread in started:  # every thread is joined before anything propagates (section 20.3)
-        joined = False
-        while not joined:
-            try:
-                thread.join()
-                joined = True
-            except BaseException as fatal:  # KeyboardInterrupt / SystemExit delivered to the caller
-                run.record_fatal(fatal)
+    for number, thread in enumerate(launched):  # every started thread is joined first (section 20.3)
+        _drain(run, thread, number)
     if run.fatal:
         raise run.fatal[0]  # the original object
-    return run.outcomes
+    # single-threaded from here: the calling thread maps the fixed positions to item indices
+    return {item.index: outcome for item, outcome in zip(items, run.slots) if outcome is not None}
 
 
 def _execute_inline(items: tuple[ItemPreview, ...], cancel: CancellationToken | None) -> dict[int, _Outcome]:

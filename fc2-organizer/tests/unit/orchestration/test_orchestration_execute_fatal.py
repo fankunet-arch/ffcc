@@ -14,7 +14,12 @@ import threading
 import pytest
 
 from fc2_organizer.execution import execute_filesystem
-from fc2_organizer.orchestration import BatchExecutionResult, OrchestrationConfig, OrchestrationConsumedError
+from fc2_organizer.orchestration import (
+    BatchExecutionResult,
+    OrchestrationBusyError,
+    OrchestrationConfig,
+    OrchestrationConsumedError,
+)
 from fc2_organizer.orchestration import execute as execute_module
 
 from ._helpers import Corpus, Film, assert_source_not_lost, run
@@ -233,3 +238,165 @@ def test_the_orchestrator_is_usable_again_after_a_fatal(tmp_path, monkeypatch):
     monkeypatch.undo()
     fresh = run(orchestrator.preview(corpus.items))  # a fresh preview of the untouched sources
     assert type(orchestrator.execute(fresh)) is BatchExecutionResult
+
+
+# --------------------------------------------------------------------------- S3-R1 (P4-C8-S3-R-02)
+
+
+def _start_seam(monkeypatch, created, joined, on_start, joining=None):
+    """``threading.Thread`` stand-in: ``on_start(thread, real_start)`` decides how ``start()`` behaves; every
+    ``join`` is recorded (and announced through ``joining`` for the first thread)."""
+    real_thread = threading.Thread
+
+    class Seam(real_thread):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            created.append(self)
+
+        def start(self):
+            on_start(self, super().start)
+
+        def join(self, timeout=None):
+            joined.append(self)
+            if joining is not None and self is created[0]:
+                joining.set()
+            return super().join(timeout)
+
+    monkeypatch.setattr(execute_module.threading, "Thread", Seam)
+    return real_thread
+
+
+def test_start_boundary_fatal_after_a_real_start_is_drained_before_it_propagates(tmp_path, monkeypatch):
+    corpus, orchestrator, preview, hashes = _prepared(tmp_path, 4, 2)
+    sentinel = KeyboardInterrupt()
+    inflight, release, joining, propagated = (threading.Event() for _ in range(4))
+    by_id = {i.preflight.preflight_id: i.index for i in preview.items}
+    calls: list[int] = []
+    lock = threading.Lock()
+
+    def blocking(preflight):
+        with lock:
+            calls.append(by_id[preflight.preflight_id])
+        inflight.set()
+        assert release.wait(WAIT)  # held inside the executor until the controller has looked
+        return execute_filesystem(preflight)
+
+    monkeypatch.setattr(execute_module, "execute_filesystem", blocking)
+    created: list[threading.Thread] = []
+    joined: list[threading.Thread] = []
+    alive_at_boundary: list[bool] = []
+
+    def on_start(thread, real_start):
+        real_start()  # the worker really runs
+        if thread is created[0]:
+            assert inflight.wait(WAIT)  # ... it admitted item 0 and is blocked inside the executor
+            alive_at_boundary.append(thread.is_alive())
+            raise sentinel  # the caller sees start() fail at its return boundary
+
+    real_thread = _start_seam(monkeypatch, created, joined, on_start, joining)
+    observed: dict[str, object] = {}
+
+    def controller():
+        observed["joined"] = joining.wait(WAIT)  # bounded: hang protection only
+        observed["alive"] = created[0].is_alive()
+        observed["propagated early"] = propagated.is_set()
+        try:
+            orchestrator.execute(preview)
+            observed["second"] = "returned"
+        except BaseException as error:  # noqa: BLE001 - classified below
+            observed["second"] = type(error)
+        release.set()
+
+    control = real_thread(target=controller)
+    control.start()
+    try:
+        with pytest.raises(BaseException) as info:
+            orchestrator.execute(preview)
+        propagated.set()
+        alive_at_propagation = [thread.is_alive() for thread in created]
+    finally:
+        joining.set()  # unblock the controller on a failing path; no-op otherwise
+        release.set()
+        control.join(WAIT)
+        for thread in created:
+            if thread.ident is not None:
+                thread.join(WAIT)
+    assert alive_at_boundary == [True]
+    assert observed == {"joined": True, "alive": True, "propagated early": False,
+                        "second": OrchestrationBusyError}  # busy stays claimed while the worker drains
+    assert info.value is sentinel  # the start-boundary object itself, only after the drain
+    assert alive_at_propagation == [False, False]
+    assert created[1].ident is None and created[1] not in joined  # never started, never joined
+    assert calls == [0]  # stopping: nothing admitted after the start-boundary fatal
+    monkeypatch.undo()
+    _after_fatal(corpus, orchestrator, preview, hashes)
+    fresh = run(orchestrator.preview(corpus.items))  # idle and usable again
+    assert len(fresh.items) == 4
+
+
+def test_start_failure_before_a_real_start_is_never_joined_and_prior_workers_drain(tmp_path, monkeypatch):
+    corpus, orchestrator, preview, hashes = _prepared(tmp_path, 5, 3)
+    failure = RuntimeError("can't start new thread")  # infrastructure failure: fatal, never an item ABORTED
+    recorded = _observe_fatal_record(monkeypatch)
+    inflight = threading.Event()
+    by_id = {i.preflight.preflight_id: i.index for i in preview.items}
+    calls: list[int] = []
+
+    def gated(preflight):
+        calls.append(by_id[preflight.preflight_id])
+        inflight.set()
+        assert recorded.wait(WAIT)  # in flight while the start failure is handled
+        return execute_filesystem(preflight)
+
+    monkeypatch.setattr(execute_module, "execute_filesystem", gated)
+    created: list[threading.Thread] = []
+    joined: list[threading.Thread] = []
+
+    def on_start(thread, real_start):
+        if thread is created[1]:
+            assert inflight.wait(WAIT)
+            raise failure  # before the real start: no thread of control exists
+        real_start()
+
+    _start_seam(monkeypatch, created, joined, on_start)
+    outcome: list[object] = []
+    with pytest.raises(BaseException) as info:
+        outcome.append(orchestrator.execute(preview))
+    assert info.value is failure and outcome == []
+    assert len(created) == 3 and joined == [created[0]]  # the never-started threads are not joined
+    assert created[1].ident is None and created[2].ident is None
+    assert not any(thread.is_alive() for thread in created)
+    assert calls == [0]
+    monkeypatch.undo()
+    _after_fatal(corpus, orchestrator, preview, hashes)
+
+
+def test_an_earlier_worker_fatal_wins_over_a_later_start_boundary_fatal(tmp_path, monkeypatch):
+    corpus, orchestrator, preview, hashes = _prepared(tmp_path, 4, 3)
+    first, later = SystemExit(7), KeyboardInterrupt()
+    recorded = _observe_fatal_record(monkeypatch)
+    by_id = {i.preflight.preflight_id: i.index for i in preview.items}
+
+    def scripted(preflight):
+        if by_id[preflight.preflight_id] == 0:
+            raise first
+        return execute_filesystem(preflight)
+
+    monkeypatch.setattr(execute_module, "execute_filesystem", scripted)
+    created: list[threading.Thread] = []
+    joined: list[threading.Thread] = []
+
+    def on_start(thread, real_start):
+        real_start()
+        if thread is created[1]:
+            assert recorded.wait(WAIT)  # the worker fatal is recorded first
+            raise later
+
+    _start_seam(monkeypatch, created, joined, on_start)
+    with pytest.raises(BaseException) as info:
+        orchestrator.execute(preview)
+    assert info.value is first
+    assert joined == created[:2] and created[2].ident is None
+    assert not any(thread.is_alive() for thread in created)
+    monkeypatch.undo()
+    _after_fatal(corpus, orchestrator, preview, hashes)
