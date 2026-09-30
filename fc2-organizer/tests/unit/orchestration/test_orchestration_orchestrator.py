@@ -134,8 +134,8 @@ def test_construction_touches_no_network_and_no_filesystem(monkeypatch):
     assert engine.calls == [] and client.calls == [] and trap.calls == [] and reads == []
 
 
-def test_no_execute_or_retry_api_in_s2():
-    for name in ("execute", "preview_retry", "merge_retry", "summary"):
+def test_no_retry_or_summary_api_before_s4():
+    for name in ("preview_retry", "merge_retry", "summary"):
         assert not hasattr(BatchOrchestrator, name), name
 
 

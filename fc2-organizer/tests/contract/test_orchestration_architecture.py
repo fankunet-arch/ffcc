@@ -1,17 +1,19 @@
 """Contract test: ``fc2_organizer.orchestration`` architecture boundary (P4-C8 contract sections 5, 6, 16, 33,
-34.1; construction plan S1, S2).
+34.1; construction plan S1, S2, S3).
 
-* exact S2 module set (S1 six + ``stages`` / ``preview`` / ``orchestrator``); no ``execute`` / ``retry`` yet;
+* exact S3 module set (S1 six + ``stages`` / ``preview`` / ``orchestrator`` + ``execute``); no ``retry`` yet;
 * per-module import allow-lists; only the bare public lower packages of contract section 6 (plus the two
   frozen explicit paths, not used before S2); the forbidden module list asserted item by item; zero
   private lower-layer module references;
 * no ``os`` use beyond ``os.name`` / ``os.path.basename``; no ``open`` / ``eval`` / ``exec`` / ``compile`` /
   ``__import__`` / ``print`` / ``shutil``; no rollback / persistence / diagnostics names;
-* structural zero mutation: ``execute_filesystem`` / ``materialize_*`` never named (S2 has no ``execute.py``);
-  no ``threading.Thread`` / thread pools / ``gather`` anywhere; ``TaskGroup.create_task`` only in ``preview.py``,
+* structural zero mutation: ``materialize_*`` never named; ``execute_filesystem`` only in ``execute.py`` (one
+  call site, the preview's own preflight); ``threading.Thread`` only in ``execute.py`` (non-daemon, created in a
+  ``range(workers)`` comprehension); no thread pools / ``gather`` anywhere; ``TaskGroup.create_task`` only in ``preview.py``,
   exactly once, inside a ``range(min(...))`` loop (bounded workers); ``acquire_images`` only in ``preview.py``;
   the five other stage APIs only in ``stages.py``; the retention ledger only in ``preview.py``;
-* ``BatchOrchestrator.preview`` claims the busy flag as its very first statement;
+* ``BatchOrchestrator.preview`` and ``BatchOrchestrator.execute`` claim the busy flag as their very first
+  statement;
 * no reverse dependency; ``fc2_organizer/__init__`` does not import it; a bare ``import fc2_organizer`` does
   not load it;
 * resource ownership (E0-R1 / E0-R2): the four resource constants are defined only in ``models.py``;
@@ -38,7 +40,8 @@ CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 _PKG = "fc2_organizer.orchestration"
 _S1_MODULES = {"__init__.py", "errors.py", "models.py", "cancellation.py", "_consumption.py", "recognition.py"}
 _S2_MODULES = _S1_MODULES | {"stages.py", "preview.py", "orchestrator.py"}
-_NOT_YET = ("execute.py", "retry.py")
+_S3_MODULES = _S2_MODULES | {"execute.py"}
+_NOT_YET = ("retry.py",)
 _STAGE_APIS = {"build_organize_plan", "prepare_publication", "render_movie_nfo", "build_artifact_requests",
                "preflight_execution"}
 
@@ -70,7 +73,11 @@ _ALLOWED = {
                    f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.recognition", f"{_PKG}.stages"},
     "orchestrator.py": {"__future__", "functools", "inspect", "threading", "fc2_metadata_core.batch",
                         "fc2_organizer.images",
-                        "fc2_organizer.planning", f"{_PKG}.errors", f"{_PKG}.models", f"{_PKG}.preview"},
+                        "fc2_organizer.planning", f"{_PKG}.errors", f"{_PKG}.execute", f"{_PKG}.models",
+                        f"{_PKG}.preview"},
+    # S3 (contract sections 5, 34.1)
+    "execute.py": {"__future__", "secrets", "threading", "fc2_organizer.execution", f"{_PKG}._consumption",
+                   f"{_PKG}.cancellation", f"{_PKG}.errors", f"{_PKG}.models"},
 }
 _FORBIDDEN_MODULES = (
     "amane", "httpx", "requests", "socket", "ssl", "urllib", "http", "json", "pickle", "marshal", "shelve", "dbm",
@@ -139,9 +146,9 @@ def _call_name(node: ast.Call) -> str | None:
 # --------------------------------------------------------------------------- module set / imports
 
 
-def test_package_has_exactly_the_s2_modules():
+def test_package_has_exactly_the_s3_modules():
     names = {p.name for p in _files()}
-    assert names == _S2_MODULES
+    assert names == _S3_MODULES
     for later in _NOT_YET:
         assert later not in names
     assert not [p for p in ORCH_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"]
@@ -151,7 +158,7 @@ def test_every_module_imports_only_its_allow_list():
     for path in _files():
         imported = _imports(_tree(path))
         assert imported <= _ALLOWED[path.name], (path.name, imported - _ALLOWED[path.name])
-        assert imported <= _ALLOWED_STDLIB | _ALLOWED_LOWER | {f"{_PKG}.{m[:-3]}" for m in _S2_MODULES}, path.name
+        assert imported <= _ALLOWED_STDLIB | _ALLOWED_LOWER | {f"{_PKG}.{m[:-3]}" for m in _S3_MODULES}, path.name
 
 
 def test_errors_cancellation_and_consumption_import_boundaries():
@@ -219,11 +226,13 @@ def test_structural_zero_mutation_and_no_unbounded_concurrency():
         names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
         attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
         aliases = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
-        for writer in _WRITER_NAMES:
+        for writer in _WRITER_NAMES - ({"execute_filesystem"} if path.name == "execute.py" else set()):
             assert writer not in names | attrs | aliases, (path.name, writer)
-        for concurrency in ("Thread", "gather", "ThreadPoolExecutor", "ProcessPoolExecutor", "run_in_executor",
-                            "to_thread", "ensure_future"):
+        for concurrency in ("gather", "ThreadPoolExecutor", "ProcessPoolExecutor", "run_in_executor",
+                            "to_thread", "ensure_future", "Timer"):
             assert concurrency not in names | attrs | aliases, (path.name, concurrency)
+        if path.name != "execute.py":
+            assert "Thread" not in names | attrs | aliases, path.name
         if path.name != "preview.py":
             assert not {"create_task", "TaskGroup"} & (names | attrs | aliases), path.name
         if path.name not in {"preview.py", "orchestrator.py"}:
@@ -280,7 +289,43 @@ def test_preview_claims_busy_first():
     assert isinstance(body[1], ast.Try) and body[1].finalbody
     assert _call_name(body[1].finalbody[0].value) == "_release"
     methods = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    assert not methods & {"execute", "preview_retry", "merge_retry"}
+    assert not methods & {"preview_retry", "merge_retry"}
+    execute = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "execute")
+    body = execute.body
+    if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]  # docstring
+    assert isinstance(body[0], ast.Expr) and _call_name(body[0].value) == "_claim"
+    assert isinstance(body[1], ast.Try) and _call_name(body[1].finalbody[0].value) == "_release"
+    delegated = [n for n in ast.walk(execute) if isinstance(n, ast.Call) and _call_name(n) == "execute_preview"]
+    assert len(delegated) == 1  # orchestrator.py only delegates; it never names execute_filesystem
+
+
+def test_execute_filesystem_has_one_call_site_on_the_previews_own_preflight():
+    tree = _tree(ORCH_SRC_ROOT / "execute.py")
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and _call_name(n) == "execute_filesystem"]
+    assert len(calls) == 1 and len(calls[0].args) == 1 and not calls[0].keywords
+    argument = calls[0].args[0]
+    assert isinstance(argument, ast.Attribute) and argument.attr == "preflight"
+    assert getattr(argument.value, "id", None) == "item"
+    owner = next(fn for fn in ast.walk(tree) if isinstance(fn, ast.FunctionDef) and calls[0] in list(ast.walk(fn)))
+    assert owner.name == "_execute_one"
+    for name in _STAGE_APIS | {"acquire_images", "scheduler"}:  # no re-preflight / rebuild before execution
+        assert name not in {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}, name
+
+
+def test_worker_threads_are_bounded_non_daemon_and_created_once():
+    tree = _tree(ORCH_SRC_ROOT / "execute.py")
+    creations = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and _call_name(n) == "Thread"]
+    assert len(creations) == 1
+    keywords = {k.arg: k.value for k in creations[0].keywords}
+    assert isinstance(keywords.get("daemon"), ast.Constant) and keywords["daemon"].value is False
+    comprehensions = [n for n in ast.walk(tree) if isinstance(n, ast.ListComp) and creations[0] in list(ast.walk(n))]
+    assert len(comprehensions) == 1
+    generator = comprehensions[0].generators[0]
+    assert _call_name(generator.iter) == "range" and getattr(generator.iter.args[0], "id", None) == "workers"
+    for path in _files():
+        if path.name != "execute.py":
+            assert "threading.Thread" not in path.read_text(encoding="utf-8"), path.name
 
 
 def test_no_persistence_or_diagnostics_output():
@@ -406,7 +451,8 @@ def test_public_api_is_exactly_the_s1_set_plus_batch_orchestrator():
         orchestration = importlib.import_module(_PKG)
         assert len(orchestration.__all__) == len(set(orchestration.__all__)) == len(_S1_PUBLIC_API) + 1 == 34
         assert set(orchestration.__all__) == _S1_PUBLIC_API | {"BatchOrchestrator"}
-        for later in ("execute", "preview_retry", "merge_retry", "summary"):
+        assert callable(orchestration.BatchOrchestrator.execute)  # S3
+        for later in ("preview_retry", "merge_retry", "summary"):
             assert not hasattr(orchestration.BatchOrchestrator, later), later
         for name in orchestration.__all__:
             assert hasattr(orchestration, name), name

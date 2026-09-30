@@ -1875,8 +1875,8 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 |---|---|---|
 | E0 | 本合同 + 施工计划（docs-only） | E0 ACCEPTED / CLOSED — FINAL REVIEWED DOCS HEAD `9e118dea32361ec19b0a84f84b6e5da0fbd134bc` |
 | S1 | Foundation：errors / models / config / cancellation / consumption / recognition / 架构守卫 | S1 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `e8f83e986d3cb306a425d666f3bc0a2738dab823` |
-| S2 | Preview composition：stages / preview / orchestrator.preview | S2 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
-| S3 | Execution orchestration：execute / selection / cancellation / fatal drain | NOT STARTED |
+| S2 | Preview composition：stages / preview / orchestrator.preview | S2 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `8c5ba6e808a6c45ee2342af497458fe88af5ff09` |
+| S3 | Execution orchestration：execute / selection / cancellation / fatal drain | S3 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S4 | Retry：RetryKind / preview_retry / merge_retry | NOT STARTED |
 | S5 | Summary / determinism / race / integration hardening + 最终公开 API | NOT STARTED |
 | S6 | 500-item batch orchestration gate + HANDOFF | NOT STARTED |
@@ -1892,7 +1892,8 @@ P4-C8 E0-R2          : REVIEWED — PASS（R-02、R1-01、R1-02 CLOSED）
 P4-C8 E0             : ACCEPTED / CLOSED（FINAL REVIEWED DOCS HEAD 9e118dea32361ec19b0a84f84b6e5da0fbd134bc）
 P4-C8 S1 Input       : 9e118dea32361ec19b0a84f84b6e5da0fbd134bc
 P4-C8 S1             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD e8f83e986d3cb306a425d666f3bc0a2738dab823）
-P4-C8 S2             : IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
+P4-C8 S2             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 8c5ba6e808a6c45ee2342af497458fe88af5ff09）
+P4-C8 S3             : IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
 P4-C8 Implementation : IN PROGRESS
 P4-C8                : NOT CLOSED
 P4-C9                : NOT STARTED

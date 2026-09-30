@@ -1,7 +1,8 @@
 """``BatchOrchestrator``: construction checks, the busy guard and ``preview`` (P4-C8 contract sections 7.2, 7.3).
 
-S2 provides the constructor, the read-only properties and ``async preview(items)``; ``execute`` (S3) and
-``preview_retry`` (S4) are added by later batches. Construction validates only and performs no network or
+S2 provides the constructor, the read-only properties and ``async preview(items)``; S3 adds the
+synchronous ``execute(preview, *, selection=None, cancel=None)`` (delegated to ``execute.py``);
+``preview_retry`` (S4) is added by a later batch. Construction validates only and performs no network or
 filesystem access. One ``BatchScheduler(engine, config.metadata)`` is created here and reused for the
 orchestrator's lifetime; the engine and the image client belong to the caller (never built or closed here).
 
@@ -32,7 +33,13 @@ import threading
 from fc2_metadata_core.batch import BatchConfigError, BatchScheduler
 from fc2_organizer.images import ImageAcquisitionPolicy
 from fc2_organizer.orchestration.errors import OrchestrationBusyError, OrchestrationConfigError
-from fc2_organizer.orchestration.models import MAX_ITEM_IMAGE_BYTES, BatchPreview, OrchestrationConfig
+from fc2_organizer.orchestration.execute import execute_preview
+from fc2_organizer.orchestration.models import (
+    MAX_ITEM_IMAGE_BYTES,
+    BatchExecutionResult,
+    BatchPreview,
+    OrchestrationConfig,
+)
 from fc2_organizer.orchestration.preview import build_preview
 from fc2_organizer.planning import OutputPolicy
 
@@ -289,5 +296,19 @@ class BatchOrchestrator:
                 library_root=self._library_root, output_policy=self._output_policy,
                 image_policy=self._image_policy, image_workers=self._config.image_in_flight_items,
                 ledger_limit=self._config.max_retained_artifact_bytes)
+        finally:
+            self._release()
+
+    def execute(self, preview, *, selection=None, cancel=None) -> BatchExecutionResult:
+        """Synchronous bounded execution of a preview (contract section 18). Busy-first; the preview is
+        consumed once all argument checks pass. In an event loop call it as
+        ``await asyncio.to_thread(orchestrator.execute, ...)`` and stop it with a ``CancellationToken``."""
+        self._claim()
+        try:
+            return execute_preview(
+                preview, selection=selection, cancel=cancel, library_root=self._library_root,
+                output_policy=self._output_policy, image_policy=self._image_policy,
+                retention_budget=self._config.max_retained_artifact_bytes,
+                workers=self._config.filesystem_workers)
         finally:
             self._release()
