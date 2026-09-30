@@ -27,8 +27,11 @@ end. A non-``Exception`` ``BaseException`` (section 20.3) from a worker, or one 
 thread while it starts or waits, is recorded once (the first object wins, none of its metadata is read),
 stops admission, every thread that actually started is joined, and the same object is re-raised -- never an
 item result, never a partial ``BatchExecutionResult``. A thread is tracked for the drain *before*
-``start()`` is called, because ``start()`` can raise after the worker already runs. No exception is raised
-from inside an ``except`` block.
+``start()`` is called, because ``start()`` can raise after the worker already runs. The drain never waits for
+the worker's target to begin (a started thread may end before its target runs, e.g. a trace hook failing):
+it skips a thread only when it provably never started and joins every other one. A started worker that never
+entered its target, with no fatal recorded, fails the whole call closed with ``OrchestrationError`` after the
+drain -- never a silent ``CANCELLED``. No exception is raised from inside an ``except`` block.
 """
 
 from __future__ import annotations
@@ -56,6 +59,7 @@ from fc2_organizer.orchestration._consumption import PREVIEW_EXECUTIONS
 from fc2_organizer.orchestration.cancellation import CancellationToken
 from fc2_organizer.orchestration.errors import (
     OrchestrationConsumedError,
+    OrchestrationError,
     OrchestrationInputError,
     OrchestrationIntegrityError,
 )
@@ -186,7 +190,8 @@ class _Run:
         # fixed length before any worker exists; slot ``p`` belongs to ``items[p]`` and is written once,
         # by the worker that admitted position ``p`` (an item assignment, never a structural change)
         self.slots: list[_Outcome | None] = [None] * len(selected)
-        self.entered = tuple(threading.Event() for _ in range(workers))  # set by each worker on entry
+        # set by each worker on entry; only observed after the drain (never waited for)
+        self.entered = tuple(threading.Event() for _ in range(workers))
 
     def record_fatal(self, fatal: BaseException) -> None:
         """Keep the first fatal object only (identity; no metadata read) and stop admission."""
@@ -207,7 +212,7 @@ class _Run:
 
 
 def _worker(run: _Run, number: int) -> None:
-    run.entered[number].set()  # first statement: this thread really runs and will end (drain handshake)
+    run.entered[number].set()  # first statement: the target was entered (observation only)
     try:
         while True:
             admitted = run.admit()
@@ -225,13 +230,18 @@ def _never_started(thread: threading.Thread) -> bool:
     return thread.ident is None and thread not in threading.enumerate()
 
 
-def _drain(run: _Run, thread: threading.Thread, number: int) -> None:
+def _drain(run: _Run, thread: threading.Thread) -> None:
+    """Join a launched thread unless it provably never started; independent of its target ever running.
+
+    ``join`` returns at once for a thread that already ended and waits for one that still runs. It can only
+    refuse (``RuntimeError``, recorded behind the first fatal) while a thread whose ``start()`` was itself
+    interrupted has not yet published its start -- which the thread does before any trace hook or target
+    code -- so the next pass either joins it or finds it never started."""
     joined = False
     while not joined:
         try:
             if _never_started(thread):
                 return  # nothing to join; joining it would raise and is never attempted
-            run.entered[number].wait()  # it runs: ``join`` is legal once the worker has entered
             thread.join()
             joined = True
         except BaseException as fatal:  # KeyboardInterrupt / SystemExit delivered to the caller
@@ -249,10 +259,14 @@ def _execute_threaded(items: tuple[ItemPreview, ...], cancel: CancellationToken 
             thread.start()
     except BaseException as failure:  # cannot start (or interrupted while starting): stop, drain, re-raise
         run.record_fatal(failure)
-    for number, thread in enumerate(launched):  # every started thread is joined first (section 20.3)
-        _drain(run, thread, number)
+    for thread in launched:  # every started thread is joined first (section 20.3)
+        _drain(run, thread)
     if run.fatal:
         raise run.fatal[0]  # the original object
+    if not all(entered.is_set() for entered in run.entered):
+        # every thread started (no fatal), yet one never ran its target: the worker protocol failed; fail
+        # closed rather than report its unadmitted items as cancelled
+        raise OrchestrationError("execution worker protocol failed: a started worker never entered its target")
     # single-threaded from here: the calling thread maps the fixed positions to item indices
     return {item.index: outcome for item, outcome in zip(items, run.slots) if outcome is not None}
 

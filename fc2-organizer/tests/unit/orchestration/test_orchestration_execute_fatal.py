@@ -9,6 +9,7 @@ observing ``_Run.record_fatal`` (events with bounded waits, no sleep).
 from __future__ import annotations
 
 import hashlib
+import sys
 import threading
 
 import pytest
@@ -19,6 +20,7 @@ from fc2_organizer.orchestration import (
     OrchestrationBusyError,
     OrchestrationConfig,
     OrchestrationConsumedError,
+    OrchestrationError,
 )
 from fc2_organizer.orchestration import execute as execute_module
 
@@ -251,12 +253,15 @@ def _start_seam(monkeypatch, created, joined, on_start, joining=None):
     class Seam(real_thread):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            self.seam_args = kwargs.get("args")
             created.append(self)
 
         def start(self):
             on_start(self, super().start)
 
         def join(self, timeout=None):
+            if self not in joined:
+                self.alive_when_joined = self.is_alive()
             joined.append(self)
             if joining is not None and self is created[0]:
                 joining.set()
@@ -400,3 +405,91 @@ def test_an_earlier_worker_fatal_wins_over_a_later_start_boundary_fatal(tmp_path
     assert not any(thread.is_alive() for thread in created)
     monkeypatch.undo()
     _after_fatal(corpus, orchestrator, preview, hashes)
+
+
+# --------------------------------------------------------------------------- S3-R2 (P4-C8-S3-R1-01)
+
+
+class _PreTarget(Exception):
+    """Raised by the test trace hook at the call event of ``_worker``: before its first statement."""
+
+
+@pytest.mark.parametrize("variant", ["one-worker", "all-workers", "already-exited"])
+def test_a_started_worker_that_never_enters_its_target_is_drained_and_fails_closed(tmp_path, monkeypatch, variant):
+    """R1-01: a thread really starts, then a (public) ``threading.settrace`` hook makes it end before the first
+    statement of ``_worker``. The drain must still finish (no wait on target entry), the thread is joined, and
+    the call fails closed -- never a result, never items silently reported ``CANCELLED``."""
+    corpus, orchestrator, preview, hashes = _prepared(tmp_path, 4, 2)
+    doomed_numbers = {0, 1} if variant == "all-workers" else {1}
+    doomed: set[threading.Thread] = set()
+    fired: dict[threading.Thread, int] = {}
+    fired_event = {number: threading.Event() for number in range(2)}
+    worker_code = execute_module._worker.__code__
+
+    def tracer(frame, event, arg):
+        current = threading.current_thread()
+        if event == "call" and frame.f_code is worker_code and current in doomed:
+            fired[current] = threading.get_ident()
+            fired_event[created.index(current)].set()
+            raise _PreTarget()  # before any statement of the target body runs
+        return None
+
+    reported: list[tuple[type, object]] = []
+    monkeypatch.setattr(threading, "excepthook", lambda args: reported.append((args.exc_type, args.thread)))
+    created: list[threading.Thread] = []
+    joined: list[threading.Thread] = []
+
+    def on_start(thread, real_start):
+        number = created.index(thread)
+        if number in doomed_numbers:
+            doomed.add(thread)
+        real_start()
+        if number in doomed_numbers and variant == "already-exited":
+            assert fired_event[number].wait(WAIT)
+            real_thread.join(thread, WAIT)  # it has fully terminated before the drain looks at it
+            assert not thread.is_alive()
+
+    real_thread = _start_seam(monkeypatch, created, joined, on_start)
+    outcome: list[object] = []
+    previous = threading.gettrace()
+    threading.settrace(tracer)
+    try:
+        def call():
+            try:
+                outcome.append(orchestrator.execute(preview))
+            except BaseException as error:  # noqa: BLE001 - asserted below
+                outcome.append(error)
+
+        caller = real_thread(target=call)
+        caller.start()
+        caller.join(10.0)  # hang watchdog only
+        hung = caller.is_alive()
+        if hung:  # release a drain that waits on target entry, so the test itself always ends
+            for thread in created:
+                thread.seam_args[0].entered[created.index(thread)].set()
+            caller.join(WAIT)
+    finally:
+        threading.settrace(previous)
+    probe: list[object] = []
+    fresh_thread = real_thread(target=lambda: probe.append(sys.gettrace()))
+    fresh_thread.start()
+    fresh_thread.join(WAIT)
+    assert threading.gettrace() is previous and probe == [previous]  # the trace hook was removed again
+    assert hung is False  # the drain did not wait for a target that never ran
+    run_state = created[0].seam_args[0]
+    for thread in created:
+        number = created.index(thread)
+        assert thread.ident is not None  # it really started
+        assert not thread.is_alive() and thread in joined  # ... ended and was joined
+        if number in doomed_numbers:
+            assert fired[thread] == thread.ident  # the hook ran in that very thread ...
+            assert run_state.entered[number].is_set() is False  # ... and the target body never started
+            assert (_PreTarget, thread) in reported
+    if variant == "already-exited":
+        assert created[1].alive_when_joined is False  # ended before the drain, still accounted as started
+    assert len(outcome) == 1 and type(outcome[0]) is OrchestrationError  # fail closed: no result at all
+    assert not isinstance(outcome[0], BatchExecutionResult)
+    monkeypatch.undo()
+    _after_fatal(corpus, orchestrator, preview, hashes)
+    fresh = run(orchestrator.preview(corpus.items))  # idle and usable again
+    assert len(fresh.items) == 4
