@@ -6,6 +6,7 @@ import asyncio
 import dataclasses
 import functools as _functools
 import inspect as _inspect
+import multiprocessing
 import threading
 
 import pytest
@@ -874,21 +875,97 @@ def test_exact_partial_never_extends_trust_to_a_partial_subclass_node():
     assert hooks.calls == []
 
 
-def _run_with_watchdog(function, seconds: float = 10.0):
-    """Run ``function`` in a daemon thread; a hang fails the test instead of the session (no sleep)."""
-    outcome: list[object] = []
+# ---- S2-R5: hang isolation in a child process (a hung thread could never be stopped or reaped)
 
-    def target():
+_SPAWN = multiprocessing.get_context("spawn")  # Windows default; no fork-only behaviour on POSIX either
+_CYCLE_TIMEOUT = 60.0  # generous: a spawned child re-imports this module before it runs
+_REAP_TIMEOUT = 10.0
+TIMED_OUT = "TIMED_OUT"
+NO_RESULT = "NO_RESULT"
+EXPECTED_REJECTION = "EXPECTED_REJECTION"
+UNEXPECTED_SUCCESS = "UNEXPECTED_SUCCESS"
+
+
+def _run_in_isolated_process(target, args: tuple, timeout: float):
+    """Run module-level ``target(*args, sender)`` in a spawned child and wait at most ``timeout`` for the one
+    result it sends. Whatever happens -- result, exception, crash, hang -- the child is joined, terminated
+    (then killed) if still alive, and reaped before this returns ``(result, alive, exitcode)``; ``result`` is
+    the child's token, ``TIMED_OUT`` or ``NO_RESULT``. Timeouts bound waits only (no sleep)."""
+    receiver, sender = _SPAWN.Pipe(duplex=False)
+    process = _SPAWN.Process(target=target, args=(*args, sender))
+    process.start()
+    sender.close()  # the parent keeps only the receiving end
+    try:
+        if receiver.poll(timeout):
+            try:
+                result = receiver.recv()
+            except EOFError:
+                result = NO_RESULT
+        else:
+            result = TIMED_OUT
+    finally:
+        receiver.close()
+        if result != TIMED_OUT:
+            process.join(_REAP_TIMEOUT)
+        if process.is_alive():
+            process.terminate()
+            process.join(_REAP_TIMEOUT)
+        if process.is_alive():  # pragma: no cover - terminate() was ignored
+            process.kill()
+            process.join(_REAP_TIMEOUT)
+    alive, exitcode = process.is_alive(), process.exitcode
+    if not alive:
+        process.close()  # releases the handle: nothing of the child remains in this process
+    return result, alive, exitcode
+
+
+def _quick_child(sender) -> None:
+    sender.send("QUICK")
+    sender.close()
+
+
+def _hang_child(sender) -> None:
+    while True:  # a real Python-level CPU loop, exactly what a cycle regression would do
+        pass
+
+
+def _cycle_child(name: str, sender) -> None:
+    """Child side: build the named cycle and construct once per role; send one short token per role."""
+    cycle = _cycles()[name]
+    client = type("Client", (), {})()
+    client.get = cycle
+    tokens = []
+    for build in (lambda: BatchOrchestrator(_engine_with(cycle), ScriptedImageClient(), LIBRARY),
+                  lambda: BatchOrchestrator(ScriptedEngine(), client, LIBRARY)):
         try:
-            outcome.append(("returned", function()))
-        except BaseException as error:  # noqa: BLE001 - recorded for the assertion below
-            outcome.append(("raised", error))
+            build()
+            tokens.append(UNEXPECTED_SUCCESS)
+        except Exception as error:  # noqa: BLE001 - classified into a fixed token
+            if type(error) is OrchestrationConfigError:
+                tokens.append(EXPECTED_REJECTION)
+            else:
+                tokens.append(f"UNEXPECTED_EXCEPTION:{type(error).__name__}")
+    sender.send(tuple(tokens))
+    sender.close()
 
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(seconds)
-    assert not thread.is_alive(), "constructor did not terminate on a partial cycle"
-    return outcome[0]
+
+def _assert_no_residue(threads_before: set[int]) -> None:
+    assert multiprocessing.active_children() == []  # also reaps: no child of this process is left
+    assert {thread.ident for thread in threading.enumerate()} <= threads_before
+
+
+def test_isolation_harness_returns_a_quick_result_and_reaps_the_child():
+    threads = {thread.ident for thread in threading.enumerate()}
+    result, alive, exitcode = _run_in_isolated_process(_quick_child, (), _CYCLE_TIMEOUT)
+    assert result == "QUICK" and alive is False and exitcode == 0
+    _assert_no_residue(threads)
+
+
+def test_isolation_harness_terminates_and_reaps_a_hung_child():
+    threads = {thread.ident for thread in threading.enumerate()}
+    result, alive, exitcode = _run_in_isolated_process(_hang_child, (), 5.0)
+    assert result == TIMED_OUT and alive is False and exitcode is not None and exitcode != 0
+    _assert_no_residue(threads)
 
 
 def _cycles():
@@ -914,9 +991,8 @@ def test_partial_cycles_fail_closed_in_finite_time(name):
         node = node.func
     assert type(node) is _functools.partial and id(node) in seen
 
-    kind, value = _run_with_watchdog(lambda: BatchOrchestrator(_engine_with(cycle), ScriptedImageClient(), LIBRARY))
-    assert kind == "raised" and type(value) is OrchestrationConfigError
-    client = type("Client", (), {})()
-    client.get = cycle
-    kind, value = _run_with_watchdog(lambda: BatchOrchestrator(ScriptedEngine(), client, LIBRARY))
-    assert kind == "raised" and type(value) is OrchestrationConfigError
+    threads = {thread.ident for thread in threading.enumerate()}
+    result, alive, exitcode = _run_in_isolated_process(_cycle_child, (name,), _CYCLE_TIMEOUT)
+    assert alive is False and exitcode is not None  # reaped on every path
+    _assert_no_residue(threads)
+    assert result == (EXPECTED_REJECTION, EXPECTED_REJECTION), result  # aggregate, then get
