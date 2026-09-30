@@ -11,6 +11,7 @@ E0 建立时状态 = P4-C8 E0 ESTABLISHED — INDEPENDENT REVIEW REQUIRED；S1-S
 E0-R1          = 闭合 P4-C8-E0-R-01 / R-02 / R-03（批级 BatchOutcome、资源硬限制、S1 治理特例）；closure review：R-01、R-03 CLOSED，R-02 OPEN
 E0-R2          = 闭合 P4-C8-E0-R1-01（快照之前的有界条目数门）/ R1-02（lineage 固定预算与多代保留不变量）；REMEDIATED — INDEPENDENT REVIEW REQUIRED
 S3-A1          = 施工计划范围修订（只补测试文件范围）：授权 S3 更新 S2 阶段的 API 不存在断言；IMPLEMENTED — INDEPENDENT DOCS REVIEW REQUIRED
+S4-A1          = 施工计划范围修订（只补测试文件范围）：授权 S4 更新 S4 之前阶段的 API 不存在断言；IMPLEMENTED — INDEPENDENT DOCS REVIEW REQUIRED
 ```
 
 S3-A1 修订范围（本计划，只改施工范围，不改合同）：S3 开始前发现，S2 阶段专用的 API 不存在回归测试
@@ -19,6 +20,15 @@ S3-A1 修订范围（本计划，只改施工范围，不改合同）：S3 开�
 `BatchOrchestrator.execute(...)` 必然冲突，而第 0.3 节禁止修改既有测试、S3 的允许改动文件也未列出该文件。本修订只在
 第 0.3 节增加第二个精确例外，并在 S3 的允许改动文件中加入该文件及其精确限制；不改变 S1-S6 的功能分工、不改变 S3 的合同
 语义、不新增批次、不修改合同。
+
+S4-A1 修订范围（本计划，只改施工范围，不改合同）：S4 开始后发现，S3 阶段留下的 S4 之前阶段 API 不存在回归测试
+（`tests/unit/orchestration/test_orchestration_orchestrator.py` 中的 `test_no_retry_or_summary_api_before_s4`，断言
+`BatchOrchestrator` 不存在 `preview_retry`、`merge_retry`、`summary`）与合同冻结的 S4 公开方法
+`BatchOrchestrator.preview_retry(...)` 必然冲突，而第 0.3 节禁止修改既有测试、S4 的允许改动文件也未列出该文件。本修订只在
+第 0.3 节增加第三个精确例外，并在 S4 的允许改动文件中加入该文件及其精确限制；不改变 S1-S6 的功能分工、不改变 S4 的合同
+语义（`preview_retry` / `merge_retry` / `RetryKind` / 保留预算 / lineage / checkpoint / 一次性登记 / 公开 API 设计均不变）、
+不新增批次、不修改合同。`merge_retry` 是模块级公开函数而不是 `BatchOrchestrator` 的方法，`summary` 属于 S5，因此两者在
+类上的不存在断言在 S4 之后继续成立。
 
 E0-R2 修订范围（本计划）：E0 表（新增 E0-R2 行）；S1、S2、S3（仅结果预算字段的复制与预算相等检查）、S4、S5、S6 中与有界快照和
 多代保留直接相关的条目；最终 integrated gate；附录 A、B。批次分工、治理规则（第 0.4 节）与 BatchOutcome 相关内容不变。
@@ -68,11 +78,16 @@ git status --porcelain
 * 不修改 `src/fc2_metadata_core/**`、`src/fc2_organizer/{discovery,planning,publication,nfo,images,materialization,execution}/**`、
   `src/fc2_organizer/__init__.py`、`pyproject.toml`、任何 JSON、`upstream/**`、Amane。
 * 不修改已冻结的 Phase 3 合同、P4-C1..P4-C7 合同、`docs/P4_C7_CONSTRUCTION_PLAN.md`、既有 HANDOFF、v1.0 规格书、`CLAUDE.md`。
-* 不修改既有测试。例外只有两个：（1）合同第 34.3 节授权、在 S1 执行的六处架构守卫更新；（2）（S3-A1）S3 可以修改
+* 不修改既有测试。例外只有三个：（1）合同第 34.3 节授权、在 S1 执行的六处架构守卫更新；（2）（S3-A1）S3 可以修改
   `tests/unit/orchestration/test_orchestration_orchestrator.py`，唯一允许的内容是把 S2 阶段的 API 不存在断言推进到 S3
   阶段：从断言集合中删除 `"execute"`，`"preview_retry"`、`"merge_retry"`、`"summary"` 继续必须不存在；允许把测试函数名
   `test_no_execute_or_retry_api_in_s2` 改为准确表达 S3 状态的名称（例如 `test_no_retry_or_summary_api_before_s4`）。
   除该函数名与该 tuple 的必要最小变化外，该文件不得有任何其它改动。
+  （3）（S4-A1）S4 可以修改同一文件 `tests/unit/orchestration/test_orchestration_orchestrator.py`，唯一允许的语义变化是把
+  S4 之前阶段的 API 不存在断言推进到 S4 阶段：从断言集合中删除 `"preview_retry"`，`"merge_retry"`（模块级函数，不是
+  `BatchOrchestrator` 的方法）与 `"summary"`（S5）继续必须不存在于 `BatchOrchestrator` 上；允许把测试函数名
+  `test_no_retry_or_summary_api_before_s4` 改为准确表达 S4 状态的名称。除该函数名与该 tuple 的必要最小变化外，该文件不得有
+  任何其它改动。
 * 不新增第三方依赖。
 * 不创建 CLI、UI、持久化、诊断输出（JSON / bundle / 日志 / 报告 schema）、Amane adapter 或 P4-C9 / P4-C10 的任何占位文件。
 * 生产代码不 import 下层私有模块（合同第 6 节）；测试可以使用下层私有接缝做失败注入（合同第 34.2 节）。
@@ -500,8 +515,14 @@ src/fc2_organizer/orchestration/orchestrator.py   + async preview_retry(previous
 src/fc2_organizer/orchestration/__init__.py       + merge_retry
 tests/contract/test_orchestration_architecture.py（追加：retry.py 规则）
 tests/unit/orchestration/_fakes.py、_helpers.py（追加）
+tests/unit/orchestration/test_orchestration_orchestrator.py（S4-A1：仅更新 S4 之前阶段的 API 不存在断言，见下）
 合同第 38 节 S3 / S4 状态行
 ```
+
+（S4-A1）`test_orchestration_orchestrator.py` 的唯一允许改动：把 `test_no_retry_or_summary_api_before_s4` 推进到 S4 阶段边界，
+从其断言集合中删除 `"preview_retry"`，`"merge_retry"` 与 `"summary"` 继续必须不存在于 `BatchOrchestrator` 上（可按第 0.3 节
+例外 3 改测试函数名）。不得修改该文件中的构造测试、busy-first 测试、钩子安全测试、partial 测试、资源测试、preview / execute
+测试或其它任何 S1 / S2 / S3 回归测试。
 
 ### 禁止范围
 
