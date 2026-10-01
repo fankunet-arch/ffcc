@@ -73,13 +73,6 @@ __all__ = ["build_retry_preview", "merge_retry"]
 _EVERY_KIND = frozenset(kind for kind in RetryKind if kind is not RetryKind.NONE)
 _MATERIAL_KINDS = frozenset({RetryKind.PREFLIGHT_RECHECK, RetryKind.FRESH_REEXECUTE, RetryKind.RESUME,
                              RetryKind.DEFERRED})
-_HEX_DIGITS = frozenset("0123456789abcdef")
-
-
-def _is_hex32(value: object) -> bool:
-    return type(value) is str and len(value) == 32 and _HEX_DIGITS.issuperset(value)
-
-
 def _same_lineage(a: object, b: object) -> bool:
     return (type(a) is BatchLineage and type(b) is BatchLineage and type(a.token) is str
             and type(b.token) is str and a.token == b.token)
@@ -261,33 +254,24 @@ async def build_retry_preview(previous: object, *, scope: object, scheduler, ima
 # --------------------------------------------------------------------------- merge_retry (section 26)
 
 
-def _exact_items(result: BatchExecutionResult) -> bool:
-    return type(result.items) is tuple and all(type(item) is ItemExecution for item in result.items)
-
-
-def _is_retry_round(retry: BatchExecutionResult) -> bool:
-    scope = retry.retry_scope
-    return (type(retry.generation) is int and retry.generation >= 1 and _is_hex32(retry.result_id)
-            and _is_hex32(retry.preview_id) and _is_hex32(retry.base_result_id)
-            and type(scope) is frozenset and all(type(kind) is RetryKind for kind in scope)
-            and type(retry.retry_budget_bytes) is int)
-
-
 def merge_retry(previous: object, retry: object) -> BatchExecutionResult:
     """Merge a retry-round result into the complete result it was made from (contract section 26).
 
     Pure composition: no network, no filesystem, no preflight. Checks 1-9b fail closed before the one-time
     registration of ``retry.result_id`` (``OrchestrationRetryError`` for a wrong result / lineage /
     generation / index set / configuration / budget, ``OrchestrationIntegrityError`` for identity and graph
-    integrity), so a rejected retry result stays mergeable once corrected. The merged result reuses the
-    very ``ItemExecution`` objects of both inputs and copies no payload."""
+    integrity), so a rejected retry result stays mergeable once corrected. The retry graph is revalidated in
+    full (every model invariant re-run) before any of it is trusted: a rewritten graph is an integrity error,
+    an intact main / merged result passed as ``retry`` is a retry error. The merged result reuses the very
+    ``ItemExecution`` objects of both inputs and copies no payload."""
     if type(previous) is not BatchExecutionResult or not previous.is_complete:  # step 1
         raise OrchestrationRetryError("previous must be a complete (main or merged) BatchExecutionResult")
     revalidate(previous)
-    if type(retry) is not BatchExecutionResult or retry.is_complete or not _is_retry_round(retry):  # step 2
+    if type(retry) is not BatchExecutionResult:  # step 2
         raise OrchestrationRetryError("retry must be a retry-round BatchExecutionResult")
-    if not _exact_items(retry):
-        raise OrchestrationIntegrityError("the retry result's items are not exact ItemExecution values")
+    revalidate(retry)  # a rewritten retry graph -> OrchestrationIntegrityError (never trusted below)
+    if retry.is_complete:  # an intact main / merged result is not a retry round
+        raise OrchestrationRetryError("retry must be a retry-round BatchExecutionResult")
     if retry.base_result_id != previous.result_id:  # step 3
         raise OrchestrationRetryError("the retry was not made from this result")
     if not _same_lineage(retry.lineage, previous.lineage):  # step 4
@@ -299,6 +283,8 @@ def merge_retry(previous: object, retry: object) -> BatchExecutionResult:
             or type(retry.image_policy) is not ImageAcquisitionPolicy
             or retry.image_policy != previous.image_policy):
         raise OrchestrationRetryError("the retry result has another configuration")
+    if retry.batch_size != previous.batch_size:  # the lineage's fixed input size N
+        raise OrchestrationRetryError("the retry result has another lineage batch size")
     expected = [item.index for item in previous.items if item.retry_kind in retry.retry_scope]
     if [item.index for item in retry.items] != expected:  # step 7
         raise OrchestrationRetryError("the retry items are not exactly the previous items in its scope")

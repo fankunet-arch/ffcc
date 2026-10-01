@@ -3,6 +3,11 @@
 Model-level results are hand-built through the ``Lineage`` builders (model-valid, no filesystem); one test
 merges a real retry round. Every rejection returns nothing, registers nothing, and the correct retry result
 still merges afterwards.
+
+Error families (S4-R1, finding P4-C8-S4-R-01): an intact result that is not a retry round, or an intact retry
+round whose relation to ``previous`` is wrong, is an ``OrchestrationRetryError``; a retry graph rewritten with
+``object.__setattr__`` so that it violates its own model invariants is an ``OrchestrationIntegrityError``
+(``revalidate(retry)`` runs before anything of it is trusted).
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from fc2_organizer.orchestration import (
     BatchExecutionResult,
     BatchOutcome,
     ExecutionDisposition as D,
+    ItemWarning,
     OrchestrationConsumedError,
     OrchestrationIntegrityError,
     OrchestrationRetryError,
@@ -23,9 +29,10 @@ from fc2_organizer.orchestration import (
     merge_retry,
 )
 from fc2_organizer.orchestration import _consumption
+from fc2_organizer.orchestration.models import revalidate
 from fc2_organizer.planning import OutputPolicy
 
-from ._helpers import Corpus, Film, Lineage, media_item, run, tampered
+from ._helpers import Corpus, Film, Lineage, fake_checkpoint, media_item, mutation_traps, run, tampered
 
 SCOPE = frozenset({K.DEFERRED, K.FRESH_REEXECUTE})
 
@@ -43,8 +50,9 @@ def _previous(lin: Lineage) -> BatchExecutionResult:
 def _retry(lin: Lineage, previous: BatchExecutionResult, indices=(1, 2, 3), *, scope=SCOPE, generation=1,
            statuses=None) -> BatchExecutionResult:
     statuses = statuses or {}
+    retained = (ExecutionStatus.FAILED, ExecutionStatus.PARTIAL)
     items = [lin.execution_item(i, D.EXECUTED, status=statuses.get(i, ExecutionStatus.SUCCESS), generation=generation,
-                                material=True if statuses.get(i) is ExecutionStatus.FAILED else ...)
+                                material=True if statuses.get(i) in retained else ...)
              for i in indices]
     kept = sum(_pay(previous.items[i]) for i in range(previous.batch_size)
                if i not in indices and previous.items[i].retry_material is not None)
@@ -104,19 +112,28 @@ def test_a_retry_of_another_result_is_rejected_even_with_an_identical_shape():
     assert merge_retry(twin, retry_of_twin).is_complete
 
 
+def _sibling(lin: Lineage) -> Lineage:
+    """Another lineage (own metadata ledger / token) over the very same media items and plans."""
+    other = Lineage(lin.size)
+    other.media, other.plans, other.numbers = lin.media, lin.plans, lin.numbers
+    return other
+
+
 def test_lineage_generation_index_and_configuration_mismatches_are_retry_errors():
+    """Intact retry rounds whose relation to ``previous`` is wrong (each one passes ``revalidate``)."""
     lin = Lineage(4)
     previous = _previous(lin)
     retry = _retry(lin, previous)
-    foreign = tampered(retry, lineage=BatchLineage.new())
-    _rejects(previous, foreign, OrchestrationRetryError, retry)
-    for generation in (0, 2, 5):  # stale / replayed / skipped generations
-        _rejects(previous, tampered(retry, generation=generation), OrchestrationRetryError, retry)
-    for indices in ((1, 2), (2, 3), (0, 1, 2, 3)):  # fewer / other / more (order: see reordered below)
+    foreign = _retry(_sibling(lin), previous)  # same media / indices / base id, another lineage
+    revalidate(foreign)
+    _rejects(previous, foreign, OrchestrationRetryError, foreign)
+    for generation in (2, 5):  # replayed / skipped generations, built as intact retry rounds
+        later = _retry(lin, previous, generation=generation)
+        revalidate(later)
+        _rejects(previous, later, OrchestrationRetryError, later)
+    for indices in ((1, 2), (2, 3), (0, 1, 2, 3)):  # fewer / other / more
         other = _retry(lin, previous, indices)
         _rejects(previous, other, OrchestrationRetryError, other)
-    reordered = tampered(retry, items=(retry.items[1], retry.items[0], retry.items[2]))
-    _rejects(previous, reordered, OrchestrationRetryError, retry)
     narrower = _retry(lin, previous, (1, 3), scope=frozenset({K.DEFERRED, K.FRESH_REEXECUTE}))
     _rejects(previous, narrower, OrchestrationRetryError, narrower)  # scope says 1, 2, 3
     for change in (dict(library_root=previous.library_root + "x"),
@@ -130,8 +147,6 @@ def test_metadata_ledger_mismatches_are_retry_errors():
     lin = Lineage(4)
     previous = _previous(lin)
     retry = _retry(lin, previous)
-    foreign = BatchResult(items=previous.metadata_batch.items, generation=0, lineage=BatchLineage.new())
-    _rejects(previous, tampered(retry, metadata_batch=foreign), OrchestrationRetryError, retry)
     older = tampered(previous, metadata_batch=BatchResult(items=previous.metadata_batch.items, generation=3,
                                                           lineage=previous.lineage))
     _rejects(older, retry, OrchestrationRetryError, retry)  # retry ledger generation 0 < 3
@@ -173,3 +188,145 @@ def test_a_real_retry_round_merges_and_the_chain_continues(tmp_path):
     assert merged.items[1] is result.items[1] and merged.items[2] is round_result.items[1]
     final = merge_retry(merged, orchestrator.execute(run(orchestrator.preview_retry(merged))))
     assert final.generation == 2 and final.outcome is BatchOutcome.SUCCESS
+
+
+# --------------------------------------------------------------------------- S4-R1: hostile retry graphs
+
+
+def _set(obj, **fields):
+    """Rewrite frozen fields in place; returns the restorer."""
+    saved = {name: getattr(obj, name) for name in fields}
+    for name, value in fields.items():
+        object.__setattr__(obj, name, value)
+    return lambda: [object.__setattr__(obj, name, value) for name, value in saved.items()]
+
+
+def _item_generation_substitution(lin, previous, retry):
+    original = previous.items[1]  # same index, same media_item object, same number, generation 0
+    assert original.index == retry.items[0].index and original.media_item is retry.items[0].media_item
+    assert original.canonical_number == retry.items[0].canonical_number
+    assert original.generation == retry.generation - 1
+    return _set(retry, items=(original, *retry.items[1:]))
+
+
+def _item_warnings(lin, previous, retry):
+    return _set(retry.items[0], warnings=(ItemWarning.METADATA_PARTIAL,))  # contradicts the item data
+
+
+def _item_issue(lin, previous, retry):
+    return _set(retry.items[0], disposition=D.NOT_SELECTED)  # EXECUTED data, wrong disposition
+
+
+def _material_plan(lin, previous, retry):
+    return _set(retry.items[1].retry_material, plan=lin.plans[0])  # no longer ItemExecution.plan
+
+
+def _material_checkpoint(lin, previous, retry):
+    return _set(retry.items[1].retry_material, checkpoint=fake_checkpoint(lin.plans[2]))  # not execution's
+
+
+def _scope_with_none(lin, previous, retry):
+    return _set(retry, retry_scope=SCOPE | {K.NONE})
+
+
+def _metadata_lineage(lin, previous, retry):
+    foreign = BatchResult(items=previous.metadata_batch.items, generation=0, lineage=BatchLineage.new())
+    return _set(retry, metadata_batch=foreign)
+
+
+def _lineage(lin, previous, retry):
+    return _set(retry, lineage=BatchLineage.new())  # metadata ledger now belongs to another lineage
+
+
+def _generation(lin, previous, retry):
+    return _set(retry, generation=2)  # items still carry generation 1
+
+
+def _reordered(lin, previous, retry):
+    return _set(retry, items=(retry.items[1], retry.items[0], retry.items[2]))
+
+
+def _budget_below_payload(lin, previous, retry):
+    return _set(retry, retry_budget_bytes=retry.retained_retry_payload_bytes - 1)  # the old 9a "-1" case
+
+
+def _no_preview_id(lin, previous, retry):
+    return _set(retry, preview_id=None)
+
+
+def _no_base_result_id(lin, previous, retry):
+    return _set(retry, base_result_id=None)
+
+
+def _no_retry_budget(lin, previous, retry):
+    return _set(retry, retry_budget_bytes=None)
+
+
+HOSTILE = [_item_generation_substitution, _item_warnings, _item_issue, _material_plan, _material_checkpoint,
+           _scope_with_none, _metadata_lineage, _lineage, _generation, _reordered, _budget_below_payload,
+           _no_preview_id, _no_base_result_id, _no_retry_budget]
+
+
+def _payload_refs(result):
+    return [(item, item.retry_material, None if item.retry_material is None else item.retry_material.artifacts)
+            for item in result.items]
+
+
+@pytest.mark.parametrize("mutate", HOSTILE, ids=[f.__name__.strip("_") for f in HOSTILE])
+def test_a_hostile_retry_graph_is_an_integrity_error_before_registration(monkeypatch, mutate):
+    lin = Lineage(4)
+    previous = _previous(lin)
+    statuses = {2: ExecutionStatus.PARTIAL} if mutate is _material_checkpoint else {2: ExecutionStatus.FAILED}
+    retry = _retry(lin, previous, statuses=statuses)
+    before = (_payload_refs(previous), _payload_refs(retry))
+    restore = mutate(lin, previous, retry)
+    outcome = []
+    with monkeypatch.context() as m:
+        trap = mutation_traps(m)  # pure composition: no filesystem access is ever attempted
+        with pytest.raises(OrchestrationIntegrityError):
+            outcome.append(merge_retry(previous, retry))
+    assert outcome == [] and trap.calls == []
+    assert not _consumption.RETRY_MERGES.is_registered(retry.result_id)  # failed before registration
+    restore()
+    assert (_payload_refs(previous), _payload_refs(retry)) == before  # nothing was rewritten by the merge
+    merged = merge_retry(previous, retry)  # the restored graph merges under the same result_id
+    assert merged.is_complete and merged.items[0] is previous.items[0]
+
+
+def test_the_lineage_batch_size_must_match_even_when_the_retry_is_self_consistent():
+    lin = Lineage(4)
+    previous = _previous(lin)
+    retry = _retry(lin, previous)
+    restore = _set(retry, batch_size=previous.batch_size + 3)  # indices 1..3 < 7: still self-valid
+    revalidate(retry)
+    with pytest.raises(OrchestrationRetryError):
+        merge_retry(previous, retry)
+    assert not _consumption.RETRY_MERGES.is_registered(retry.result_id)
+    restore()
+    assert merge_retry(previous, retry).batch_size == previous.batch_size
+
+
+def test_a_scope_rewrite_that_changes_the_expected_index_set_fails_closed():
+    lin = Lineage(4)
+    previous = _previous(lin)
+    retry = _retry(lin, previous)
+    restore = _set(retry, retry_scope=frozenset({K.DEFERRED}))  # self-valid, but scope now selects 1 and 3
+    revalidate(retry)
+    with pytest.raises(OrchestrationRetryError):
+        merge_retry(previous, retry)
+    assert not _consumption.RETRY_MERGES.is_registered(retry.result_id)
+    restore()
+    assert merge_retry(previous, retry).is_complete
+
+
+def test_intact_main_and_merged_results_are_not_retry_rounds():
+    lin = Lineage(4)
+    previous = _previous(lin)
+    main = _previous(lin)  # an intact main result of the same lineage
+    retry = _retry(lin, main)
+    merged = merge_retry(main, retry)  # an intact merged result
+    for intact in (main, merged):
+        revalidate(intact)
+        with pytest.raises(OrchestrationRetryError):
+            merge_retry(previous, intact)
+        assert not _consumption.RETRY_MERGES.is_registered(intact.result_id)

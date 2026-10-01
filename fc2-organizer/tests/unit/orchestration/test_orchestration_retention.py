@@ -219,8 +219,9 @@ def test_tampered_retry_budget_or_payload_fails_closed_before_registration():
     lin, previous, retry_item, budget, base = _retention_lineage()
     retry = lin.result([retry_item], generation=1, base_result_id=previous.result_id,
                        retry_scope=frozenset({K.DEFERRED}), budget=budget, retry_budget=budget - base)
+    assert retry.retained_retry_payload_bytes <= budget - base + 1 <= budget  # still self-valid: a pure 9a case
     with pytest.raises(OrchestrationRetryError):  # 9a: retry_budget_bytes rewritten
-        merge_retry(previous, tampered(retry, retry_budget_bytes=budget - base - 1))
+        merge_retry(previous, tampered(retry, retry_budget_bytes=budget - base + 1))
     with pytest.raises(OrchestrationRetryError):  # 9a: another lineage budget
         merge_retry(previous, tampered(retry, retention_budget_bytes=budget + 1))
     bigger = lin.execution_item(1, D.NOT_SELECTED, material=True, generation=1,
