@@ -1,10 +1,11 @@
 """``BatchOrchestrator``: construction checks, the busy guard and ``preview`` (P4-C8 contract sections 7.2, 7.3).
 
 S2 provides the constructor, the read-only properties and ``async preview(items)``; S3 adds the
-synchronous ``execute(preview, *, selection=None, cancel=None)`` (delegated to ``execute.py``);
-``preview_retry`` (S4) is added by a later batch. Construction validates only and performs no network or
-filesystem access. One ``BatchScheduler(engine, config.metadata)`` is created here and reused for the
-orchestrator's lifetime; the engine and the image client belong to the caller (never built or closed here).
+synchronous ``execute(preview, *, selection=None, cancel=None)`` (delegated to ``execute.py``); S4 adds
+``async preview_retry(previous, *, scope=None)`` (delegated to ``retry.py``). Construction validates only
+and performs no network or filesystem access. One ``BatchScheduler(engine, config.metadata)`` is created
+here and reused for the orchestrator's lifetime; the engine and the image client belong to the caller (never
+built or closed here).
 
 Constructor shape checks never run caller code (S2-R1, finding P4-C8-S2-R-01): ``engine.aggregate`` and
 ``image_client.get`` are resolved *statically* (the class namespaces along the C-level MRO and the instance
@@ -41,6 +42,7 @@ from fc2_organizer.orchestration.models import (
     OrchestrationConfig,
 )
 from fc2_organizer.orchestration.preview import build_preview
+from fc2_organizer.orchestration.retry import build_retry_preview
 from fc2_organizer.planning import OutputPolicy
 
 __all__ = ["BatchOrchestrator"]
@@ -310,5 +312,18 @@ class BatchOrchestrator:
                 output_policy=self._output_policy, image_policy=self._image_policy,
                 retention_budget=self._config.max_retained_artifact_bytes,
                 workers=self._config.filesystem_workers)
+        finally:
+            self._release()
+
+    async def preview_retry(self, previous, *, scope=None) -> BatchPreview:
+        """Read-only retry preview of a complete result (contract section 25.4). Busy-first; ``previous`` is
+        registered as retried only when the retry preview is returned. Zero filesystem mutation."""
+        self._claim()
+        try:
+            return await build_retry_preview(
+                previous, scope=scope, scheduler=self._scheduler, image_client=self._image_client,
+                library_root=self._library_root, output_policy=self._output_policy,
+                image_policy=self._image_policy, image_workers=self._config.image_in_flight_items,
+                retention_budget=self._config.max_retained_artifact_bytes)
         finally:
             self._release()
