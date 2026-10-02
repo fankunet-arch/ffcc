@@ -12,6 +12,7 @@ E0-R1          = 闭合 P4-C8-E0-R-01 / R-02 / R-03（批级 BatchOutcome、资�
 E0-R2          = 闭合 P4-C8-E0-R1-01（快照之前的有界条目数门）/ R1-02（lineage 固定预算与多代保留不变量）；REMEDIATED — INDEPENDENT REVIEW REQUIRED
 S3-A1          = 施工计划范围修订（只补测试文件范围）：授权 S3 更新 S2 阶段的 API 不存在断言；IMPLEMENTED — INDEPENDENT DOCS REVIEW REQUIRED
 S4-A1          = 施工计划范围修订（只补测试文件范围）：授权 S4 更新 S4 之前阶段的 API 不存在断言；IMPLEMENTED — INDEPENDENT DOCS REVIEW REQUIRED
+S5-A1          = 施工计划范围修订（只补测试辅助范围）：授权 S5-R1 修正既有确定性投影 helper；IMPLEMENTED — INDEPENDENT DOCS REVIEW REQUIRED
 ```
 
 S3-A1 修订范围（本计划，只改施工范围，不改合同）：S3 开始前发现，S2 阶段专用的 API 不存在回归测试
@@ -29,6 +30,16 @@ S4-A1 修订范围（本计划，只改施工范围，不改合同）：S4 开�
 语义（`preview_retry` / `merge_retry` / `RetryKind` / 保留预算 / lineage / checkpoint / 一次性登记 / 公开 API 设计均不变）、
 不新增批次、不修改合同。`merge_retry` 是模块级公开函数而不是 `BatchOrchestrator` 的方法，`summary` 属于 S5，因此两者在
 类上的不存在断言在 S4 之后继续成立。
+
+S5-A1 修订范围（本计划，只改施工范围，不改合同）：S5 独立 Level 1 复查发现 P4-C8-S5-R-01——合同第 29 节只允许确定性投影
+排除六类不确定字段（`preview_id`、`result_id`、`BatchLineage.token`、P4-C7 的 `preflight_id`、`checkpoint_id`、`seal`），而
+S1 创建的 `tests/unit/orchestration/_helpers.py` 中的 `_execution_projection` / `projection` 额外丢弃了
+`LeftoverTemporary.name`（只保留 `directory_role`）。闭合该 finding 必须**修改**这两个既有 helper，而不仅是追加新 helper；但
+第 0.5 节与 S5 的允许改动文件只允许后续批次对 `_fakes.py` / `_helpers.py` 做追加。本修订只在第 0.5 节增加一个精确例外，并在
+S5 的允许改动文件中注明该例外；不改变合同（第 29 节排除集合保持上述六类，`LeftoverTemporary.name` **不是**豁免字段，必须
+被投影）、不改变 S5 的测试矩阵与门槛、不改变 S1-S6 的功能分工、不新增批次或生产模块。P4-C8-S5-R-02（S5 新增的
+`tests/unit/orchestration/test_orchestration_fault_injection.py`）与 P4-C8-S5-R-03（`tests/contract/test_orchestration_architecture.py`）
+所涉文件本来就在 S5 的允许改动范围内，不需要额外的施工范围授权。
 
 E0-R2 修订范围（本计划）：E0 表（新增 E0-R2 行）；S1、S2、S3（仅结果预算字段的复制与预算相等检查）、S4、S5、S6 中与有界快照和
 多代保留直接相关的条目；最终 integrated gate；附录 A、B。批次分工、治理规则（第 0.4 节）与 BatchOutcome 相关内容不变。
@@ -149,6 +160,15 @@ tests/unit/orchestration/_helpers.py
 ```
 
 测试辅助只存在于 `tests/**`；生产代码不得 import 它们。
+
+（S5-A1）“之后各批只追加”的唯一精确例外：S5-R1 可以修改 `_helpers.py` 中既有的 `_execution_projection(...)` 与
+`projection(...)`（及这两个函数直接相关的 docstring / 注释），唯一目的是使实际确定性投影严格符合合同第 29 节：
+`ExecutionResult.leftover_temporaries` 的投影必须同时保留 `directory_role` 与 `name`，不得再静默丢弃
+`LeftoverTemporary.name`。合同第 29 节的排除集合不变（仍只有 `preview_id`、`result_id`、`BatchLineage.token`、`preflight_id`、
+`checkpoint_id`、`seal`）。本例外不授权修改 preview 投影或 execution 投影的其它字段、issue / preflight 投影、artifact 内容
+哈希、plan / metadata / warnings / conflict 字段、retry material 投影，也不授权新增任何忽略字段、归一化、掩码、占位符或
+随机值剥离；不授权修改其它任何既有 helper（例如 `FsFault`、`Corpus`、`Lineage`）。若后续确需修改其它既有 helper，开发者
+必须再次 STOP；按原规则追加新的 helper 仍然允许。
 
 ### 0.6 复查流程（每一批）
 
@@ -593,7 +613,8 @@ S4 被接受的 Head；合同第 7.1、28、29、30、34、35 节。
 src/fc2_organizer/orchestration/models.py      + PreviewSummary、ExecutionSummary、summary 属性、stage_counts（第 28 节）
 src/fc2_organizer/orchestration/__init__.py    导出集合 == 合同第 7.1 节最终集合
 tests/contract/test_orchestration_architecture.py（追加：公开 API 精确集合、完整模块集合、运行时端到端阻断测试）
-tests/unit/orchestration/_fakes.py、_helpers.py（追加）
+tests/unit/orchestration/_fakes.py、_helpers.py（追加；S5-A1：另外唯一允许修改既有的
+    _helpers.py::_execution_projection 与 _helpers.py::projection，仅用于闭合 P4-C8-S5-R-01，见第 0.5 节）
 合同第 38 节 S4 / S5 状态行
 ```
 
