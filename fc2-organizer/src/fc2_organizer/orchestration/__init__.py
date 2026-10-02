@@ -12,8 +12,8 @@ Contract: ``docs/specifications/PHASE4_BATCH_ORCHESTRATION_CONTRACT.md``; constr
 
 S1 (foundation) exports the models, configuration, cancellation token, resource / concurrency
 constants and the error hierarchy; S2 adds ``BatchOrchestrator`` (construction + ``preview``);
-S3 adds ``execute``; S4 adds ``preview_retry`` and the module-level ``merge_retry``. The summary models
-(S5) are added by a later batch.
+S3 adds ``execute``; S4 adds ``preview_retry`` and the module-level ``merge_retry``; S5 adds the summary
+models and fixes the final public API (``__all__`` is exactly contract section 7.1, in its order).
 
 Dependencies: standard library plus the bare public packages listed in contract section 6; never a
 lower-layer private module. ``fc2_organizer/__init__.py`` does not import this package; import it
@@ -45,6 +45,7 @@ from fc2_organizer.orchestration.models import (
     BatchOutcome,
     BatchPreview,
     ExecutionDisposition,
+    ExecutionSummary,
     IssueReason,
     ItemExecution,
     ItemIssue,
@@ -53,6 +54,7 @@ from fc2_organizer.orchestration.models import (
     OrchestrationConfig,
     OrchestrationStage,
     PreviewState,
+    PreviewSummary,
     ResourceLimitReason,
     RetryKind,
     RetryMaterial,
@@ -68,9 +70,11 @@ __all__ = [
     "BatchPreview",
     "ItemPreview",
     "PreviewState",
+    "PreviewSummary",
     "BatchExecutionResult",
     "ItemExecution",
     "ExecutionDisposition",
+    "ExecutionSummary",
     "BatchOutcome",
     "RetryMaterial",
     "RetryKind",

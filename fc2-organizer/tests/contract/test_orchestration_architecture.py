@@ -1,7 +1,8 @@
 """Contract test: ``fc2_organizer.orchestration`` architecture boundary (P4-C8 contract sections 5, 6, 16, 33,
-34.1; construction plan S1, S2, S3, S4).
+34.1; construction plan S1, S2, S3, S4, S5).
 
-* exact S4 module set (S1 six + ``stages`` / ``preview`` / ``orchestrator`` + ``execute`` + ``retry``);
+* exact final module set (contract section 5: S1 six + ``stages`` / ``preview`` / ``orchestrator`` + ``execute`` +
+  ``retry``; S5 adds no module), cross-checked against the contract's own module table;
 * per-module import allow-lists; only the bare public lower packages of contract section 6 (plus the two
   frozen explicit paths, not used before S2); the forbidden module list asserted item by item; zero
   private lower-layer module references;
@@ -23,7 +24,8 @@
   ``outcome`` is never a stored field; ``bounded_snapshot`` only in ``recognition.py``; payload metering
   helpers only in ``models.py``; no ``len`` / ``tuple`` / ``list`` of the ``items`` input; no ``copy`` /
   ``deepcopy``;
-* the public API is exactly the S1 set plus ``BatchOrchestrator`` and ``merge_retry`` (no summary yet);
+* the public API is exactly contract section 7.1 (S5, final): ``__all__`` equals the frozen list item by item and
+  in order (also parsed from the contract text); every name exists; no internal name leaks;
 * at runtime, with ``amane`` / ``requests`` / ``sqlite3`` / ``shelve`` / ``dbm`` / ``pickle`` blocked, the
   package imports, its S1 functions run and a real ``preview`` runs end to end (scripted engine / client).
 """
@@ -45,6 +47,23 @@ _S1_MODULES = {"__init__.py", "errors.py", "models.py", "cancellation.py", "_con
 _S2_MODULES = _S1_MODULES | {"stages.py", "preview.py", "orchestrator.py"}
 _S3_MODULES = _S2_MODULES | {"execute.py"}
 _S4_MODULES = _S3_MODULES | {"retry.py"}
+_FINAL_MODULES = _S4_MODULES  # S5 adds no production module (contract section 5)
+_FINAL_PUBLIC_API = (  # contract section 7.1, in its order
+    "BatchOrchestrator", "OrchestrationConfig", "CancellationToken", "merge_retry",
+    "BatchPreview", "ItemPreview", "PreviewState", "PreviewSummary",
+    "BatchExecutionResult", "ItemExecution", "ExecutionDisposition", "ExecutionSummary", "BatchOutcome",
+    "RetryMaterial", "RetryKind",
+    "OrchestrationStage", "IssueReason", "ItemIssue", "ItemWarning", "ResourceLimitReason",
+    "DEFAULT_IMAGE_IN_FLIGHT_ITEMS", "MAX_IMAGE_IN_FLIGHT_ITEMS",
+    "DEFAULT_FILESYSTEM_WORKERS", "MAX_FILESYSTEM_WORKERS",
+    "MAX_BATCH_ITEMS", "MAX_ITEM_IMAGE_BYTES",
+    "DEFAULT_MAX_RETAINED_ARTIFACT_BYTES", "MAX_RETAINED_ARTIFACT_BYTES_LIMIT",
+    "OrchestrationError", "OrchestrationConfigError", "OrchestrationInputError", "OrchestrationBusyError",
+    "OrchestrationContractError", "OrchestrationIntegrityError", "OrchestrationConsumedError",
+    "OrchestrationRetryError",
+    "OrchestrationResourceLimitError",
+)
+CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "specifications" / "PHASE4_BATCH_ORCHESTRATION_CONTRACT.md"
 _STAGE_APIS = {"build_organize_plan", "prepare_publication", "render_movie_nfo", "build_artifact_requests",
                "preflight_execution"}
 
@@ -153,9 +172,18 @@ def _call_name(node: ast.Call) -> str | None:
 # --------------------------------------------------------------------------- module set / imports
 
 
-def test_package_has_exactly_the_s4_modules():
+def _contract_section(heading: str, until: str) -> str:
+    text = CONTRACT.read_text(encoding="utf-8")
+    start = text.index(heading)
+    return text[start:text.index(until, start)]
+
+
+def test_package_has_exactly_the_final_modules():
     names = {p.name for p in _files()}
-    assert names == _S4_MODULES
+    assert names == _FINAL_MODULES
+    table = _contract_section("## 5. ", "## 6. ")
+    frozen = {line.split("`")[1] for line in table.splitlines() if line.startswith("| `") and ".py`" in line}
+    assert frozen == _FINAL_MODULES  # the contract's own frozen module table
     assert not [p for p in ORCH_SRC_ROOT.iterdir() if p.is_dir() and p.name != "__pycache__"]
 
 
@@ -163,7 +191,7 @@ def test_every_module_imports_only_its_allow_list():
     for path in _files():
         imported = _imports(_tree(path))
         assert imported <= _ALLOWED[path.name], (path.name, imported - _ALLOWED[path.name])
-        assert imported <= _ALLOWED_STDLIB | _ALLOWED_LOWER | {f"{_PKG}.{m[:-3]}" for m in _S4_MODULES}, path.name
+        assert imported <= _ALLOWED_STDLIB | _ALLOWED_LOWER | {f"{_PKG}.{m[:-3]}" for m in _FINAL_MODULES}, path.name
 
 
 def test_errors_cancellation_and_consumption_import_boundaries():
@@ -498,22 +526,33 @@ def test_no_production_module_has_mutable_state_except_the_consumption_registrie
 # --------------------------------------------------------------------------- public API / runtime
 
 
-def test_public_api_is_exactly_the_s1_set_plus_batch_orchestrator_and_merge_retry():
+def test_public_api_is_exactly_the_final_contract_list():
+    block = _contract_section("### 7.1 ", "### 7.2 ").split("```text", 1)[1].split("```", 1)[0]
+    parsed = tuple(name.strip() for name in block.replace("\n", ",").split(",") if name.strip())
+    assert parsed == _FINAL_PUBLIC_API  # the test's list is the contract's list, in order
     _purge()
     try:
         orchestration = importlib.import_module(_PKG)
-        assert len(orchestration.__all__) == len(set(orchestration.__all__)) == len(_S1_PUBLIC_API) + 2 == 35
-        assert set(orchestration.__all__) == _S1_PUBLIC_API | {"BatchOrchestrator", "merge_retry"}
-        assert callable(orchestration.BatchOrchestrator.execute)  # S3
-        assert callable(orchestration.BatchOrchestrator.preview_retry) and callable(orchestration.merge_retry)  # S4
-        for later in ("merge_retry", "summary"):
-            assert not hasattr(orchestration.BatchOrchestrator, later), later
+        assert type(orchestration.__all__) is list and tuple(orchestration.__all__) == _FINAL_PUBLIC_API
+        assert len(orchestration.__all__) == len(set(orchestration.__all__)) == 37
+        assert set(_FINAL_PUBLIC_API) == _S1_PUBLIC_API | {"BatchOrchestrator", "merge_retry", "PreviewSummary",
+                                                           "ExecutionSummary"}
         for name in orchestration.__all__:
             assert hasattr(orchestration, name), name
-        for name in (_LATER_OR_FORBIDDEN_PUBLIC - {"BatchOrchestrator", "merge_retry"}) | {
+        assert callable(orchestration.BatchOrchestrator.execute) and callable(orchestration.merge_retry)
+        assert callable(orchestration.BatchOrchestrator.preview_retry)
+        assert isinstance(orchestration.BatchPreview.summary, property)
+        assert isinstance(orchestration.BatchExecutionResult.summary, property)
+        for name in ("merge_retry", "summary"):
+            assert not hasattr(orchestration.BatchOrchestrator, name), name
+        exported = set(_FINAL_PUBLIC_API)
+        for name in (_LATER_OR_FORBIDDEN_PUBLIC - exported) | {
                 "revalidate", "type_name", "reason_detail", "bounded_snapshot", "retry_payload_bytes",
-                "ConsumptionRegistry", "build_retry_preview", "base_retained"}:
+                "ConsumptionRegistry", "build_retry_preview", "base_retained", "build_preview", "execute_preview"}:
             assert name not in orchestration.__all__ and not hasattr(orchestration, name), name
+        public = {name for name in vars(orchestration) if not name.startswith("_")}
+        assert public - exported <= {"cancellation", "errors", "models", "orchestrator", "preview", "execute",
+                                     "retry", "stages", "recognition"}  # only submodule names besides __all__
     finally:
         _purge()
 
@@ -587,6 +626,44 @@ def test_orchestration_imports_and_runs_with_forbidden_modules_blocked(tmp_path)
         _run_real_preview(orchestration, discovery, tmp_path)
         loaded = set(sys.modules)
         assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in loaded)
+    finally:
+        sys.meta_path.remove(blocker)
+        _purge()
+        sys.modules.update(saved)
+
+
+def test_the_full_lifecycle_runs_with_forbidden_modules_blocked(tmp_path):
+    """S5: preview -> execute -> preview_retry -> execute -> merge_retry -> summaries, end to end, while ``amane`` /
+    ``requests`` / ``sqlite3`` / ``shelve`` / ``dbm`` / ``pickle`` cannot be imported (positive control included)."""
+    _purge()
+    saved = {name: sys.modules.pop(name) for name in list(sys.modules) if name.split(".")[0] in _BLOCKED_ROOTS}
+    blocker = _BlockFinder()
+    sys.meta_path.insert(0, blocker)
+    try:
+        for root in sorted(_BLOCKED_ROOTS):  # positive control: the trap really fires
+            try:
+                importlib.import_module(root)
+            except ImportError:
+                continue
+            raise AssertionError(f"the forbidden-module trap did not fire for {root}")
+        import asyncio
+
+        orchestration = importlib.import_module(_PKG)
+        discovery = importlib.import_module("fc2_organizer.discovery")
+        aggregation = importlib.import_module("fc2_metadata_core.aggregation")
+        (tmp_path / "dl").mkdir()
+        (tmp_path / "dl" / "FC2-PPV-1234567.mp4").write_bytes(b"media")
+        (tmp_path / "lib").mkdir()
+        items = discovery.discover_media(str(tmp_path / "dl")).items
+        orchestrator = orchestration.BatchOrchestrator(_Engine(aggregation), _Client(), str(tmp_path / "lib"))
+        preview = asyncio.run(orchestrator.preview(items))
+        result = orchestrator.execute(preview)
+        retry = asyncio.run(orchestrator.preview_retry(result))
+        merged = orchestration.merge_retry(result, orchestrator.execute(retry))
+        assert preview.summary.unprepared == 1 and merged.summary.retryable == 1 and merged.generation == 1
+        assert merged.outcome is orchestration.BatchOutcome.FAILED
+        assert (tmp_path / "dl" / "FC2-PPV-1234567.mp4").read_bytes() == b"media"
+        assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in sys.modules)
     finally:
         sys.meta_path.remove(blocker)
         _purge()

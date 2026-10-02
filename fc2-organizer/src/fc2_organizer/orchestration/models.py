@@ -7,8 +7,8 @@ was rewritten with ``object.__setattr__`` before (or after, through :func:`reval
 composed is always detected.
 
 Derived values (display properties, ``warnings`` of a preview, ``retry_kind``, ``outcome``,
-retained payload byte counts) are read-only properties, never stored fields, so they cannot
-contradict the data they are derived from.
+retained payload byte counts, the batch ``summary`` models) are read-only properties, never stored
+fields, so they cannot contradict the data they are derived from.
 
 Besides the standard library this module imports only the bare public packages authorised by
 contract section 6 (the lower-layer types the invariants are expressed in). It never imports a
@@ -80,9 +80,11 @@ __all__ = [
     "OrchestrationConfig",
     "ItemIssue",
     "ItemPreview",
+    "PreviewSummary",
     "BatchPreview",
     "RetryMaterial",
     "ItemExecution",
+    "ExecutionSummary",
     "BatchExecutionResult",
 ]
 
@@ -615,6 +617,94 @@ _ABSENT_WARNINGS = (
 _ABSENT_WARNING_SET = frozenset(warning for _, warning in _ABSENT_WARNINGS)
 
 
+# --------------------------------------------------------------------------- summaries (contract section 28)
+
+
+def _check_counts(model: object, names: tuple[str, ...], what: str) -> None:
+    for name in names:
+        if not _is_int(getattr(model, name)):
+            _fail(f"{what}.{name} must be an exact int >= 0")
+    counts = model.stage_counts
+    if (type(counts) is not tuple or len(counts) != len(OrchestrationStage)
+            or any(type(pair) is not tuple or len(pair) != 2 for pair in counts)
+            or [pair[0] for pair in counts] != list(OrchestrationStage)
+            or any(not _is_int(pair[1]) for pair in counts)):
+        _fail(f"{what}.stage_counts must list every OrchestrationStage in declaration order with an exact int")
+
+
+def _stage_counts(items: tuple) -> tuple[tuple[OrchestrationStage, int], ...]:
+    """Contract section 28.1: every ``OrchestrationStage`` in declaration order (zeros included), counting
+    ``issue.stage`` of the items that have an issue."""
+    counts = {stage: 0 for stage in OrchestrationStage}
+    for item in items:
+        if item.issue is not None:
+            counts[item.issue.stage] += 1
+    return tuple((stage, counts[stage]) for stage in OrchestrationStage)
+
+
+@dataclass(frozen=True, slots=True)
+class PreviewSummary:
+    """Counts of a ``BatchPreview`` (contract section 28.1); built only by ``BatchPreview.summary``."""
+
+    total: int
+    ready: int
+    blocked: int
+    unprepared: int
+    warned: int
+    stage_counts: tuple[tuple[OrchestrationStage, int], ...]
+
+    def __post_init__(self) -> None:
+        _check_counts(self, ("total", "ready", "blocked", "unprepared", "warned"), "PreviewSummary")
+        if self.total != self.ready + self.blocked + self.unprepared or self.warned > self.total:
+            _fail("PreviewSummary: total == ready + blocked + unprepared and warned <= total")
+        if sum(count for _, count in self.stage_counts) != self.blocked + self.unprepared:
+            _fail("PreviewSummary: stage_counts sum to blocked + unprepared")
+
+
+_RETRYABLE_KINDS = frozenset({RetryKind.METADATA_REFETCH, RetryKind.PREFLIGHT_RECHECK, RetryKind.FRESH_REEXECUTE,
+                              RetryKind.RESUME})
+_EXECUTION_COUNTS = ("total", "ready", "blocked", "unprepared", "executed", "success", "partial", "failed",
+                     "not_selected", "cancelled", "rejected", "aborted", "retryable", "deferred", "non_retryable")
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionSummary:
+    """Counts of a ``BatchExecutionResult`` (contract section 28.2); built only by
+    ``BatchExecutionResult.summary``. No ``outcome`` field: ``outcome`` is the result's own property."""
+
+    total: int
+    ready: int
+    blocked: int
+    unprepared: int
+    executed: int
+    success: int
+    partial: int
+    failed: int
+    not_selected: int
+    cancelled: int
+    rejected: int
+    aborted: int
+    retryable: int
+    deferred: int
+    non_retryable: int
+    stage_counts: tuple[tuple[OrchestrationStage, int], ...]
+
+    def __post_init__(self) -> None:
+        _check_counts(self, _EXECUTION_COUNTS, "ExecutionSummary")
+        unexecuted = self.not_selected + self.cancelled + self.rejected + self.aborted
+        if self.executed != self.success + self.partial + self.failed:
+            _fail("ExecutionSummary: executed == success + partial + failed")
+        if self.ready != self.executed + unexecuted:
+            _fail("ExecutionSummary: ready == executed + not_selected + cancelled + rejected + aborted")
+        if self.total != self.executed + self.blocked + self.unprepared + unexecuted:
+            _fail("ExecutionSummary: total == every disposition count")
+        if self.total != self.success + self.retryable + self.deferred + self.non_retryable:
+            _fail("ExecutionSummary: total == success + retryable + deferred + non_retryable")
+        issued = self.blocked + self.unprepared + self.partial + self.failed + self.rejected + self.aborted
+        if sum(count for _, count in self.stage_counts) != issued:
+            _fail("ExecutionSummary: stage_counts sum to the items that carry an issue")
+
+
 # --------------------------------------------------------------------------- BatchPreview (contract section 10.4)
 
 
@@ -703,6 +793,18 @@ class BatchPreview:
         """Σ ``len(request.content)`` over ``preflight.artifacts`` of every item with a preflight
         (contract section 10.4; shared bytes counted once per reference)."""
         return sum(_manifest_bytes(item.preflight.artifacts) for item in self.items if item.preflight is not None)
+
+    @property
+    def summary(self) -> PreviewSummary:
+        """Contract section 28.1, derived from ``items`` on every access (never stored)."""
+        entries = self.items
+        return PreviewSummary(
+            total=len(entries),
+            ready=sum(1 for item in entries if item.state is PreviewState.READY),
+            blocked=sum(1 for item in entries if item.state is PreviewState.BLOCKED),
+            unprepared=sum(1 for item in entries if item.state is PreviewState.UNPREPARED),
+            warned=sum(1 for item in entries if item.warnings),
+            stage_counts=_stage_counts(entries))
 
 
 # --------------------------------------------------------------------------- RetryMaterial (contract section 10.5)
@@ -979,6 +1081,39 @@ class BatchExecutionResult:
         """Σ ``retry_payload_bytes`` over items holding ``RetryMaterial`` (contract section 10.7)."""
         return sum(retry_payload_bytes(item.retry_material) for item in self.items
                    if item.retry_material is not None)
+
+    @property
+    def summary(self) -> ExecutionSummary:
+        """Contract section 28.2, derived from ``items`` on every access (never stored). ``success`` only from a
+        P4-C7 ``SUCCESS``; ``PARTIAL`` never counts as success; ``ABORTED`` is counted on its own only."""
+        entries = self.items
+        executed = [item for item in entries if item.disposition is ExecutionDisposition.EXECUTED]
+        not_ready = [item for item in entries if item.disposition is ExecutionDisposition.NOT_READY]
+
+        def disposition(value: ExecutionDisposition) -> int:
+            return sum(1 for item in entries if item.disposition is value)
+
+        def status(value: ExecutionStatus) -> int:
+            return sum(1 for item in executed if item.execution.status is value)
+
+        kinds = [item.retry_kind for item in entries]
+        return ExecutionSummary(
+            total=len(entries),
+            ready=sum(1 for item in entries if item.preview_state is PreviewState.READY),
+            blocked=sum(1 for item in not_ready if item.preview_state is PreviewState.BLOCKED),
+            unprepared=sum(1 for item in not_ready if item.preview_state is PreviewState.UNPREPARED),
+            executed=len(executed),
+            success=status(ExecutionStatus.SUCCESS),
+            partial=status(ExecutionStatus.PARTIAL),
+            failed=status(ExecutionStatus.FAILED),
+            not_selected=disposition(ExecutionDisposition.NOT_SELECTED),
+            cancelled=disposition(ExecutionDisposition.CANCELLED),
+            rejected=disposition(ExecutionDisposition.REJECTED),
+            aborted=disposition(ExecutionDisposition.ABORTED),
+            retryable=sum(1 for kind in kinds if kind in _RETRYABLE_KINDS),
+            deferred=sum(1 for kind in kinds if kind is RetryKind.DEFERRED),
+            non_retryable=sum(1 for item, kind in zip(entries, kinds) if kind is RetryKind.NONE and not _is_s(item)),
+            stage_counts=_stage_counts(entries))
 
     @property
     def outcome(self) -> BatchOutcome:
