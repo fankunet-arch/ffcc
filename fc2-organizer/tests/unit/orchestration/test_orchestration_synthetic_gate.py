@@ -303,34 +303,43 @@ def _normalised(root, models) -> list[str]:
 # --------------------------------------------------------------------------- the gate
 
 
-def _gate(root, monkeypatch, *, reverse: bool):
+def _hardlinks(corpus) -> list[tuple[str, str]]:
+    links = [str(corpus.downloads / "c-link" / _name(2_200_000, k)) for k in range(2 * C_HARDLINK_PAIRS)]
+    return list(zip(links[0::2], links[1::2]))
+
+
+def _blockers(corpus) -> list:
+    return [corpus.library / _number(5_000_000, k) for k in range(GROUPS["F"])]
+
+
+def _main_composition(root):
+    """The single authoritative section 35.1 main-preview initial state, shared by the main gate and every B_exact
+    corpus: the 497 files of ``_films()`` with the two C hard-linked pairs, the 20 F pre-existing target
+    directories (each with the user's ``user-note.txt``), the 497 items of the real ``discover_media`` and the three
+    C repeated entries appended once more -> 500 logical inputs. Returns corpus, items, group, kinds."""
     films, group, kinds = _films()
     corpus = Corpus(root, films)
-    downloads = corpus.downloads
-    links = [str(downloads / "c-link" / _name(2_200_000, k)) for k in range(2 * C_HARDLINK_PAIRS)]
-    for first, second in zip(links[0::2], links[1::2]):  # C: two names, one inode, different numbers
+    for first, second in _hardlinks(corpus):  # C: two names, one inode, different numbers
         os.remove(second)
         os.link(first, second)
-    for k in range(GROUPS["F"]):  # F: the target directory already exists (the user's)
-        blocker = corpus.library / _number(5_000_000, k)
+    for blocker in _blockers(corpus):  # F: the target directory already exists (the user's)
         blocker.mkdir()
         (blocker / "user-note.txt").write_bytes(b"mine")
-    discovered = discover_media(str(downloads)).items
-    assert len(discovered) == 497
+    discovered = discover_media(str(corpus.downloads)).items
     repeated = [i for i in discovered if os.path.basename(i.source_path) in
                 {_name(2_100_000, k) for k in range(C_REPEATED_ENTRIES)}]
     items = tuple(discovered) + tuple(repeated)  # C: three entries appear twice
-    assert len(items) == 500
-    hashes = {item.source_path: _sha(item.source_path) for item in discovered}
-    monkeypatch.setattr(execution_transfer, "_SAME_VOLUME_STRATEGY", "link")
-    config = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=4), image_in_flight_items=4,
-                                 filesystem_workers=4)  # default B, MAX_BATCH_ITEMS and image policy
-    orchestrator = corpus.orchestrator(config=config)
-    models = []
+    assert len(films) == len(discovered) == 497  # physical discovered files
+    assert len(repeated) == C_REPEATED_ENTRIES == 3  # repeated logical references
+    assert len(items) == 500  # logical inputs
+    assert all(os.path.samefile(first, second) for first, second in _hardlinks(corpus))
+    assert all((b / "user-note.txt").read_bytes() == b"mine" for b in _blockers(corpus))
+    return corpus, items, group, kinds
 
-    # ---- g0: main preview + execute
-    preview = _preview_read_only(corpus, lambda: _preview(corpus, orchestrator, items, reverse))
-    assert corpus.engine.peak == 4 and corpus.client.peak == 4  # M and K reached and never exceeded
+
+def _assert_main_preview_shape(preview, corpus, group) -> dict[str, list]:
+    """The frozen main-preview shape: 500 / 360 / 50 / 90, the group sizes, Phase A conflicts blocked before
+    metadata, the hard-linked pairs blocked by Phase B, the F blockers PREFLIGHT_BLOCKED. Returns the group map."""
     summary = preview.summary
     assert dict(total=summary.total, ready=summary.ready, blocked=summary.blocked,
                 unprepared=summary.unprepared) == MAIN_PREVIEW
@@ -347,11 +356,30 @@ def _gate(root, monkeypatch, *, reverse: bool):
     # section 14.2: Phase A blocks before metadata (no metadata, no preflight, the engine never asked)
     assert all(i.metadata is None and i.preflight is None for i in phase_a)
     assert not {i.canonical_number for i in phase_a} & set(corpus.engine.calls)
+    repeated = [i for i in phase_a if os.path.basename(i.source_path).startswith("FC2-PPV-21")]
+    assert len(repeated) == 2 * C_REPEATED_ENTRIES  # both references of each repeated entry
+    assert {i.issue.reason for i in repeated} == {R.DUPLICATE_SOURCE_IN_BATCH}
     assert all(i.preflight is not None and i.issue.reason is R.DUPLICATE_SOURCE_IN_BATCH for i in phase_b)  # 14.3
     assert {i.issue.reason for i in by_group["D"]} == {R.METADATA_UNAVAILABLE, R.METADATA_ENGINE_FAILURE}
     assert {i.issue.reason for i in by_group["E"]} == {R.NFO_RENDER_FAILED}
     assert {i.issue.reason for i in by_group["F"]} == {R.PREFLIGHT_BLOCKED}
     assert all(i.state is S.READY for g in "AGHI" for i in by_group[g])
+    return by_group
+
+
+def _gate(root, monkeypatch, *, reverse: bool):
+    corpus, items, group, kinds = _main_composition(root)
+    hashes = {item.source_path: _sha(item.source_path) for item in items}
+    monkeypatch.setattr(execution_transfer, "_SAME_VOLUME_STRATEGY", "link")
+    config = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=4), image_in_flight_items=4,
+                                 filesystem_workers=4)  # default B, MAX_BATCH_ITEMS and image policy
+    orchestrator = corpus.orchestrator(config=config)
+    models = []
+
+    # ---- g0: main preview + execute
+    preview = _preview_read_only(corpus, lambda: _preview(corpus, orchestrator, items, reverse))
+    assert corpus.engine.peak == 4 and corpus.client.peak == 4  # M and K reached and never exceeded
+    by_group = _assert_main_preview_shape(preview, corpus, group)
     models.append(preview)
     selection = tuple(sorted(i.index for i in preview.items if i.state is S.READY and group[
         os.path.basename(i.source_path)] != "I"))
@@ -614,25 +642,37 @@ def _resource_model(preview) -> tuple[int, list[int]]:
 
 
 def test_b_exact_admits_the_500_item_preview_and_one_byte_less_fails(tmp_path):
-    films, _, _ = _films()
-    reference_corpus = Corpus(tmp_path / "reference", films)
-    reference = run(reference_corpus.orchestrator().preview(reference_corpus.items), timeout=600)
-    a_nfo, images = _resource_model(reference)
+    # every corpus is the authoritative 500-input main-preview composition (hard links, F blockers, repeated
+    # entries) in its own fresh tree; only the resource configuration differs
+    reference_corpus, reference_items, group, _ = _main_composition(tmp_path / "reference")
+    reference = run(reference_corpus.orchestrator().preview(reference_items), timeout=600)  # default resources
+    _assert_main_preview_shape(reference, reference_corpus, group)  # the frozen main-preview shape
+    a_nfo, images = _resource_model(reference)  # derived from the 500-input preview, never a preset number
+    assert len(images) == len([i for i in reference.items if i.preflight is not None])
     reservation = max(images)  # a small R that still fits every item's images
     b_exact = a_nfo + sum(images[:-1]) + reservation  # section 19.6.4 admission at the last image target
     policy = ImageAcquisitionPolicy(max_image_bytes=reservation, max_total_bytes=reservation)
-    exact_corpus = Corpus(tmp_path / "exact", films)
+
+    exact_corpus, exact_items, _, _ = _main_composition(tmp_path / "exact")
     exact = run(exact_corpus.orchestrator(image_policy=policy, config=OrchestrationConfig(
-        max_retained_artifact_bytes=b_exact)).preview(exact_corpus.items), timeout=600)
+        max_retained_artifact_bytes=b_exact)).preview(exact_items), timeout=600)
+    assert len(exact.items) == 500
+    _assert_main_preview_shape(exact, exact_corpus, group)
     assert _item_text(exact, exact_corpus.root) == _item_text(reference, reference_corpus.root)  # same preview
-    short_corpus = Corpus(tmp_path / "short", films)
+
+    short_corpus, short_items, _, _ = _main_composition(tmp_path / "short")
     snapshot = tree_snapshot(short_corpus.root)
+    hashes = {item.source_path: _sha(item.source_path) for item in short_items}
     outcome = []
     with pytest.raises(OrchestrationResourceLimitError) as info:
         outcome.append(run(short_corpus.orchestrator(image_policy=policy, config=OrchestrationConfig(
-            max_retained_artifact_bytes=b_exact - 1)).preview(short_corpus.items), timeout=600))
+            max_retained_artifact_bytes=b_exact - 1)).preview(short_items), timeout=600))
     assert info.value.reason is ResourceLimitReason.RETAINED_BYTES_LIMIT and outcome == []
-    assert tree_snapshot(short_corpus.root) == snapshot
+    assert tree_snapshot(short_corpus.root) == snapshot  # zero mutation: sources, hard links, blockers, notes
+    assert all(_sha(path) == digest for path, digest in hashes.items())
+    assert all(os.path.samefile(first, second) for first, second in _hardlinks(short_corpus))
+    assert all(sorted(os.listdir(b)) == ["user-note.txt"] and (b / "user-note.txt").read_bytes() == b"mine"
+               for b in _blockers(short_corpus))
 
 
 def _item_text(model, root) -> str:
