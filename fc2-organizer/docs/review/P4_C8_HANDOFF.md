@@ -378,3 +378,60 @@ Phase 4                       : NOT CLOSED
 
 下一步：P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW（增量范围 `43ca3e6..<S6-R1 Docs Head>`；完整 S6 范围
 `78f92c8..<S6-R1 Docs Head>`）。
+
+## 15. P4-C8 最终闭合
+
+```text
+Final Implementation Review   : PASS（P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW）
+P4-C8-S6-R-01                 : CLOSED
+S6                            : ACCEPTED / CLOSED
+S6 Final Reviewed Code Head   : 15912b1b5e0c2a813998e898423d11c280e965fb
+S6 Final Reviewed Docs Head   : da2d5342579366cd29041c620abbd800ae9ac2ea
+P4-C8 implementation          : REVIEWED COMPLETE
+P4-C8                         : CLOSED
+P4-C9                         : NOT STARTED
+Phase 4                       : NOT CLOSED
+```
+
+**快照声明**：本文件第 1-14 节是对应时间点的实现 / 复查证据快照，原样保留。其中出现的 `IMPLEMENTED — INDEPENDENT REVIEW
+REQUIRED`、原 S6 复查 `FAIL — P4-C8-S6-R-01`、`REMEDIATED — INDEPENDENT REVIEW REQUIRED`、`NOT ESTABLISHED` 等状态，以及
+原 S6 的 497 输入 `B_exact = 396197` 与 S6-R1 的 500 输入 `B_exact = 393146` 的更正历史，均为当时的证据记录，不再更新。
+P4-C8 的最终状态以本节与合同第 38 节（含 38.1 最终闭合记录）为准。
+
+### 15.1 最终坐标
+
+```text
+P4-C8 Frozen Base             : 586f92f9b96576dbd71c005a6c95b6e7e52210f4
+E0 Final Accepted Docs Head   : 9e118dea32361ec19b0a84f84b6e5da0fbd134bc
+S1 Final Reviewed Code Head   : e8f83e986d3cb306a425d666f3bc0a2738dab823
+S2 Final Reviewed Code Head   : 8c5ba6e808a6c45ee2342af497458fe88af5ff09
+S3 Final Reviewed Code Head   : 7fb6bfb2d230d90d240a0a4b462332d27afe77d5
+S4 Final Reviewed Code Head   : 4933f38bd09101766643af0b66757080565a8619
+S5 Final Reviewed Code Head   : 78f92c8b77a7ef15f0563decd1773d30cfb65f0e
+S6 Final Reviewed Code Head   : 15912b1b5e0c2a813998e898423d11c280e965fb
+S6 Final Reviewed Docs Head   : da2d5342579366cd29041c620abbd800ae9ac2ea
+Final Closure Docs Head       : 本提交（git log -1 --format=%H -- fc2-organizer/docs/P4_C8_CONSTRUCTION_PLAN.md）
+```
+
+### 15.2 最终验收摘要
+
+* S1-S6：全部经独立复查 PASS（复查与修复链见第 1 节与合同第 38.1 节）。
+* 500-item 门槛：PASS（第 4 节；资源子门槛见第 5 节，`B_exact` 以第 13 节的 500 输入证据为准）。
+* 非空洞性变异 (a)-(j)：全部被杀死（第 6 节）。
+* 全量测试：6178 passed / 40 skipped / 0 failed（第 7 节）。
+* 生产边界：PASS——S6 与 S6-R1 均无生产修改。
+* 文件系统修改所有权：PASS——所有写入只经 P4-C7 委托，无越权修改。
+* 无持久化：PASS。
+* 无诊断输出：PASS（诊断归 P4-C9）。
+* P4-C1..P4-C7 受保护范围：PASS（只有已授权的守卫更新）。
+
+### 15.3 证据缺口与延续
+
+P4-C8 CLOSED **不代表** 第 9 节所列证据缺口已被解决：跨进程并发、POSIX 原生主机，以及 P4-C7 的平台证据缺口（Windows native
+symlink、POSIX native、kernel `O_NOFOLLOW`、native cross-volume）仍为 EVIDENCE GAP。合同第 36 节延续项（第 10 节）与第 37 节
+已知局限（第 11 节）原样延续。
+
+### 15.4 后续
+
+本节所在的 Final Closure Docs 提交仍须经过独立的 P4-C8 FINAL DOCS-ONLY CLOSURE REVIEW。只有该复查 PASS 后，本提交才成为
+P4-C9 Frozen Base；在此之前 P4-C9 Frozen Base 尚未建立。

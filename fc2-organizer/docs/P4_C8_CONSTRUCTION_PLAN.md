@@ -832,3 +832,20 @@ S6 的 Code Review Candidate 与 Docs Head 都**不是** P4-C9 Frozen Base。P4-
 | P9 | （E0-R2）有界快照归 S1 `recognition.py`；预算字段、载荷计量 helper 与保留不变量归 S1 `models.py`；lineage 预算校验、`base_retained`、可用额度与 merge 纵深防御归 S4 `retry.py`；S3 只复制字段并检查预算相等；S5 只加固测试 | 沿用现有模块职责，不新增生产模块或批次，施工时无需再决定归属 |
 
 无需项目所有者决定的外部业务问题。
+
+## P4-C8 最终闭合记录
+
+本节是只追加的治理记录；本计划既有内容（E0、S1-S6、各项修订、附录 A / B 与全部冻结施工语义）保持不变。
+
+```text
+S6 Final Incremental Closure Review : PASS（P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW）
+S6 Final Reviewed Code Head         : 15912b1b5e0c2a813998e898423d11c280e965fb
+S6 Final Reviewed Docs Head         : da2d5342579366cd29041c620abbd800ae9ac2ea
+P4-C8 implementation                : REVIEWED COMPLETE
+P4-C8                               : CLOSED
+Phase 4                             : NOT CLOSED
+P4-C9                               : NOT STARTED
+```
+
+按“P4-C8 闭合流程（冻结）”，本 Final Closure Docs 提交仍须经过独立的 P4-C8 FINAL DOCS-ONLY CLOSURE REVIEW。本提交中的
+`P4-C8 CLOSED` 是待该复查验证的闭合记录；只有该复查 PASS 后，本提交才成为 P4-C9 Frozen Base。

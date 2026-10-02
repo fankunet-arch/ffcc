@@ -1879,7 +1879,7 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 | S3 | Execution orchestration：execute / selection / cancellation / fatal drain | S3 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `7fb6bfb2d230d90d240a0a4b462332d27afe77d5` |
 | S4 | Retry：RetryKind / preview_retry / merge_retry | S4 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `4933f38bd09101766643af0b66757080565a8619` |
 | S5 | Summary / determinism / race / integration hardening + 最终公开 API | S5 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `78f92c8b77a7ef15f0563decd1773d30cfb65f0e` |
-| S6 | 500-item batch orchestration gate + HANDOFF | S6-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
+| S6 | 500-item batch orchestration gate + HANDOFF | S6 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `15912b1b5e0c2a813998e898423d11c280e965fb`（FINAL REVIEWED DOCS HEAD `da2d5342579366cd29041c620abbd800ae9ac2ea`） |
 
 ```text
 P4-C8-E0-R-01        : CLOSED（批级 BatchOutcome，第 11.5 节；E0-R1 closure review）
@@ -1896,13 +1896,42 @@ P4-C8 S2             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 8c5ba6e808a6
 P4-C8 S3             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 7fb6bfb2d230d90d240a0a4b462332d27afe77d5）
 P4-C8 S4             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 4933f38bd09101766643af0b66757080565a8619）
 P4-C8 S5             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 78f92c8b77a7ef15f0563decd1773d30cfb65f0e）
-P4-C8 S6             : S6-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
-P4-C8-S6-R-01        : REMEDIATED — INDEPENDENT REVIEW REQUIRED（B_exact 子门槛改用 500 逻辑输入主 preview 构成）
-P4-C8 Implementation : COMPLETE — INDEPENDENT REVIEW REQUIRED
-P4-C8                : NOT CLOSED
+P4-C8 S6             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 15912b1b5e0c2a813998e898423d11c280e965fb；FINAL REVIEWED DOCS HEAD da2d5342579366cd29041c620abbd800ae9ac2ea）
+P4-C8-S6-R-01        : CLOSED（B_exact 子门槛改用 500 逻辑输入主 preview 构成；P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW = PASS）
+P4-C8 Implementation : REVIEWED COMPLETE
+P4-C8                : CLOSED
 P4-C9                : NOT STARTED
 Phase 4              : NOT CLOSED
 ```
+
+### 38.1 P4-C8 最终闭合记录
+
+本小节是**治理性质的闭合记录（governance closure record）**，只记录复查结论与坐标，不改变本合同第 1-37 节的任何语义。
+
+```text
+Final Closure Docs Parent     : da2d5342579366cd29041c620abbd800ae9ac2ea
+P4-C8 Frozen Base             : 586f92f9b96576dbd71c005a6c95b6e7e52210f4
+E0 Final Accepted Docs Head   : 9e118dea32361ec19b0a84f84b6e5da0fbd134bc
+S1 Final Reviewed Code Head   : e8f83e986d3cb306a425d666f3bc0a2738dab823
+S2 Final Reviewed Code Head   : 8c5ba6e808a6c45ee2342af497458fe88af5ff09
+S3 Final Reviewed Code Head   : 7fb6bfb2d230d90d240a0a4b462332d27afe77d5
+S4 Final Reviewed Code Head   : 4933f38bd09101766643af0b66757080565a8619
+S5 Final Reviewed Code Head   : 78f92c8b77a7ef15f0563decd1773d30cfb65f0e
+S6 Final Reviewed Code Head   : 15912b1b5e0c2a813998e898423d11c280e965fb
+S6 Final Reviewed Docs Head   : da2d5342579366cd29041c620abbd800ae9ac2ea
+S6 Final Review               : PASS（P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW）
+P4-C8 implementation          : REVIEWED COMPLETE
+P4-C8                         : CLOSED
+P4-C9                         : NOT STARTED
+Phase 4                       : NOT CLOSED（P4-C9、P4-C10 尚未完成）
+```
+
+复查与修复链按原样保留，不改写为从未发生：E0 经 E0-R1、E0-R2 后 ACCEPTED；S2 经 R1-R5；S3 经 R1、R2；S4 经 S4-A1 与
+S4-R1；S5 经 S5-A1 与 S5-R1；S6 的 FINAL INDEPENDENT CLOSURE REVIEW 首次为 FAIL（P4-C8-S6-R-01），经 S6-R1 修复后增量复查
+PASS。各批的详细证据见 `docs/review/P4_C8_HANDOFF.md`。
+
+本记录所在的 Final Closure Docs 提交仍须经过独立的 P4-C8 FINAL DOCS-ONLY CLOSURE REVIEW；只有该复查 PASS 后，该提交才成为
+P4-C9 Frozen Base。第 36 节延续项与第 37 节已知局限保持不变并继续有效。
 
 ## 附录 A. 裁决记录（E0）
 
