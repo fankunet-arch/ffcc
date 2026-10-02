@@ -9,10 +9,11 @@ Branch       = claude/phase4-c8-batch-orchestration
 施工计划     = docs/P4_C8_CONSTRUCTION_PLAN.md（当前权威：S5-A1 0f591ff）
 ```
 
-**当前状态**：`P4-C8 implementation: COMPLETE — INDEPENDENT REVIEW REQUIRED`；`P4-C8: NOT CLOSED`；`P4-C9: NOT STARTED`；
-`Phase 4: NOT CLOSED`。
+**当前状态**：`S6: IMPLEMENTED — R1 INDEPENDENT REVIEW REQUIRED`；`P4-C8 implementation: COMPLETE — INDEPENDENT REVIEW
+REQUIRED`；`P4-C8: NOT CLOSED`；`P4-C9: NOT STARTED`；`Phase 4: NOT CLOSED`。
 
-本文件是 reviewer 证据文档，不是验收结论。S6 与 P4-C8 均须经过 P4-C8 S6 FINAL INDEPENDENT CLOSURE REVIEW；本文件不宣布
+本文件是 reviewer 证据文档，不是验收结论。原 S6（`4d8efe2` / `43ca3e6`）的 P4-C8 S6 FINAL INDEPENDENT CLOSURE REVIEW 结论为
+**FAIL — P4-C8-S6-R-01**（第 13 节）；S6-R1 只修复该 finding，须经过 P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW。本文件不宣布
 S6 ACCEPTED、P4-C8 CLOSED 或 Phase 4 CLOSED，也不包含“P4-C8 最终闭合”一节（那属于复查 PASS 之后的 Final Closure Docs）。
 
 ## 1. 坐标
@@ -28,20 +29,25 @@ S3 Final Reviewed Code Head       = 7fb6bfb2d230d90d240a0a4b462332d27afe77d5   S
 S4 Final Reviewed Code Head       = 4933f38bd09101766643af0b66757080565a8619   S4-R1
 S5 Final Reviewed Code Head       = 78f92c8b77a7ef15f0563decd1773d30cfb65f0e   S5-R1（= S6 Frozen Input）
 施工计划修订（均已 ACCEPTED）     = S2-A1 9e45009、S3-A1 570c3d0、S4-A1 b4d8c35、S5-A1 0f591ff
-S6 Code Review Candidate          = 4d8efe2fa101316404f97c77395235f8e7a64150   只含 S6 测试
-S6 Docs Head                      = 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C8_HANDOFF.md）
+Original S6 Code Review Candidate = 4d8efe2fa101316404f97c77395235f8e7a64150   只含 S6 测试
+Original S6 Docs Head             = 43ca3e68508bde5e12a6c46f294ef9e6f05d3cb5   本文件 + 合同第 38 节
+Original S6 Final Review          = FAIL — P4-C8-S6-R-01（HIGH / BLOCKING，唯一 finding）
+S6-R1 Code Repair Head            = 15912b1b5e0c2a813998e898423d11c280e965fb   只修改 S6 门槛测试文件
+S6-R1 Docs Head                   = 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C8_HANDOFF.md）
 
-S6 Code Review Range       : 78f92c8b77a7ef15f0563decd1773d30cfb65f0e..4d8efe2fa101316404f97c77395235f8e7a64150
-S6 Docs Review Range       : 4d8efe2fa101316404f97c77395235f8e7a64150..<S6 Docs Head>
-Final S6 Closure Review    : 78f92c8b77a7ef15f0563decd1773d30cfb65f0e..<S6 Docs Head>
+Original S6 Code Review Range     : 78f92c8b77a7ef15f0563decd1773d30cfb65f0e..4d8efe2fa101316404f97c77395235f8e7a64150
+Original S6 Docs Review Range     : 4d8efe2fa101316404f97c77395235f8e7a64150..43ca3e68508bde5e12a6c46f294ef9e6f05d3cb5
+Incremental Code Repair Range     : 43ca3e68508bde5e12a6c46f294ef9e6f05d3cb5..15912b1b5e0c2a813998e898423d11c280e965fb
+Incremental Docs Repair Range     : 15912b1b5e0c2a813998e898423d11c280e965fb..<S6-R1 Docs Head>
+Final S6 Review Range             : 78f92c8b77a7ef15f0563decd1773d30cfb65f0e..<S6-R1 Docs Head>
 ```
 
-关系：`S6 Code Review Candidate^ == 78f92c8`；`S6 Docs Head^ == 4d8efe2`。开始前已验证
-`HEAD == origin/claude/phase4-c8-batch-orchestration == 78f92c8` 且工作区干净。没有 rebase、amend、squash、force push 或
-改写历史。
+关系：`4d8efe2^ == 78f92c8`；`43ca3e6^ == 4d8efe2`；`15912b1^ == 43ca3e6`；`<S6-R1 Docs Head>^ == 15912b1`。S6 开始前已验证
+`HEAD == origin == 78f92c8`，S6-R1 开始前已验证 `HEAD == origin == 43ca3e6`，两次工作区均干净。原 S6 两个提交保持不变，S6-R1
+只追加两个提交；没有 rebase、amend、squash、force push 或改写历史。
 
-**Code Review Candidate 与 Docs Head 严格区分**：代码复查对象是 `4d8efe2`（只含测试）；Docs Head 只新增本文件并修改合同
-第 38 节状态行，不含任何代码或测试。
+**Code 与 Docs 严格区分**：代码复查对象是 `4d8efe2` 与 `15912b1`（只含测试）；两个 Docs 提交只修改本文件与合同第 38 节状态
+行，不含任何代码或测试。
 
 ## 2. 变更范围
 
@@ -68,7 +74,20 @@ S6 行 `NOT STARTED` -> `S6 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`；状�
 
 ### 2.3 S6 期间的生产缺陷
 
-S6 门槛**没有**发现任何生产正确性缺陷；没有 `fix(orchestration): … (P4-C8 S6)` 提交。
+S6 门槛**没有**发现任何生产正确性缺陷；没有 `fix(orchestration): … (P4-C8 S6)` 提交。S6-R1 同样没有生产修改。
+
+### 2.3.1 S6-R1（`15912b1`，1 个文件；Docs Head 2 个文件）
+
+```text
+Code Repair : M fc2-organizer/tests/unit/orchestration/test_orchestration_synthetic_gate.py
+Docs Repair : M fc2-organizer/docs/review/P4_C8_HANDOFF.md
+              M fc2-organizer/docs/specifications/PHASE4_BATCH_ORCHESTRATION_CONTRACT.md   仅第 38 节
+```
+
+* Production、`_helpers.py`、`_fakes.py`、其它测试、施工计划：零差异；合同第 1-37 节零差异。
+* 合同第 38 节：S6 行与状态块 `P4-C8 S6` 改为 `S6-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED`，并新增
+  `P4-C8-S6-R-01 : REMEDIATED — INDEPENDENT REVIEW REQUIRED`；`P4-C8 Implementation` 仍为 `COMPLETE — INDEPENDENT REVIEW
+  REQUIRED`，P4-C8 / P4-C9 / Phase 4 状态不变。
 
 ### 2.4 E0..S6 全部变更文件（`git diff --name-status 586f92f..<S6 Docs Head>`）
 
@@ -144,7 +163,10 @@ P4-C1..P4-C7 的生产代码、合同、HANDOFF 均未修改（除上表六个�
 | H 外来异常 | 10 | 经 `_FS` 在 U2 link 注入 `RuntimeError` | READY | ABORTED / NONE | -- |
 | I 未选中 | 10 | 主轮 selection 排除 | READY | NOT_SELECTED / DEFERRED | g3 |
 
-输入为 497 个由真实 `discover_media` 发现的合成文件（几字节）加 3 个重复条目，共 500。
+输入为 497 个由真实 `discover_media` 发现的合成文件（几字节）加 3 个重复条目，共 500。S6-R1 起，这一初始状态（497 个文件、
+2 对 hardlink、20 个 F 预置目标目录及 `user-note.txt`、真实 `discover_media`、3 个重复引用）由测试文件内唯一的
+`_main_composition(root)` 建立，主门槛与 `B_exact` 的 reference / exact / short 三套语料共用；第 4.4 节的 preview 形状断言
+（500 / 360 / 50 / 90、组规模、Phase A / Phase B / F）由 `_assert_main_preview_shape` 承担，主门槛语义不变。
 
 ### 4.2 各轮计数（全部精确断言）
 
@@ -196,24 +218,26 @@ g4 scope=None                               15 条（D 10 + F 5）-> ready 0，�
 | `MAX_BATCH_ITEMS`（2000 个不可识别番号的手工条目） | 接受，2000 条 UNPREPARED |
 | `MAX_BATCH_ITEMS + 1` | `OrchestrationResourceLimitError(BATCH_ITEM_LIMIT)`；engine 调用 0、client 调用 0、修改拦截 0 |
 | 有界快照（计数型自定义 `Sequence` 经 `preview`）：`MAX + 1`、惰性 1 000 000、说谎长度（`__len__ == 1`，实际 3000） | 三者均 `BATCH_ITEM_LIMIT`；读取元素数 `== 2001`；`__len__` 调用 0、`__getitem__` 调用 0 |
-| `B_exact`（500-item 语料，`R = 714`，387 个图片条目，`A_nfo = 255420`） | `B_exact = 396197`：preview 成功，条目投影与默认配置主 preview 相等 |
-| `B_exact - 1 = 396196` | `RETAINED_BYTES_LIMIT`，不返回 preview，零修改 |
+| `B_exact`（S6-R1：与主门槛共用 `_main_composition` 的 500 逻辑输入主 preview 构成——497 个物理文件、3 个重复引用、2 对 hardlink、20 个 F 阻断目录；默认配置 reference preview `500 / 360 / 50 / 90`；`A_nfo = 253440`，384 个有 preflight 的目标（其中 374 个有图片字节，`Σa_i = 139349`），`R = 714`） | `B_exact = A_nfo + Σ_{i<n} a_i + R = 253440 + 138992 + 714 = 393146`（动态推导，非预设）：preview 成功，`500 / 360 / 50 / 90`，条目投影与默认配置 500 输入 reference preview 相等 |
+| `B_exact - 1 = 393145`（同一 500 输入构成） | `RETAINED_BYTES_LIMIT`，不返回 preview；零修改（树快照、源字节、hardlink、F 阻断目录与 `user-note.txt` 均不变） |
 | 并发预约（6 条，`K = 4`，`R = 623`，`A_nfo = 3960`，`B = 5206` 只容纳 2 个预约） | `RETAINED_BYTES_LIMIT`；进行中的 `acquire_images` 峰值 `== 2`；账本最大值 `5206 <= B`；自然与反转完成顺序下准入的条目集合相同（前两个） |
 | 多代保留（合同第 35.1.1 节；`L = 165`、`I = 40123`、`pay = 40288`、`need = 40783`、`payD = 161152`、`B = 201935`） | g0 `161152`；g1 恰好准入，合并 `201440`；g2 越界尝试 `RETAINED_BYTES_LIMIT` 且 g1 合并结果未被登记；g2 结算 `161152`；g3 恰好准入，合并 `201440`；g4 `0`（M3、M4 仍 metadata FAILED）；每代 `<= B` |
 
 ## 6. 非空洞性（mutation）门槛
 
 全部十种变异都未提交；每种变异后运行整个门槛文件，撤销后以 `git hash-object --no-filters` 与 HEAD blob 比对确认逐字节恢复
-（全部 `True`），最终工作区只剩正式 S6 工作。
+（全部 `True`），最终工作区只剩正式 S6 工作。S6-R1 在修复后的门槛上重跑 (f)（本 finding 直接相关）与 (a)（其杀死断言被移入共享
+helper），二者均被杀死且 `preview.py` 逐字节恢复；(b)-(e)、(g)-(j) 的杀死断言未被 S6-R1 改动，未在 R1 重跑，保留原 S6 历史结果
+（unchanged by S6-R1）。
 
 | # | 变异 | 文件 | 杀死机制（行为层断言） | 失败用例 | 失败数 |
 |---|---|---|---|---|---|
-| (a) | 去掉 Phase A 冲突阻断 | `preview.py` | C 组 Phase A 条目“无 metadata、无 preflight、engine 未被询问”的断言失败 | 500-item 门槛 | 1 |
+| (a) | 去掉 Phase A 冲突阻断 | `preview.py` | C 组 Phase A 条目“无 metadata、无 preflight、engine 未被询问”的断言失败（S6-R1 重跑：断言移入共享 `_assert_main_preview_shape`） | 500-item 门槛、B_exact | 2（S6-R1 重跑；原 S6 为 1） |
 | (b) | `execute` 不登记 `preview_id` | `execute.py` | 再次 `execute` 同一 preview 不再抛 `OrchestrationConsumedError` | 500-item 门槛 | 1 |
 | (c) | summary 把 PARTIAL 计入 success | `models.py` | `ExecutionSummary` 恒等式（`total == success + retryable + …`）与计数断言失败 | 500-item 门槛 | 1 |
 | (d) | RetryKind 对调 RESUME / FRESH_REEXECUTE | `models.py` | 主执行结果的 RESUME 材料不变量失败（结果无法构造） | 500-item 门槛 | 1 |
 | (e) | 执行 worker 改为每条目一个线程 | `execute.py` | 文件系统执行峰值 `181 != 4` | 500-item 门槛 | 1 |
-| (f) | 图片预约无条件准入（不检查预算） | `preview.py` | `B_exact` 预期成功却失败、`B_exact - 1` 不再是 `RETAINED_BYTES_LIMIT`；并发预约峰值 / 账本断言失败 | B_exact、并发预约 × 2 | 3 |
+| (f) | 图片预约无条件准入（不检查预算） | `preview.py` | S6-R1 重跑：500 输入 `B_exact` preview（`B` 由 reference 动态推导）因预约越过预算而抛 `OrchestrationIntegrityError("retention ledger conversion rejected")`，不再成功；并发预约峰值 / 账本断言失败。与任何硬编码数值无关 | B_exact、并发预约 × 2 | 3（S6-R1 重跑） |
 | (g) | 移除 `MAX_BATCH_ITEMS` 检查 | `recognition.py` | `MAX + 1` 被接受；三个有界快照用例不再抛 `BATCH_ITEM_LIMIT` | MAX_BATCH_ITEMS、有界快照 × 3 | 4 |
 | (h) | 非空全 SUCCESS 结果不判为 SUCCESS | `models.py` | g1 重试轮 outcome `PARTIAL != SUCCESS` | 500-item 门槛 | 1 |
 | (i) | 恢复 snapshot-first（先 `tuple(items)`） | `recognition.py` | 读取元素数远大于 `MAX + 1`（惰性 1 000 000 全部读取） | 有界快照 × 3 | 3 |
@@ -240,6 +264,19 @@ POSIX 路径形式 10（14 + 4 + 5 + 5 + 2 + 10 = 40）。skip 不计为通过�
 
 `git diff --check`：Code Range（`78f92c8..4d8efe2`）、Docs Range、`78f92c8..<S6 Docs Head>` 均干净。
 
+以上为原 S6 数字。S6-R1（在 `15912b1` 工作树上；同一 Windows 11 10.0.26200 / Python 3.12.10）：
+
+```text
+B_exact finding gate (-k b_exact)          1 passed, 8 deselected, 0 failed
+Synthetic gate                             9 passed, 0 skipped, 0 failed   （116.06 s）
+tests/unit/orchestration + architecture    949 passed, 0 skipped, 0 failed （S6 基线 949）
+tests/contract                             209 passed, 0 skipped, 0 failed （基线 209）
+Full suite                                 6178 passed, 40 skipped, 0 failed；collected 6218 = 6178 + 40
+```
+
+S6-R1 新增 skip：NONE（40 个 skip 与上述分类相同）。上一轮的 Phase 3 墙钟瞬时失败在 S6-R1 全量运行中未再出现。
+`git diff --check`：`43ca3e6..15912b1`、`15912b1..<S6-R1 Docs Head>`、`78f92c8..<S6-R1 Docs Head>` 均干净。
+
 ## 8. 直接复现表
 
 所有命令在 `fc2-organizer/` 下以 `python -m pytest -q -p no:cacheprovider --basetemp=<tmp>` 运行（下称 `PT`）。
@@ -249,7 +286,7 @@ POSIX 路径形式 10（14 + 4 + 5 + 5 + 2 + 10 = 40）。skip 不计为通过�
 | 500-item 门槛 + 反转重跑 | `PT tests/unit/orchestration/test_orchestration_synthetic_gate.py::test_the_500_item_gate_with_a_deterministic_reversed_rerun` | 第 4 节全部断言 | PASS |
 | MAX / MAX+1 | `PT …::test_max_batch_items_is_accepted_and_one_more_fails_before_any_work` | 接受 / `BATCH_ITEM_LIMIT`，调用与修改 0 | PASS |
 | 有界快照 | `PT …::test_the_bounded_snapshot_reads_at_most_limit_plus_one_through_preview` | 读取 2001、`__len__` 0 | PASS（3 个参数） |
-| `B_exact` / `B_exact - 1` | `PT …::test_b_exact_admits_the_500_item_preview_and_one_byte_less_fails` | 成功且投影相等 / `RETAINED_BYTES_LIMIT` | PASS |
+| `B_exact` / `B_exact - 1`（S6-R1：500 逻辑输入主 preview 构成） | `PT …::test_b_exact_admits_the_500_item_preview_and_one_byte_less_fails`（或 `PT tests/unit/orchestration/test_orchestration_synthetic_gate.py -k b_exact`） | reference / exact 均 `500 / 360 / 50 / 90`；`B_exact = 393146` 成功且投影相等 / `393145` -> `RETAINED_BYTES_LIMIT`、零修改 | PASS（`B_exact = 393146`） |
 | 并发预约 | `PT …::test_reservation_admission_holds_two_in_flight_when_b_fits_two` | 峰值 2、账本 `<= B`、顺序无关 | PASS（自然 / 反转） |
 | 35.1.1 g2 越界 | `PT …::test_multi_generation_retention_g0_to_g4` | g2 `RETAINED_BYTES_LIMIT`，g0-g4 精确字节 | PASS |
 | RESUME inode / mtime | 500-item 门槛 g1 段 | G 组 15 条不变 | PASS |
@@ -294,17 +331,50 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 * 未解决技术决策：NONE。
 * 需要外部业务决策：NONE。
 
-## 13. 状态
+## 13. S6-R1 Finding 修复：P4-C8-S6-R-01
+
+```text
+Finding   : P4-C8-S6-R-01（HIGH / BLOCKING）
+状态      : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+修复提交  : 15912b1b5e0c2a813998e898423d11c280e965fb
+```
+
+**原证据的问题**：原 `test_b_exact_admits_the_500_item_preview_and_one_byte_less_fails` 使用 `Corpus(..., films).items`，即
+497 个逻辑输入；没有追加 3 个重复引用，也没有建立主门槛 preview 前的 2 对 hardlink 与 20 个 F 预置目标目录。因此原
+`B_exact = 396197`（`A_nfo = 255420`、387 个目标）证明的是另一套 497 输入保留图，**不是**合同第 35.1 节要求的 500-item 主
+preview 资源边界；原 HANDOFF 把它写成“500-item 语料”的表述不准确，已在第 5 节更正。
+
+**S6-R1 修正**：测试文件内唯一的 `_main_composition(root)` 建立主 preview 初始状态（497 个物理文件 -> 真实 `discover_media`
+497 条 -> 追加 3 个重复引用 = 500 逻辑输入；2 对 hardlink；20 个 F 阻断目录与 `user-note.txt`），并对每套语料断言
+`497 / 3 / 500`、hardlink 同一文件、`user-note.txt` 内容。主门槛 `_gate()` 与 `B_exact` 的 reference / exact / short 三套
+语料都调用它，各自在全新的目录树中建立，只有资源配置不同；不再存在第二份 setup，未来不能再漂移。没有移动到 `_helpers.py`。
+
+**证据**：
+
+| 项 | 结果 |
+|---|---|
+| reference / exact / short 逻辑输入 | 均 500（物理 497 + 重复引用 3）；hardlink 2 对；F 阻断 20 |
+| reference preview（默认资源配置） | `500 / 360 / 50 / 90`；3 个重复条目的 6 个引用在 Phase A 以 `DUPLICATE_SOURCE_IN_BATCH` 阻断（无 metadata、无 preflight、engine 未被询问）；hardlink 2 对在 Phase B 阻断；F 20 条 `PREFLIGHT_BLOCKED`；A/G/H/I READY |
+| 资源模型（第 19.6.4 节） | `A_nfo = 253440`；有 preflight 的目标 384（其中有图片字节 374），`Σa_i = 139349`，最后一个目标 `a_n = 357`；`R = max a_i = 714`；`B_exact = A_nfo + Σ_{i<n} a_i + R = 253440 + 138992 + 714 = 393146` |
+| exact（`max_retained_artifact_bytes = 393146`，图片策略 `max_image_bytes = max_total_bytes = R`） | preview 成功；`len(items) == 500`；`500 / 360 / 50 / 90`；条目投影（`_helpers.projection`，只做根路径归一化）与 reference 完全相等 |
+| short（`393145`） | `OrchestrationResourceLimitError(RETAINED_BYTES_LIMIT)`；不返回 preview；树快照完全相等，源字节、hardlink、20 个阻断目录及 `user-note.txt` 均不变 |
+| 变异 (f) | 3 failed（B_exact、并发预约 × 2）；B_exact 由动态推导的 `B` 下 preview 失败（`retention ledger conversion rejected`）而被杀死，与旧数值 `396197` 无关；`preview.py` 逐字节恢复 |
+| 主门槛回归 | 500 逻辑输入、`360 / 50 / 90`、g0-g4 计数、九个 outcome、395 个成功目录、源安全、确定性重跑全部不变（synthetic gate 9 passed） |
+
+## 14. 状态
 
 ```text
 E0                            : ACCEPTED / CLOSED（9e118de）
 S1 / S2 / S3 / S4 / S5        : ACCEPTED / CLOSED（e8f83e9 / 8c5ba6e / 7fb6bfb / 4933f38 / 78f92c8）
-S6                            : IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
+S6                            : IMPLEMENTED — R1 INDEPENDENT REVIEW REQUIRED
+P4-C8-S6-R-01                 : REMEDIATED — INDEPENDENT REVIEW REQUIRED
 S6 Final Reviewed Code Head   : NOT ESTABLISHED
+S6 Final Reviewed Docs Head   : NOT ESTABLISHED
 P4-C8 implementation          : COMPLETE — INDEPENDENT REVIEW REQUIRED
 P4-C8                         : NOT CLOSED
 P4-C9                         : NOT STARTED
 Phase 4                       : NOT CLOSED
 ```
 
-下一步：P4-C8 S6 FINAL INDEPENDENT CLOSURE REVIEW（范围 `78f92c8..<S6 Docs Head>`，并对 E0..S6 做闭合审计）。
+下一步：P4-C8 S6-R1 INCREMENTAL FINAL CLOSURE REVIEW（增量范围 `43ca3e6..<S6-R1 Docs Head>`；完整 S6 范围
+`78f92c8..<S6-R1 Docs Head>`）。
