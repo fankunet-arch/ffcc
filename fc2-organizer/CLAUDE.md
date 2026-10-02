@@ -63,3 +63,14 @@ Phase 0 完成后必须：
 6. 维护现有英文文档时，新增或重写的正文必须使用中文；如果任务明确属于“文档中文化迁移”，则应把该文档的英文说明正文完整翻译为中文。
 7. 任何 AI 或开发者都不得根据仓库中的历史英文文档推断“系统语言 = 英文”“产品界面语言 = 英文”或“开发输出语言 = 英文”。本项目明确以中文为默认系统语言和项目语言。
 8. 翻译文档时不得改变合同语义、requirement、finding ID、severity、SHA、测试数字、API 行为、状态或 frozen boundary，只能改变自然语言表达。
+
+## 加速治理规则（P4-C9 起）
+
+本节为强制引用，详细规则见 `docs/PROJECT_GOVERNANCE_ACCELERATION.md`。
+
+1. 从 P4-C9 起，以及之后所有尚未冻结的新 Phase / Package，规划时必须读取并遵循 `docs/PROJECT_GOVERNANCE_ACCELERATION.md`。
+2. 该文档用于减少不必要的拆包、中间 closure、重复 Review 和人工等待。
+3. 它不能降低 Frozen Contract、安全不变量、测试、独立 Review 和 finding closure 的任何标准。
+4. 已经冻结的 Contract / Construction Plan 继续优先；如有冲突，以 Frozen Contract / Frozen Construction Plan 为准。本规则不追溯改写已经 CLOSED 的 package 或已经冻结的文档。
+5. 创建新 C 前，必须完成该治理文档规定的“四问”与风险分级（A / B / C）。
+6. Owner Question Gate：BUSINESS DECISIONS ONLY。
