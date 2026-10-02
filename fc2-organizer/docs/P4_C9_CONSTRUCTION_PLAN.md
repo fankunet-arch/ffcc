@@ -15,12 +15,14 @@ Why Not Merge With Previous C      : P4-C8 已正式 CLOSED；Batch Orchestratio
 Why Not Split Further              : model / local validation + integration / JSON+redaction+tests 共同构成同一个 Diagnostics 纵向
                                      能力；取消其间的 package boundary 不降低 correctness / safety / auditability（第 1 节 Q3、Q4）
 Internal Stages                    : S1 / S2 / S3（连续施工，无中间 Review、无中间 docs closure、无 S 级状态 docs）
-Independent Review Plan            : Design Authority Review（Original：FAIL；Design-R1：FAIL -> Design-R2 增量闭合复查，一次）
+Independent Review Plan            : Design Authority Review（Original：FAIL；Design-R1：FAIL；Design-R2：FAIL -> Design-R3 增量闭合复查，一次）
                                      + one C-level implementation Independent Level 1 Review（S1-S3 全部完成后，一次）
 Owner Question Gate                : BUSINESS DECISIONS ONLY
 Evidence Gate                      : 第 8 节（Contract -> implementation -> test 映射、完整 diff scope、P4-C9 专项 / targeted /
                                      contract / full suite、mutation / non-vacuity、本地校验 / 篡改 / 恶意子类 / 无上游 __post_init__
-                                     证据、RetryMaterial / retained 预算篡改证据、无 gc / 无反射原语证据、脱敏 canary（含默认 NONE 的
+                                     证据、validate-before-dispatch 证据（Dispatch Safety Matrix D-01..D-31、Horizontal Audit H-01..H-15、R2-01
+                                     EvilStr gate + Normal-Key Positive Control、MAX_PROVENANCE_KEYS 边界与不物化 tripwire、上游 characterization
+                                     UC-1..UC-9）、RetryMaterial / retained 预算篡改证据、无 gc / 无反射原语证据、脱敏 canary（含默认 NONE 的
                                      secret-like basename）、确定性、资源与输出上界、无副作用、500-item 诊断门槛、MAX 边界、
                                      Windows 11 / Python 3.12.x 验收证据环境（不是运行时支持边界）、evidence gaps、known limitations）
 Python Runtime Authority           : Python >= 3.11（项目既有 requires-python；本计划与实现不得修改 pyproject.toml，也不得收窄为
@@ -33,7 +35,8 @@ Branch                       = claude/phase4-c9-diagnostics（自 Planning Paren
 规范合同                     = docs/specifications/PHASE4_DIAGNOSTICS_CONTRACT.md
 Original Design Candidate    = b5e98314eb64101b9da3b8c12a52c9044d73a60d（Original Design Review：FAIL）
 Design-R1 Candidate          = ea32b37bab4c3440b83254466193212ae4be5ba8（Design-R1 Review：FAIL）
-P4-C9 Design                 = DESIGN-R2 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED
+Design-R2 Candidate          = 00e5be38e7232e6dc34f3c194472e58470ceadd0（Design-R2 Review：FAIL；亦为 Design-R3 Parent）
+P4-C9 Design                 = DESIGN-R3 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED
 Frozen Contract              = NOT YET ACCEPTED
 Construction Plan            = NOT YET ACCEPTED（本文件）
 Design Accepted Head         = NOT ESTABLISHED
@@ -51,23 +54,37 @@ production / test 改动。
 |---|---|---|
 | Original Design Candidate | `b5e98314eb64101b9da3b8c12a52c9044d73a60d` | Original Design Review：**FAIL** |
 | P4-C9-DESIGN-R-01（HIGH / BLOCKING） | 上游 `__post_init__` 调用与 private-name 禁令互斥 | **CLOSED**（Design-R1 Review 确认；本轮 0 回归） |
-| P4-C9-DESIGN-R-02（HIGH / BLOCKING） | 被篡改嵌套子类经上游 validator 动态分派执行调用方代码 | Design-R1 Review：OPEN；Design-R2：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
-| P4-C9-DESIGN-R-03（HIGH / BLOCKING） | 被消费对象校验不完整；剩余缺口为 `RetryMaterial` 图一致性与 retained payload / retention budget 关系 | Design-R1 Review：OPEN；Design-R2：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| P4-C9-DESIGN-R-02（HIGH / BLOCKING） | 调用方子类对象可经 P4-C9 对 caller-originated 容器的分派（`__hash__` / `__eq__` / 成员判定 / 多态 property）执行调用方代码；根因：对象在 exact-type 校验完成之前就进入了分派敏感操作 | Design-R1 Review：OPEN；Design-R2 Review：OPEN（以 R2-01 为同根因具体实例）；Design-R3：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| P4-C9-DESIGN-R-03（HIGH / BLOCKING） | 被消费对象校验不完整；剩余缺口为 `RetryMaterial` 图一致性与 retained payload / retention budget 关系 | **CLOSED**（Design-R2 Review 确认；本轮 0 回归） |
 | P4-C9-DESIGN-R-04（HIGH / BLOCKING） | 默认 BASENAME 与绝对脱敏承诺矛盾 | **CLOSED**（Design-R1 Review 确认；本轮 0 回归） |
 | P4-C9-DESIGN-R-05（MEDIUM / BLOCKING） | 最终 `__all__` 与逐阶段 API 冲突 | **CLOSED**（Design-R1 Review 确认；本轮 0 回归） |
 | Design-R1 Candidate | `ea32b37bab4c3440b83254466193212ae4be5ba8` | Design-R1 Review：**FAIL** |
-| P4-C9-DESIGN-R1-01（HIGH / BLOCKING） | `gc.get_referents` 作为 production 校验原语（反射 / 审计原语） | Design-R2：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
-| P4-C9-DESIGN-R1-02（HIGH / BLOCKING） | 对 CPython 3.12 `mappingproxy` referent 形态的规范性依赖，收窄 `>=3.11` 运行时权威 | Design-R2：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| P4-C9-DESIGN-R1-01（HIGH / BLOCKING） | `gc.get_referents` 作为 production 校验原语（反射 / 审计原语） | **CLOSED**（Design-R2 Review 确认；本轮 0 回归） |
+| P4-C9-DESIGN-R1-02（HIGH / BLOCKING） | 对 CPython 3.12 `mappingproxy` referent 形态的规范性依赖，收窄 `>=3.11` 运行时权威 | **CLOSED**（Design-R2 Review 确认；本轮 0 回归） |
+| Design-R2 Candidate | `00e5be38e7232e6dc34f3c194472e58470ceadd0` | Design-R2 Review：**FAIL** |
+| P4-C9-DESIGN-R2-01（HIGH / BLOCKING） | Design-R2 的 `field_sources` 固定 known-key 查询在 stored key 尚未验证为 exact `str` 时即发生；上游 `NormalizedMetadata` 构造器以 `isinstance(key, str)` 接受 `str` 子类 key，使其经公开构造路径进入 supported public model graph（合同第 9.0 节 A / B 层，不是 C 层），查询会执行子类 `__eq__` | Design-R3：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
 
-Design-R2 对本计划的改动：删除所有 `gc` / unwrap 相关的施工内容、测试与架构断言，新增“无 `gc` / 无反射原语”架构与运行时 sentinel
+Design-R2 对本计划的改动（历史记录；其中 field_sources 相关的“固定 known 字段名查询、不迭代”已被 Design-R3 取代）：删除所有 `gc` / unwrap 相关的施工内容、测试与架构断言，新增“无 `gc` / 无反射原语”架构与运行时 sentinel
 断言；S2 的测试矩阵新增 `RetryMaterial` / retained 预算篡改测试（`test_diagnostics_retry_material.py`）、`retry_kind` 一致性测试、
 `field_sources` 上游信任边界测试，并把“恶意嵌套子类”门槛限定在合同第 9.0 节 A / B 层（移除 `MappingProxyType` 包装恶意 dict 的
 不可实现测试）；Validation Map 由 M-01..M-29 扩为 M-01..M-30；保留 `validation.py`（无 `gc`）；运行时权威保持 `>=3.11`，
 “Windows 11 / Python 3.12.x”只是验收证据环境；第 12 节改为 Design-R2 静态自审。R-01 / R-04 / R-05 语义、阶段化模块集合与
 `__all__`、默认 `PathPolicy.NONE`、S1-S3 连续施工与一次 C 级 Review 均不变。
 
-**Design-R2 的 Risk Class 裁决**：仍为 B。Design-R2 不新增 security boundary：它在 Design 尚未 ACCEPT 前删除一个无法证明且依赖
+**Design-R2 的 Risk Class 裁决（历史）**：仍为 B。Design-R2 不新增 security boundary：它在 Design 尚未 ACCEPT 前删除一个无法证明且依赖
 CPython 实现细节的 introspection 假设，并把输入校验声明准确收窄到项目真正支持的 public model 边界；风险升级门 A-K 均未触发。
+
+Design-R3 对本计划的改动（DISPATCH-SAFETY CLOSURE；一次闭合 R-02 + R2-01）：
+
+* 合同新增第 9.0.1 节 validate-before-dispatch（V-1..V-4）、第 9.10 节 Dispatch Safety Matrix（D-01..D-31）、第 9.11 节 Horizontal Dispatch Audit（H-01..H-15）、第 9.3.1 节批准 property 依赖图；`field_sources` 算法改为
+  BOUNDED ITERATE → EXACT KEY VALIDATION → FIXED KNOWN-KEY LOOKUP（第 9.2 节第 9 条），新增内部常量 `MAX_PROVENANCE_KEYS = 64`（不进 `__all__`）。
+* S1：`models.py` 增加内部常量 `MAX_PROVENANCE_KEYS`；`test_diagnostics_public_api.py` 断言其数值 / 关系 / 不在 `__all__`。
+* S2：`validation.py` 按 Step 1-5 与 Phase V→Phase R 实现；新增测试文件 `test_diagnostics_upstream_characterization.py`（UC-1..UC-9）与 `test_diagnostics_dispatch_safety.py`（D-xx / H-xx 覆盖与 Phase V→R 非空洞性）；
+  `test_diagnostics_provenance.py` 恢复并强化 R2-01 EvilStr public-constructor gate、Normal-Key Positive Control 与 key 扫描 mutation；`test_diagnostics_malicious_subclass.py` 扩展到全部 H-xx 容器并强制“上游构造后复位 sentinel”；架构测试增加 AST 禁止 `sorted` / `min` / `max` 与 `validation.py` 禁止 `keys` / `values` / `items` / `get` / `copy` 方法调用。
+* S3：`test_diagnostics_resources.py` 与 `test_diagnostics_scale_gate.py` 覆盖 `MAX_PROVENANCE_KEYS` 边界、早停与不物化 tripwire。
+* 第 7 节测试矩阵映射、第 8 节 HANDOFF 证据项、第 9 节 Review Plan、第 10 节状态、第 12 节静态自审随之更新；S1-S3 连续施工、Risk Class B、公开 schema / `PathPolicy` / `RetryMaterial` / 资源模型（除 provenance key 上界外）/ 序列化 / S 边界 0 变更。
+
+**Design-R3 的 Risk Class 裁决**：仍为 B。Design-R3 只为既有本地校验补全 dispatch-safety 证明与一个有界 key 扫描，不新增 security boundary、持久化、文件写入、网络、并发所有权或对 CLOSED package 的 production 改动；风险升级门 A-K 均未触发。
 
 本计划与合同一起一次性冻结 P4-C9 的全部施工内容。Design-R2 增量复查 PASS 后，开发者只能**执行**本计划：不得重新设计、
 不得调整 S 边界或公开 API、不得把任何设计项推迟到“开发时再决定”。凡合同与本计划未写明的实现细节（内部 helper 命名、文件
@@ -179,7 +196,7 @@ K. 需要改变已 CLOSED 的 P4-C8（或任何其它 CLOSED package）productio
 * `src/fc2_organizer/diagnostics/__init__.py`：`__all__` **精确等于合同第 8.1 节 S1 集合**（无 builder / renderer 名称）。
 * `errors.py`（合同第 8.4 节全部错误）、`models.py`（四个诊断枚举——`PathPolicy` 成员顺序 `NONE`、`BASENAME`；合同第 8.3 节全部
   常量；第 11 节全部不可变模型；每个模型的模块级本地校验函数，由 `__post_init__` 调用；第 11.4 节 detail 类型名表；安全文本
-  正则与码点常量）。
+  正则与码点常量；内部常量 `MAX_PROVENANCE_KEYS = 64`（合同第 8.3 节，**不**加入 `__all__`））。
 * 合同第 27.3 节七处既有架构守卫的最小授权更新（新顶层目录在 S1 出现，守卫必须在 S1 同步更新，否则全量回归失败）。
 * `tests/contract/test_diagnostics_architecture.py`：S1 断言模块集合恰为合同第 6 节 S1 集合、`__all__` 恰为 S1 集合；import /
   禁止清单 / 零 `_` 属性访问 / 反向依赖 / 无全局可变状态；后续 S 只把阶段断言切换为对应集合并新增断言。
@@ -193,6 +210,7 @@ S1 测试（`tests/unit/diagnostics/`）：
   `path_policy is NONE` 时路径派生字段必须为 `None`；
 * `test_diagnostics_public_api.py`：S1 `__all__`（集合与顺序）、常量数值、`MAX_DIAGNOSTIC_ITEMS == MAX_BATCH_ITEMS`、
   `PROVENANCE_FIELD_ORDER == fc2_metadata_core.aggregation.policy.FIELD_ORDER`、四个新枚举、复用上游枚举 value 集合快照；
+  内部常量 `MAX_PROVENANCE_KEYS == 64`、`>= len(PROVENANCE_FIELD_ORDER)`、定义在 `models.py`、**不在**任何阶段 `__all__`；
   断言 builder / renderer 名称在 S1 **不存在**。
 
 S1 允许改动文件：
@@ -223,7 +241,8 @@ S1 完成：继续 S2，不等待 Review，不创建 docs commit。
 交付：
 
 * `src/fc2_organizer/diagnostics/validation.py`：合同第 9 节全部内容——Input Trust / Tamper Boundary（第 9.0 节）、Local
-  Validation 规则（第 9.2 节，含 `field_sources` 的固定 known 字段名查询规则与“先迭代后成员判定”；**不 import `gc`，不
+  Validation 规则（第 9.2 节，含 `field_sources` 的 Step 1-5：类型确认 → **有界单遍 key 扫描**（计数、`MAX_PROVENANCE_KEYS` 上限、`type(key) is str`）→ 固定 known 字段查询 → value 校验，以及“先迭代后成员判定”；
+  第 9.0.1 节 validate-before-dispatch（Phase V → Phase R）；第 9.10 节 Dispatch Safety Matrix 每行前置条件；第 9.3.1 节批准 property 依赖图；**不 import `gc`，不
   introspect `MappingProxyType`**）、Consumed-Object Validation Map M-01..M-30（第 9.5 节，含 `RetryMaterial`）、跨对象检查（第
   9.6 节，含 `retry_kind` 本地推导、`retry_material` 关系、retained artifact / retry payload 字节的本地计算与预算关系）、安全输出
   检查（第 9.7 节，含第 18.2 节 basename grammar 与计时范围）、本地冻结表 T-1..T-4（第 9.8 节）、校验快照（第 9.2 节第 11 条）、
@@ -234,8 +253,8 @@ S1 完成：继续 S2，不等待 Review，不创建 docs commit。
   `path_policy=PathPolicy.NONE`）；合同第 24.2 节九步检查顺序；第 9.3 节批准 property 只在第 7 步读取。
 * `__init__.py` 的 `__all__` 更新为**合同第 8.1 节 S2 集合**（新增两个 builder，不含 `render_diagnostics_json`）；架构测试切换为
   S2 模块集合与 S2 `__all__`，并增加 `os` / `math` / `types` 成员白名单断言，以及“任何模块不 import `gc` / `inspect` / `ctypes` /
-  `sys` / `pickle` / `marshal` / `copyreg` / `weakref` / `traceback` / `builtins` / `copy`”的 AST 断言。
-* 必须 read-only、deterministic、零调用方钩子；不读取合同第 9.9 节任何字段；不调用任何上游 `__post_init__` / private / dunder /
+  `sys` / `pickle` / `marshal` / `copyreg` / `weakref` / `traceback` / `builtins` / `copy`”的 AST 断言；并增加 Design-R3 AST 断言：不得调用 `sorted` / `min` / `max`；`validation.py` 不得调用方法名为 `keys` / `values` / `items` / `get` / `copy` 的方法；`MAX_PROVENANCE_KEYS` 不在任何阶段 `__all__`。
+* 必须 read-only、deterministic、零调用方钩子（精确语义：合同第 9.0 / 9.0.1 节——在 caller-originated 对象 exact-type 校验之前不做任何分派敏感操作）；不读取合同第 9.9 节任何字段；不调用任何上游 `__post_init__` / private / dunder /
   实例校验方法。
 
 S2 测试：
@@ -250,8 +269,9 @@ S2 测试：
   执行、(E) 输入对象逐字段不变；
 * `test_diagnostics_malicious_subclass.py`：合同第 28.1 节“恶意嵌套子类”行全部植入点（合同第 9.0 节 A / B 层：含
   `SourceResult.metadata`、`AggregationResult` 的 metadata / source / trace / conflict 图、`ItemExecution.retry_material` 及其
-  plan / artifacts 元素 / checkpoint、`field_sources` 值 tuple 中的 `str` 子类 source id、含恶意元素的 `retry_scope`）；每例断言
-  `DiagnosticsIntegrityError` 且全部 sentinel 未触发。**不包含**“`MappingProxyType` 包装恶意 `dict` 子类”（合同第 9.0 节 C 层，
+  plan / artifacts 元素 / checkpoint、`field_sources` 值 tuple 中的 `str` 子类 source id、含恶意元素的 `retry_scope`，以及合同第 9.11 节 H-02 / H-03 / H-04 / H-07 / H-08 / H-11
+  每个 caller-originated 容器的恶意元素）；hostile 对象至少携带 `__hash__` / `__eq__` / `__bool__` / `__len__` / `__repr__` / `__str__` sentinel；每例断言
+  `DiagnosticsIntegrityError` 且全部 sentinel 未触发——凡经上游公开构造器构造的对象，**在上游构造完成之后、调用 builder 之前复位全部 sentinel**，断言自复位点起为 0（合同第 28.1 节“Sentinel 复位规则”）。**不包含**“`MappingProxyType` 包装恶意 `dict` 子类”（合同第 9.0 节 C 层，
   不在测试模型内）；
 * `test_diagnostics_retry_material.py`：合同第 28.1 节“RetryMaterial 篡改”与“`retry_kind` 一致性”两行——存在性与 `retry_kind`
   矛盾、`material.plan` 非 `item.plan`、RESUME checkpoint 身份 / 缺失、FRESH 错误携带 checkpoint、artifact 类型 / content 类型
@@ -269,11 +289,16 @@ S2 测试：
   （六种 RetryKind）；
 * `test_diagnostics_sources.py`：SUCCESS / NOT_FOUND / 五种 operational failure、refined kinds、CIRCUIT_OPEN、deadline during
   attempt / backoff、retried、无 trace、disabled sources、安全 id 规则、结构上限边界（迭代前失败）；
-* `test_diagnostics_provenance.py`：合同第 28.1 节“field provenance（上游信任边界测试）”六项——`field_sources` 非精确
+* `test_diagnostics_provenance.py`：合同第 28.1 节三行——(a)“field provenance（上游信任边界测试）”：`field_sources` 非精确
   `MappingProxyType` -> fail closed；known key 值非精确 `tuple[str, ...]`（含 `str` 子类）-> fail closed；source id 不属于
   `contributing_source_ids` -> fail closed；固定字段顺序投影不依赖插入顺序（反转 / 打乱插入顺序后输出逐字节相同）；正常 public
-  构造的 `NormalizedMetadata` 稳定完成投影（四类字段出处、优先级顺序、FAILED 为空）；额外未知 key 不读取、不输出。**不测试**
+  构造的 `NormalizedMetadata` 稳定完成投影（四类字段出处、优先级顺序、FAILED 为空且不执行 key 扫描）；unknown exact-`str` key 被扫描、计数、不投影、不输出；(b)**“R2-01 `field_sources` key-subclass gate”**（**恢复并强化**
+  field_sources key subclass sentinel gate）：`EvilStr(str)` 覆写 `__hash__` / `__eq__` / `__ne__` / `__lt__` / `__bool__` / `__len__` / `__repr__` / `__str__`；经**正常 upstream public constructor**
+  `NormalizedMetadata(field_sources={EvilStr("title"): ("src1",)})` 构造；**上游构造完成后复位 sentinel**；调用 builder -> `DiagnosticsIntegrityError` 且自复位点起 `__hash__` / `__eq__` sentinel 均为 0；变体：同名 known / unknown 名 /
+  hash-collision / 位置第一·中间·最后 / 与合法 key 同批 / V-4 先出现者；**Normal-Key Positive Control**（全部 exact-`str`，含 15 个 known + 合法 unknown key，正常通过，输出只含 known，插入顺序反转逐字节相同）；(c) key 扫描 mutation（先查后验、跳过 `type(key) is str`、只验 known key、先物化再检查大小、去掉 / 偏移上限、unknown 不计数、第 65 个之后继续读取）各自被杀死；`validation` 命名空间 tripwire 证明不物化 proxy。**不测试**
   opaque referent introspection；
+* `test_diagnostics_upstream_characterization.py`（Design-R3 新增）：合同第 28.1 节“上游 characterization”行 UC-1..UC-9——固定上游 `NormalizedMetadata` / `AggregationResult` / Phase 3 merge 的公开构造行为（`str` 子类 key / 元素 / source id 的接受与保留、非 `str` key 拒绝、`MappingProxyType` 发布与快照隔离、真实 producer key 数 `<= 15 <= MAX_PROVENANCE_KEYS`、语言级“先扫描后查询”事实）；上游变化使其失败即强制合同修订，不是对上游的修改授权；
+* `test_diagnostics_dispatch_safety.py`（Design-R3 新增）：合同第 9.10 节 Dispatch Safety Matrix 每个非 NOT USED 行（D-01..D-05、D-07..D-19、D-23..D-31）至少一个 `[D-xx]` 测试；第 9.11 节 H-01..H-15 每个 caller-originated 容器的 hostile 元素（含 `__iter__` / `__format__` / `__getattribute__` sentinel）；Phase V → Phase R 非空洞性（`contributing_source_ids = ("src1", EvilSID("src2"))` 等构型；“成员判定先于 Phase V 全部完成”的 mutation 被杀死）；NOT USED 行（D-06、D-20、D-21、D-22）的 AST + sentinel 证明；批准 property 依赖图（合同第 9.3.1 节）逐行：依赖图元素被篡改 -> 在读取该 property 之前 fail closed（property 读取 sentinel / 计数）；
 * `test_diagnostics_path_policy.py`：默认（不传参）为 `NONE`、全部路径派生字段为 `None` 且不计算 basename；显式 `BASENAME`；合同
   第 18.2 节 grammar 每条边界；`NONE` 下禁止码点文件名不失败；
 * `test_diagnostics_input_integrity.py`：错误顶层类型 / 子类 / 策略类型；`items` 非 tuple；条目数 2001（在逐条工作前失败，计数
@@ -299,6 +324,8 @@ A tests/unit/diagnostics/test_diagnostics_preview.py
 A tests/unit/diagnostics/test_diagnostics_execution.py
 A tests/unit/diagnostics/test_diagnostics_sources.py
 A tests/unit/diagnostics/test_diagnostics_provenance.py
+A tests/unit/diagnostics/test_diagnostics_upstream_characterization.py
+A tests/unit/diagnostics/test_diagnostics_dispatch_safety.py
 A tests/unit/diagnostics/test_diagnostics_path_policy.py
 A tests/unit/diagnostics/test_diagnostics_input_integrity.py
 A tests/unit/diagnostics/test_diagnostics_no_side_effects.py
@@ -331,12 +358,12 @@ S3 测试：
   `BASENAME`”、“`NONE` 下泄露 filename”、“去掉禁止码点检查”；
 * `test_diagnostics_determinism.py`：重复构建 / 渲染相等；临时身份全部替换、完成顺序反转、`field_sources` 插入顺序反转后逐字节
   相同；golden 期望输出；排序 mutation；
-* `test_diagnostics_resources.py`：每个结构上限的等于 / 超过边界（迭代前失败）；输出字节上限（精确长度成功、减 1 失败、超限后
+* `test_diagnostics_resources.py`：每个结构上限的等于 / 超过边界（迭代前失败）；**`MAX_PROVENANCE_KEYS` 边界**（合同第 28.1 节“R2-01 `MAX_PROVENANCE_KEYS` 边界”行：exact limit 64 通过、65 抛 `DiagnosticsResourceLimitError`、第 65 个之后的 `EvilStr` key 不被读取（早停）、`10 ×` 上限的输入仍失败、`validation` 命名空间 tripwire 证明不物化）；输出字节上限（精确长度成功、减 1 失败、超限后
   停止编码、无部分输出）；
 * `test_diagnostics_integration.py`：合同第 28.3 节全部场景（真实 `BatchOrchestrator` + 既有 `tests/unit/orchestration/_fakes.py` /
   `_helpers.py` 的脚本化 fake + 临时目录），对每个场景断言模型与 JSON（默认 `NONE` 与显式 `BASENAME` 各一次），证明真实 producer
   输出全部通过本地校验，并证明第 1 节问题表每一行可被回答；
-* `test_diagnostics_scale_gate.py`：500 逻辑条目诊断投影门槛与 `MAX_BATCH_ITEMS` 边界（合同第 28.4 节）；
+* `test_diagnostics_scale_gate.py`：500 逻辑条目诊断投影门槛与 `MAX_BATCH_ITEMS` 边界（合同第 28.4 节，含“2000 条目 × 每条 64 个 `field_sources` key”的上限内最坏输入仍成功）；
 * `test_diagnostics_mutations.py`（可选拆分）：合同第 28.5 节中不便放在上面文件里的 fail-closed / 本地校验 / 无副作用 mutation
   （例如“跳过某个 M-xx 精确类型检查”、“直接对 proxy 做 `in`”、“第 7 步之前读取 summary”、“生产代码调用上游 `__post_init__`”）。
 
@@ -409,12 +436,16 @@ S3 完成后：整个 P4-C9 统一进入一次 **P4-C9 Independent Level 1 Revie
 | 本地校验逐模型 M-01..M-30、跨对象第 9.6 节、冻结表 T-1..T-4 | `test_diagnostics_local_validation.py` |
 | `RetryMaterial` 图一致性、`retry_kind` 本地推导一致性、retained payload / retention budget 关系（R-03 non-vacuity） | `test_diagnostics_retry_material.py` |
 | 篡改（`BatchResult` / `OrganizePlan` / `ArtifactWriteRequest` / `SourceResult.metadata` / `AggregationResult` 嵌套 / execution 模型 / 条目关系） | `test_diagnostics_tamper.py` |
-| 恶意嵌套子类（R-02 non-vacuity，合同第 9.0 节 A / B 层：`str` 子类 source id、恶意 frozenset 元素、嵌套模型子类、`retry_material` 子类；不含 opaque mappingproxy referent） | `test_diagnostics_malicious_subclass.py` |
+| 恶意嵌套子类（R-02 non-vacuity，合同第 9.0 节 A / B 层：`str` 子类 source id / `field_sources` key、恶意 frozenset 元素、嵌套模型子类、`retry_material` 子类、H-xx 各容器恶意元素；上游构造后复位 sentinel；不含 opaque mappingproxy referent） | `test_diagnostics_malicious_subclass.py`、`test_diagnostics_provenance.py` |
 | 无上游 `__post_init__` / 实例校验方法调用 / 无 `gc.get_referents`（运行时 sentinel） | `test_diagnostics_no_upstream_validators.py` + 架构测试（AST 零 `_` 属性访问、零 `gc` / 反射原语 import） |
 | preview 诊断 | `test_diagnostics_preview.py`、`test_diagnostics_integration.py` |
 | execution 诊断 / failure / retry 映射 | `test_diagnostics_execution.py`、`test_diagnostics_integration.py` |
 | source 诊断（来源级日志） | `test_diagnostics_sources.py` |
 | field provenance（字段来源追踪；上游信任边界测试，不测试 opaque referent introspection） | `test_diagnostics_provenance.py` |
+| R2-01 EvilStr public-constructor gate + Normal-Key Positive Control + key 扫描 mutation + 不物化 tripwire | `test_diagnostics_provenance.py` |
+| `MAX_PROVENANCE_KEYS` 边界（exact limit / limit + 1 / 早停 / 不物化）与内部常量不在 `__all__` | `test_diagnostics_resources.py`、`test_diagnostics_scale_gate.py`、`test_diagnostics_public_api.py` |
+| 上游 characterization UC-1..UC-9（合同第 9.0 节 U-1..U-5） | `test_diagnostics_upstream_characterization.py` |
+| Dispatch Safety Matrix D-01..D-31、Horizontal Audit H-01..H-15、批准 property 依赖图、Phase V → Phase R 非空洞性 | `test_diagnostics_dispatch_safety.py`、`test_diagnostics_malicious_subclass.py`、`test_diagnostics_tamper.py` + 架构测试（AST：无 `sorted` / `min` / `max`、`validation.py` 无 `keys` / `values` / `items` / `get` / `copy`） |
 | 路径策略（默认 NONE、BASENAME opt-in、basename grammar） | `test_diagnostics_path_policy.py` |
 | issues / warnings | `test_diagnostics_preview.py`、`test_diagnostics_execution.py` |
 | ordering + ordering non-vacuity | `test_diagnostics_determinism.py` |
@@ -458,6 +489,7 @@ S3 完成后：整个 P4-C9 统一进入一次 **P4-C9 Independent Level 1 Revie
 9. 资源证据：结构上限与输出上限边界结果、2000 条输出大小与耗时；
 10. 无副作用证据：文件系统快照、fake 调用计数、被禁止 API 列表；
 11. 风险升级门核对（A-K 逐项“未触发”或处理记录）；`BLOCKED DESIGN ISSUE`：NONE（或记录）；
+11a. **dispatch-safety 证据（Design-R3）**：合同第 9.10 节 D-01..D-31 -> 实现位置 -> 测试用例映射表（NOT USED 行 D-06 / D-20 / D-21 / D-22 的 AST + sentinel 结果）；第 9.11 节 H-01..H-15 逐项结果；R2-01 EvilStr public-constructor gate（变体 (a)-(g)）与 Normal-Key Positive Control 结果、sentinel 复位点记录；`MAX_PROVENANCE_KEYS` 边界（64 通过 / 65 失败 / 早停 / tripwire）结果；上游 characterization UC-1..UC-9 结果；key 扫描与 Phase V → Phase R mutation 表（变异、杀死机制、失败用例、失败数、`git hash-object --no-filters` 恢复校验）；
 12. evidence gaps（例如 POSIX 原生 basename 行为若未在 POSIX 主机运行）与 known limitations（合同第 31 节）；
 13. 如实记录任何瞬时失败及重跑结果（与 P4-C8 HANDOFF 相同标准）。
 
@@ -469,17 +501,19 @@ S3 完成后：整个 P4-C9 统一进入一次 **P4-C9 Independent Level 1 Revie
 1. P4-C9 INDEPENDENT DESIGN / CONTRACT / PLAN REVIEW（Original Design Candidate b5e9831…）                 -> FAIL（R-01..R-05）
 2. P4-C9 DESIGN-R1 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW（Design-R1 Candidate ea32b37…）  -> FAIL
      （R-01 / R-04 / R-05 CLOSED；R-02 / R-03 OPEN；新增 R1-01 / R1-02）
-3. P4-C9 DESIGN-R2 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW（Design-R2 Candidate）
+3. P4-C9 DESIGN-R2 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW（Design-R2 Candidate 00e5be3…）  -> FAIL
+     （R-03 / R1-01 / R1-02 CLOSED；R-02 OPEN；新增 R2-01）
+4. P4-C9 DESIGN-R3 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW（Design-R3 Candidate）
      PASS -> Contract 与本计划成为 Frozen Authority；该 Review 的 head 即 Design Accepted Head（不创建 design closure docs）
      FAIL -> 再一轮设计修订（authority docs），再次独立复查
-4. S1 -> S2 -> S3 连续施工（不单独 Review，不创建 S 级 docs）
-5. P4-C9 Independent Level 1 Review（Review Range = Design Accepted Head .. C9 Implementation Head）
+5. S1 -> S2 -> S3 连续施工（不单独 Review，不创建 S 级 docs）
+6. P4-C9 Independent Level 1 Review（Review Range = Design Accepted Head .. C9 Implementation Head）
      PASS -> Final Closure（状态 docs 与 Final Closure 合并）
      FAIL -> 同根因 / 范围明确的 findings 统一进入 C9-R1；需要 Contract amendment、Plan scope amendment、新安全设计或新公开 API
              裁决的 findings 先解决 authority（治理文档第 12.2 节）
 ```
 
-Per-S Independent Review：**NO**。C-Level Independent Review：**YES**。Design Authority Review Required：**YES**（Design-R2 增量复查）。
+Per-S Independent Review：**NO**。C-Level Independent Review：**YES**。Design Authority Review Required：**YES**（Design-R3 增量复查）。
 
 ## 10. 状态
 
@@ -492,10 +526,13 @@ P4-C9 Frozen Base             : a662659dfd6e801531b14af7913d84a5f9f859e2
 Governance Authority          : 3b9d39e9adbcc8a009707486eebbb8736a5b1c4d
 Original Design Review        : FAIL（b5e98314eb64101b9da3b8c12a52c9044d73a60d）
 Design-R1 Review              : FAIL（ea32b37bab4c3440b83254466193212ae4be5ba8）
-P4-C9-DESIGN-R-01 / R-04 / R-05 : CLOSED（Design-R1 Review 确认；Design-R2 0 回归）
-P4-C9-DESIGN-R-02 / R-03      : REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED
-P4-C9-DESIGN-R1-01 / R1-02    : REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED
-P4-C9 Design                  : DESIGN-R2 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED
+Design-R2 Review              : FAIL（00e5be38e7232e6dc34f3c194472e58470ceadd0）
+P4-C9-DESIGN-R-01 / R-04 / R-05 : CLOSED（Design-R1 Review 确认；Design-R3 0 回归）
+P4-C9-DESIGN-R-03             : CLOSED（Design-R2 Review 确认；Design-R3 0 回归）
+P4-C9-DESIGN-R1-01 / R1-02    : CLOSED（Design-R2 Review 确认；Design-R3 0 回归）
+P4-C9-DESIGN-R-02             : OPEN → Design-R3 REMEDIATED — REVIEW REQUIRED
+P4-C9-DESIGN-R2-01            : Design-R3 REMEDIATED — REVIEW REQUIRED
+P4-C9 Design                  : DESIGN-R3 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED
 P4-C9 Frozen Contract         : NOT YET ACCEPTED
 P4-C9 Construction Plan       : NOT YET ACCEPTED
 P4-C9 Design Accepted Head    : NOT ESTABLISHED
@@ -509,7 +546,7 @@ P4-C10                        : NOT STARTED
 Phase 4                       : NOT CLOSED
 ```
 
-本 Design-R2 commit 之后 **STOP**：不开始 S1、不写 production、不写 tests、不规划 P4-C10，等待 P4-C9 DESIGN-R2 INCREMENTAL
+本 Design-R3 commit 之后 **STOP**：不开始 S1、不写 production、不写 tests、不规划 P4-C10，等待 P4-C9 DESIGN-R3 INCREMENTAL
 DESIGN / CONTRACT / PLAN CLOSURE REVIEW。
 
 ## 11. Owner Question Gate
@@ -523,21 +560,21 @@ Owner Question Gate : BUSINESS DECISIONS ONLY
 class 名、文件拆分、fixture、JSON key 命名、测试 helper、validation helper 名、basename helper 名、fail-closed 默认等均已由设计者
 裁决并记录于合同附录 A；实施中同类细节按本计划开头的优先级自行裁决，不询问 Owner。
 
-## 12. Design-R2 静态自审（提交前确认）
+## 12. Design-R3 静态自审（提交前确认）
 
 | # | 自审项 | 结论 | 依据 |
 |---|---|---|---|
-| 1 | 不存在要求 production 调用上游 `__post_init__` 的条款；无 private / dunder 例外（R-01 0 回归） | PASS | 合同第 7、9.1、19、24.3、27.1 节 |
-| 2 | `gc.get_referents` / `gc` allowlist / Mapping-Proxy Unwrap Rule / “恰一个 referent” / “CPython 3.12 已验证”已从规范正文、架构例外、测试要求、已知局限中删除（仅在复查历史与禁止项中出现） | PASS | 合同第 7、9.2 第 9 条、27.1、28.1、31 节；本计划第 4、7 节 |
-| 3 | 无任何替代 introspection 原语（`inspect` / `ctypes` / `sys._*` / `pickle` / `marshal` / `copyreg` / `weakref` / 对象布局 / 帧检查） | PASS | 合同第 7 节 No New Introspection；第 27.1 节 AST 断言 |
-| 4 | 运行时权威保持 `Python >= 3.11`；`pyproject.toml` 未改；3.12.x 仅为验收证据环境 | PASS | 合同头部、第 7、28.7 节；本计划头部、第 8 节 |
-| 5 | Input Trust / Tamper Boundary 三层已精确冻结；C 层排除窄且可审；A / B 层 fail-closed 不降低 | PASS | 合同第 9.0 节；附录 A 第 24 条 |
-| 6 | “零调用方钩子”已改为精确语义，不再绝对承诺；不声称进程内无 audit hook | PASS | 合同第 5.1、9.0、19 节 |
-| 7 | `field_sources` 按固定 known 字段名查询，不迭代、不依赖插入顺序、不 introspect proxy；未知 key 不读取不输出 | PASS | 合同第 9.2 第 9 条、M-18、12.3 |
-| 8 | 上游信任边界测试替换了不可实现的 mappingproxy hostile-referent 测试；普通嵌套子类 sentinel 测试保留 | PASS | 合同第 28.1 节；本计划 S2 测试 |
-| 9 | `RetryMaterial` 完整本地校验（M-30）；`retry_material` 存在性、`material.plan is item.plan`、RESUME / FRESH checkpoint 关系；`PREFLIGHT_RECHECK` / `DEFERRED` 未擅自加严 | PASS | 合同第 9.5 节 M-30、9.6.4 节 |
-| 10 | `retry_kind` 先本地推导再与 property 比较；`retry_material_retained` 输出前已与 `retry_kind` 一致 | PASS | 合同第 9.6.4、24.2、9.3 节 |
-| 11 | retained artifact / retry payload 字节本地计算（不调用 property、不复制 bytes、按引用重复计数）并校验 `retention_budget_bytes` / `retry_budget_bytes` | PASS | 合同第 9.6.1、9.6.2 节 |
-| 12 | `RetryMaterial` 篡改测试冻结（7 项 + 正例） | PASS | 合同第 28.1 节；本计划 S2 `test_diagnostics_retry_material.py` |
-| 13 | 空 RETRY scope 仍 LEGAL；R-04（默认 NONE、BASENAME opt-in）与 R-05（阶段化模块集合 / `__all__`）0 回归；`validation.py` 保留且无 `gc` | PASS | 合同第 8.1、9.5 M-01、18、6、7 节 |
-| 14 | S1-S3 仍连续施工；无 per-S Review；无 S 级状态 docs；Risk Class B；仍无需 Owner 决策 | PASS | 本计划第 4、9、11 节 |
+| 1 | `field_sources` 算法已冻结为 BOUNDED ITERATE → EXACT KEY VALIDATION → FIXED KNOWN-KEY LOOKUP；任何 `name in proxy` / `proxy[name]` / 相等 / hash 敏感操作都在**全部** stored key exact-`str` PASS 之后 | PASS | 合同第 9.2 节第 9 条（Step 1-5）、M-18、第 12.3 节、第 9.10 节 D-03 / D-08 |
+| 2 | 先 `list(proxy)` 再检查大小被禁止；以单遍计数 + 超限即停实现；`MAX_PROVENANCE_KEYS = 64` 已冻结（`>= 15`、覆盖真实 producer、有 resource rationale、内部常量不进 `__all__`、进入 resource tests、无 TBD） | PASS | 合同第 8.3 节“`MAX_PROVENANCE_KEYS` 冻结说明”、第 21.2 节、第 28.1 节 R2-01 边界行 |
+| 3 | unknown exact-`str` key 的语义已改正：全部 stored key 被扫描并计数，仅 known key 有语义（不再写“不读取”） | PASS | 合同第 9.2 节第 9 条 Unknown key、M-18、第 12.3 节 |
+| 4 | “禁止迭代 proxy”过宽禁令已删除；迭代仅用于 validation，输出顺序仍只由 `PROVENANCE_FIELD_ORDER` 决定 | PASS | 合同第 9.2 节第 9 条 Mapping 迭代范围、第 15 节 |
+| 5 | Layer C 保持窄边界；公开构造器可产生的 `str` 子类 key 明确归入 A / B 层；无 `gc` / 反射 / referent introspection | PASS | 合同第 9.0 节、第 7 节 No New Introspection、第 31 节 |
+| 6 | 上游 constructor 接受 / 拒绝什么的断言引用稳定 symbol + frozen upstream SHA / package authority；行号仅为 review evidence；characterization 测试已冻结 | PASS | 合同第 9.0 节 U-1..U-5；第 28.1 节 UC-1..UC-9；本计划 S2 `test_diagnostics_upstream_characterization.py` |
+| 7 | R2-01 non-vacuity：`EvilStr` 经正常 public constructor 构造、覆写 `__hash__` / `__eq__` + sentinel、**上游构造后复位**、builder 抛 `DiagnosticsIntegrityError`、自复位点起 sentinel 为 0；并有 Normal-Key Positive Control | PASS | 合同第 28.1 节 R2-01 gate 行；本计划 S2 `test_diagnostics_provenance.py` |
+| 8 | Resource non-vacuity：exact limit 通过、limit + 1 抛 `DiagnosticsResourceLimitError`、早停、tripwire 证明不物化 | PASS | 合同第 28.1 / 28.4 节；本计划 S3 `test_diagnostics_resources.py` |
+| 9 | Dispatch Safety Matrix 冻结（iteration / `len` / subscript / `in` / `==` / ordering / hash 查表 / bool / 文本转换 / regex / 路径字符串 / property / 纯函数 等，逐行 Operation / Operand / Dispatch Surface / Precondition / Why Safe / Failure） | PASS | 合同第 9.10 节 D-01..D-31 |
+| 10 | Horizontal Dispatch Audit 覆盖 `retry_scope`、`contributing_source_ids`、`disabled_source_ids`、conflict id、`field_sources`、`FieldConflict` alternatives、warnings、source sets / tuples、`summary` / `outcome`、`retry_kind`；结果 PASS WITH ONE FINDING（H-05 = R2-01，已闭合）；无第二个同类真实漏洞 | PASS | 合同第 9.11 节 |
+| 11 | 批准 property 的依赖图显式化（读取前提 = 完整依赖图已本地校验） | PASS | 合同第 9.3.1 节；第 24.2 节第 7 步固定读取顺序 |
+| 12 | 无上游 production 改动；不修改 `NormalizedMetadata` / `fc2_metadata_core` / Phase 3 / P4-C8；P4-C9 在自己的 validation boundary 内闭合 | PASS | 合同第 9.0、9.0.1 节；本计划第 3、5 节 |
+| 13 | 已 CLOSED 语义 0 回归：无上游 `__post_init__`、无 private / dunder 例外、无 `gc`、无 introspection、Python >= 3.11、默认 `PathPolicy.NONE`、`BASENAME` 显式 opt-in、`RetryMaterial` 图完整、retained payload 预算完整、阶段化 `__all__`、S1-S3 连续、Risk Class B | PASS | 合同第 5、7、8、9.5 M-30、9.6.4、18 节 |
+| 14 | Risk Class 仍为 B；风险升级门 A-K 均未触发；不需要 Owner 决策 | PASS | 合同第 5.3 节；本计划第 2、11 节 |
