@@ -1,8 +1,8 @@
 # FC2 Organizer -- Phase 4 / P4-C9 结构化诊断合同（Diagnostics Contract）
 
 ```text
-文档状态                         ：DESIGN-R3 CANDIDATE — IMPLEMENTATION NOT STARTED
-P4-C9 Design                     ：DESIGN-R3 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED
+文档状态                         ：DESIGN-R4 CANDIDATE — IMPLEMENTATION NOT STARTED
+P4-C9 Design                     ：DESIGN-R4 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED
 P4-C9 Frozen Contract            ：NOT YET ACCEPTED
 P4-C9 Design Accepted Head       ：NOT ESTABLISHED
 Implementation Input             ：NOT ESTABLISHED
@@ -15,6 +15,7 @@ Planning Parent                  ：3b9d39e9adbcc8a009707486eebbb8736a5b1c4d
 Original Design Candidate        ：b5e98314eb64101b9da3b8c12a52c9044d73a60d（Original Design Review：FAIL）
 Design-R1 Candidate              ：ea32b37bab4c3440b83254466193212ae4be5ba8（Design-R1 Review：FAIL）
 Design-R2 Candidate              ：00e5be38e7232e6dc34f3c194472e58470ceadd0（Design-R2 Review：FAIL；亦为 Design-R3 Parent）
+Design-R3 Candidate              ：9f04e4f4baefdd4309f1bd34cb0c31ea5ba04f42（Design-R3 Review：FAIL；亦为 Design-R4 Parent）
 Branch                           ：claude/phase4-c9-diagnostics
 Governance Mode                  ：ACCELERATED v2
 Risk Class                       ：B（第 5 节；受第 5.3 节风险升级门约束）
@@ -22,7 +23,9 @@ Python Runtime Authority         ：Python >= 3.11（项目既有 `requires-pyth
 施工计划                         ：docs/P4_C9_CONSTRUCTION_PLAN.md（S1 / S2 / S3，连续施工）
 ```
 
-本合同一次性冻结 P4-C9 的全部规范语义。本文件经独立 DESIGN / CONTRACT / PLAN Review PASS 后成为 Frozen Contract；
+本合同一次性冻结 P4-C9 的全部规范语义。**唯一的 authority transition（冻结，Design-R4）**：P4-C9 DESIGN-R4 INDEPENDENT CLOSURE REVIEW **PASS** ->
+P4-C9 Design Accepted Head = Design-R4 Candidate -> Frozen Contract / Construction Plan = Design-R4 Candidate -> 才允许进入 S1。此前任何轮次（含 Design-R1 / R2 / R3）的 Review 结论都不是 implementation activation 条件；Design-R4
+开发者完成修订本身**不**等于 Design-R4 PASS。本文件经上述 Review PASS 后成为 Frozen Contract；
 S1-S3 只能**执行**本合同，不得重新设计。S1 / S2 / S3 施工期间**不修改**本文件（包括第 32 节状态行；不创建任何 S 级状态
 docs commit）；第 32 节只允许在整个 C9 implementation 完成后、随 HANDOFF / Final Closure 同步状态行。任何语义改动（含公开
 API、schema、脱敏、路径策略、输入校验、资源上限、风险边界）都属于 authority docs 改动（治理文档第 11.2 节），必须作为独立
@@ -39,7 +42,7 @@ API、schema、脱敏、路径策略、输入校验、资源上限、风险边�
 ```text
 P4-C1 .. P4-C8                   : CLOSED（本合同不修改其中任何一个的生产代码、合同、施工计划或 HANDOFF）
 Acceleration Governance v2       : ACCEPTED / CLOSED
-P4-C9                            : DESIGN-R3 CANDIDATE；Implementation NOT STARTED
+P4-C9                            : DESIGN-R4 CANDIDATE；Implementation NOT STARTED
 P4-C10                           : NOT STARTED
 Phase 4                          : NOT CLOSED
 ```
@@ -50,7 +53,7 @@ Phase 4                          : NOT CLOSED
 |---|---|---|
 | Original Design Candidate | `b5e98314eb64101b9da3b8c12a52c9044d73a60d` | Original Design Review：**FAIL** |
 | P4-C9-DESIGN-R-01（HIGH / BLOCKING） | 原第 24.3 节授权调用上游 `__post_init__`，与“禁止一切上游 `_` 开头访问”互斥 | **CLOSED**（Design-R1 Review 确认；本轮语义 0 回归） |
-| P4-C9-DESIGN-R-02（HIGH / BLOCKING） | 被篡改 / 调用方子类对象可经 P4-C9 对调用方来源容器的分派（`__hash__` / `__eq__` / 容器成员判定 / 多态 property）执行调用方代码；根因：caller-originated 对象在 exact-type 校验完成之前就进入了可能触发分派的操作 | Design-R1 Review：OPEN；Design-R2 Review：OPEN（以 R2-01 为同根因的 public-constructor-reachable 具体实例）；Design-R3：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| P4-C9-DESIGN-R-02（HIGH / BLOCKING） | 被篡改 / 调用方子类对象可经 P4-C9 对调用方来源容器的分派（`__hash__` / `__eq__` / 容器成员判定 / 多态 property）执行调用方代码；根因：caller-originated 对象在 exact-type 校验完成之前就进入了可能触发分派的操作 | Design-R1 Review：OPEN；Design-R2 Review：OPEN（以 R2-01 为同根因的 public-constructor-reachable 具体实例）；Design-R3：REMEDIATED；**CLOSED**（Design-R3 Review 确认；本轮语义 0 回归） |
 | P4-C9-DESIGN-R-03（HIGH / BLOCKING） | 被消费对象校验不完整；剩余缺口为 `RetryMaterial` 图一致性与 retained payload / retention budget 关系 | **CLOSED**（Design-R2 Review 确认；本轮语义 0 回归） |
 | P4-C9-DESIGN-R-04（HIGH / BLOCKING） | 默认 `PathPolicy.BASENAME` 与绝对脱敏承诺矛盾 | **CLOSED**（Design-R1 Review 确认；本轮语义 0 回归） |
 | P4-C9-DESIGN-R-05（MEDIUM / BLOCKING） | 最终 `__all__` 与逐阶段 API 冲突 | **CLOSED**（Design-R1 Review 确认；本轮语义 0 回归） |
@@ -58,7 +61,10 @@ Phase 4                          : NOT CLOSED
 | P4-C9-DESIGN-R1-01（HIGH / BLOCKING） | Design-R1 把 `gc.get_referents` 作为 production 校验原语；它是专门的对象图反射 / 审计原语 | **CLOSED**（Design-R2 Review 确认；本轮语义 0 回归） |
 | P4-C9-DESIGN-R1-02（HIGH / BLOCKING） | Design-R1 引入对 CPython 3.12 `mappingproxy` referent 形态的规范性依赖，收窄了项目 `>=3.11` 的运行时权威 | **CLOSED**（Design-R2 Review 确认；本轮语义 0 回归） |
 | Design-R2 Candidate | `00e5be38e7232e6dc34f3c194472e58470ceadd0` | Design-R2 Review：**FAIL** |
-| P4-C9-DESIGN-R2-01（HIGH / BLOCKING） | Design-R2 的 `field_sources` 访问规则（只按固定 known 字段名 `name in proxy` / `proxy[name]` 查询、“不迭代”）在 stored key 尚未验证为 exact `str` 时就触发 hash-dependent lookup；上游 `NormalizedMetadata` 构造器以 `isinstance(key, str)` 接受 `str` 子类 key 并原样写入新建 exact `dict`，因此 `str` 子类 key 可经正常 public constructor 进入 supported public model graph（第 9.0 节 A / B 层，**不是** C 层），固定 exact-`str` 查询会对其执行子类 `__eq__` | Design-R3：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| P4-C9-DESIGN-R2-01（HIGH / BLOCKING） | Design-R2 的 `field_sources` 访问规则（只按固定 known 字段名 `name in proxy` / `proxy[name]` 查询、“不迭代”）在 stored key 尚未验证为 exact `str` 时就触发 hash-dependent lookup；上游 `NormalizedMetadata` 构造器以 `isinstance(key, str)` 接受 `str` 子类 key 并原样写入新建 exact `dict`，因此 `str` 子类 key 可经正常 public constructor 进入 supported public model graph（第 9.0 节 A / B 层，**不是** C 层），固定 exact-`str` 查询会对其执行子类 `__eq__` | Design-R3：REMEDIATED；**CLOSED**（Design-R3 Review 确认；本轮语义 0 回归） |
+| Design-R3 Candidate | `9f04e4f4baefdd4309f1bd34cb0c31ea5ba04f42` | Design-R3 Review：**FAIL**（新增 R3-01 / R3-02；Design-R3 的 dispatch 闭合 R-02 / R2-01 已被确认） |
+| P4-C9-DESIGN-R3-01（HIGH / BLOCKING） | Numeric Totality / Raw Builtin Exception Escape：Design-R3 的 D-29 允许 `type(v) is int` 后调用 `math.isfinite(v)`，巨大 exact int（如 `10**400`）会抛 `OverflowError`；第 12.7 节 `int(backoff_before_seconds * 1000)` 先乘后 `int()` 后检查上界，约 `1e306` 的有限 float 乘 1000 得 `inf`，`int(inf)` 抛 `OverflowError` | Design-R4：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| P4-C9-DESIGN-R3-02（MEDIUM / BLOCKING） | 施工计划（及合同相关文字）残留 “Design-R2 增量复查 PASS 后……” 作为 implementation activation 条件，与 Design-R2 / Design-R3 的 FAIL 事实及当前 authority 状态矛盾 | Design-R4：REMEDIATED — INDEPENDENT DESIGN REVIEW REQUIRED |
 
 Design-R2 闭合方式（历史摘要；R-03 / R1-01 / R1-02 已由 Design-R2 Review 确认 CLOSED，规范正文以各节为准）：
 
@@ -106,6 +112,21 @@ Design-R2 闭合方式（历史摘要；R-03 / R1-01 / R1-02 已由 Design-R2 Re
 A-K 均未触发）。
 
 （Design-R2 的 Risk Class 裁决历史记录：仍为 B；其删除 introspection 假设、收窄输入校验声明的动作同样未触发 A-K。）
+
+**Design-R4 闭合方式（NUMERIC TOTALITY + AUTHORITY ACTIVATION CLOSURE；一次闭合 R3-01 + R3-02）**：
+
+* **全局 invariant：TOTAL VALIDATION BEFORE THROWING CONVERSION**（新增第 9.12 节，冻结 TN-1..TN-6）：任何可能因 magnitude / representation 抛 `OverflowError` / `ValueError` / `TypeError` 的 builtin / stdlib 操作，只能在 exact-type 校验 + 不抛异常的 safe-bound 校验之后执行；
+  裸 builtin 异常不得逃出任何 public builder / renderer。
+* **Huge exact int**：exact int 不经 `float()` / `math.isfinite` 证明有限（int 没有 NaN / ±inf），直接做 `int` 常量范围比较；D-29 改为 `math.isfinite` 只作用于 exact `float`。
+* **Float**：exact float 先 `math.isfinite`，再 `>= 0.0`，再（INCLUDE）上界 gate，最后才转换。
+* **Timing conversion（SAFE BOUND BEFORE MULTIPLY / INT CONVERSION）**：`backoff_before_seconds` 先以输入秒数 gate（int `> 604800` / float `> 604800.0` -> `DiagnosticsUnsafeValueError`），之后才 `* 1000` 与 `int()`；`elapsed_ms` 先 gate 后 `int()`；
+  内部派生常量 `MAX_TIMING_SECONDS = 604800`（第 8.3 节）。含 float 乘法的正确性证明见第 9.12 节。
+* **Numeric Totality Matrix**（第 9.12.1 节 N-01..N-15）、**边界值冻结表**（第 9.12.2 节）、**数值横向审计**（第 9.12.3 节）覆盖全部 P4-C9 实际读取 / 转换的 timing / count / size / retained bytes / aggregation 字段；无 TBD。
+* **R3-02**：唯一 authority transition 冻结为 Design-R4 Independent Closure Review PASS -> Design Accepted Head = Design-R4 Candidate -> Frozen Contract / Construction Plan = Design-R4 Candidate -> 才允许进入 S1；施工计划中残留的 “Design-R2 增量复查 PASS 后……” 已删除 / 改正，Design-R2 / Design-R3 FAIL 保留为历史事实。
+* **未改动**：dispatch 闭合（validate-before-dispatch、`field_sources` BOUNDED ONE-PASS KEY SCAN → EXACT KEY VALIDATION → FIXED KNOWN-KEY LOOKUP、`MAX_PROVENANCE_KEYS = 64`、EvilStr sentinel reset、Dispatch Safety Matrix、Horizontal Dispatch Audit）、无 `gc`、无 introspection、无上游 `__post_init__`、无 private / dunder validator、Python >= 3.11、默认 `PathPolicy.NONE`、`BASENAME` opt-in、`RetryMaterial`、retained payload 预算、阶段化 `__all__`、Risk Class B；无上游 production 改动。
+* **唯一语义收紧**：`backoff_before_seconds` 为 exact float 且严格大于 `604800.0` 时，INCLUDE 一律 `DiagnosticsUnsafeValueError`（R3 会让 `(604800.0, 604800.001)` 内的值因截断而放行）；见第 9.12.2 节。
+
+**Design-R4 的 Risk Class 裁决**：仍为 **B**。Design-R4 只是本地数值校验 / 转换顺序的 authority 修订与施工计划治理更正：没有持久化、文件写入、网络、新的 security boundary、新的并发所有权、不可逆迁移，也没有对 CLOSED package 的 production 语义修改（风险升级门 A-K 均未触发）。
 
 ---
 
@@ -189,8 +210,9 @@ CLOSED package 语义、严格脱敏——时，P4-C9 才保持 B 类。
 
 * 内部 S1 / S2 / S3 连续施工（施工计划第 4 节），S1、S2、S3 均**不**单独 Review、**不**做中间 docs closure。
 * 本合同 / 施工计划需要独立 DESIGN / AUTHORITY REVIEW（因为实现建立在新的 Frozen Contract 上，治理文档第 9 节第 2 条）；
-  Original Design Review、Design-R1 Review 与 Design-R2 Review 均为 FAIL；Design-R3 之后需要 P4-C9 DESIGN-R3 INCREMENTAL DESIGN /
-  CONTRACT / PLAN CLOSURE REVIEW。该 Review PASS 本身建立 Design Accepted Head，不再创建 design closure docs。
+  Original Design Review、Design-R1 Review、Design-R2 Review 与 Design-R3 Review 均为 FAIL（历史事实）；Design-R4 之后需要 P4-C9 DESIGN-R4 INCREMENTAL DESIGN /
+  CONTRACT / PLAN CLOSURE REVIEW。**唯一 authority transition**：该 Review PASS 本身建立 Design Accepted Head（= Design-R4 Candidate），同时 Frozen Contract / Construction Plan = Design-R4 Candidate，之后才允许进入 S1；
+  不再创建 design closure docs。
 * 整个 C9 实现完成后统一一次 **P4-C9 Independent Level 1 Review**；FAIL 时同根因 / 范围明确的 findings 统一进入 C9-R1
   （治理文档第 12 节）。
 
@@ -280,7 +302,7 @@ fc2_organizer.diagnostics
 |---|---|
 | `errors.py` | `__future__` |
 | `models.py` | `__future__`、`dataclasses`、`enum`、`re` |
-| `validation.py` | `__future__`、`re`、`math`（只 `math.isfinite`）、`os`（只 `os.path.isabs`、`os.path.join`、`os.path.basename`、`os.sep`、`os.altsep`）、`types`（只 `types.MappingProxyType`，仅用于 `type(x) is MappingProxyType` 精确类型比较） |
+| `validation.py` | `__future__`、`re`、`math`（只 `math.isfinite`，且只作用于 exact `float`，第 9.12 节）、`os`（只 `os.path.isabs`、`os.path.join`、`os.path.basename`、`os.sep`、`os.altsep`）、`types`（只 `types.MappingProxyType`，仅用于 `type(x) is MappingProxyType` 精确类型比较） |
 | `projection.py` | `__future__` |
 | `build.py` | `__future__` |
 | `render.py` | `__future__`、`json`（只 `json.JSONEncoder`） |
@@ -397,7 +419,7 @@ __all__ = [
 ]
 ```
 
-Design Review PASS 后不得增加、删除、重命名或重排任何阶段集合中的公开名称；任何变化都是合同修订。任何阶段都不得以 stub、
+Design-R4 Independent Closure Review PASS 后不得增加、删除、重命名或重排任何阶段集合中的公开名称；任何变化都是合同修订。任何阶段都不得以 stub、
 placeholder function 或假模块提前凑出后续阶段的名称。
 
 ### 8.2 函数签名（冻结）
@@ -444,6 +466,7 @@ def render_diagnostics_json(diagnostics: BatchDiagnostics, /) -> bytes: ...
 | `MAX_PATH_TEXT_CHARS` | `255` | 每个路径派生文本（basename）的字符上限 |
 | `MAX_TIMING_MS` | `604800000`（7 天） | 计时值上限（毫秒） |
 | `MAX_DIAGNOSTIC_OUTPUT_BYTES` | `67108864`（64 MiB） | 单次序列化输出的硬上限 |
+| `MAX_TIMING_SECONDS`（**内部常量**，不属于任何阶段的 `__all__`） | `604800`（`MAX_TIMING_MS // 1000`；要求 `MAX_TIMING_MS % 1000 == 0`） | `backoff_before_seconds` 的 INCLUDE 发布上界（秒）；第 9.12 节 N-07 的 safe-bound gate；定义在 `models.py`，不出现在任何诊断模型字段或 JSON 输出中 |
 
 **`MAX_PROVENANCE_KEYS` 冻结说明（Design-R3，技术设计裁决，无 TBD，无需 Owner）**：
 
@@ -608,8 +631,9 @@ Local Validation 是 P4-C9 自己实现的纯只读校验，规则如下：
 3. **容器精确**：容器先确认精确容器类型（`tuple` / `frozenset` / `types.MappingProxyType`，按第 9.5 节逐字段冻结；
    `MappingProxyType` 只出现在 `NormalizedMetadata.field_sources`，见第 9 条）；tuple 元素逐个精确类型确认。
 4. **枚举精确**：枚举值必须 `type(v) is FrozenEnum`；枚举比较一律用 `is`。
-5. **int 拒绝 bool**：整数字段必须 `type(v) is int`；`bool` 与 `int` 子类拒绝；需要浮点数的计时字段接受 `type(v) is int`
-   或 `type(v) is float`，并要求 `math.isfinite(v)`。
+5. **int 拒绝 bool；数值全域性（Design-R4，第 9.12 节）**：整数字段必须 `type(v) is int`；`bool` 与 `int` 子类拒绝；整数只与 `int` 常量比较，**不得**经 `float()` / `math.isfinite` / 文本转换“证明有限”（exact int 没有 NaN / ±inf）。
+   计时字段接受 `type(v) is int` 或 `type(v) is float`：**float 分支**先 `math.isfinite(v)`（仅作用于 exact `float`；`False` -> `DiagnosticsIntegrityError`）再 `v >= 0.0`；**int 分支**直接 `v >= 0`。所有可能抛 `OverflowError` / `ValueError` / `TypeError` 的转换
+   （`float * 1000`、`int(float)`）只在 total 的 safe-bound gate 之后执行（TN-4）。
 6. **str 先精确**：字符串字段必须 `type(v) is str`，之后才执行该字段冻结的规则（非空、正则、长度、`isidentifier()`、
    `strip()` 等内建 `str` 方法只在精确 `str` 上调用）。
 7. **跨对象关系显式检查**：第 9.6 节逐项列出；对象身份比较用 `is`；值比较只在两侧都已确认为精确 `str` / `int` / `bool` /
@@ -804,7 +828,7 @@ package 自己的已冻结代码（实例上无法替换 class 级 property）�
 
 * Projection：`status`、`aggregation_result`、`error_kind`、`generation`；`elapsed_ms`（仅 `TimingPolicy.INCLUDE`）。
 * Validation-Only：`index`、`number`、`error_type`、`elapsed_ms`（任何策略下的数值检查）。
-* 标量 / 枚举：`index` int≥0；`number` 精确 `str` 且 `is_valid_fc2_number`；`status` 精确 `BatchItemStatus`；`generation` int≥0；`elapsed_ms` 精确 `int` 或 `float`、有限、≥0；`aggregation_result` opt 精确 `AggregationResult`；`error_kind` opt 精确 `BatchItemErrorKind`；`error_type` opt（非空 str，长度 ≤ 256）。
+* 标量 / 枚举：`index` int≥0；`number` 精确 `str` 且 `is_valid_fc2_number`；`status` 精确 `BatchItemStatus`；`generation` int≥0；`elapsed_ms` 精确 `int` 或 `float`、≥0，float 另需有限（第 9.12 节 N-01 / N-04 / N-05；INCLUDE 的发布 gate 见 N-06）；`aggregation_result` opt 精确 `AggregationResult`；`error_kind` opt 精确 `BatchItemErrorKind`；`error_type` opt（非空 str，长度 ≤ 256）。
 * 跨对象（Phase 3 批处理合同第 6 节）：有 `aggregation_result` 时 `error_kind is None`、`error_type is None`、`aggregation_result.number == number`、`status` 是 `aggregation_result.status` 的 1:1 映射（SUCCESS / PARTIAL / FAILED 同名）；没有时 `status is FAILED`、`error_kind` 与 `error_type` 均非 `None`。
 
 **M-16 `AggregationResult`**（`fc2_metadata_core.aggregation`）
@@ -812,7 +836,7 @@ package 自己的已冻结代码（实例上无法替换 class 级 property）�
 * Projection：`status`、`metadata`（只经 M-18 读取 `field_sources`）、`source_results`、`contributing_source_ids`、`conflicts`、`disabled_source_ids`、`source_execution_traces`。
 * Validation-Only：`number`、`elapsed_ms`、`metadata.number` / `metadata.title`（M-18）。
 * 容器：`source_results` 精确 `tuple`、非空、元素精确 `SourceResult`；`contributing_source_ids`、`disabled_source_ids` 精确 `tuple`、元素精确 `str`；`conflicts` 精确 `tuple`、元素精确 `FieldConflict`；`source_execution_traces` 精确 `tuple`、元素精确 `SourceExecutionTrace`。
-* 标量 / 枚举：`number` 精确 `str` 且 `is_valid_fc2_number`；`status` 精确 `AggregateStatus`；`metadata` opt 精确 `NormalizedMetadata`；`elapsed_ms` 精确 `int` / `float`、有限、≥0。
+* 标量 / 枚举：`number` 精确 `str` 且 `is_valid_fc2_number`；`status` 精确 `AggregateStatus`；`metadata` opt 精确 `NormalizedMetadata`；`elapsed_ms` 精确 `int` / `float`、≥0，float 另需有限（第 9.12 节 N-01 / N-04 / N-05；永不发布、无上界、不转换）。
 * 跨对象：第 9.6.6 节（Phase 3 聚合合同第 3 节 / 模型不变量）。
 * 资源：`len(source_results)`、`len(source_execution_traces)`、`len(contributing_source_ids)`、`len(disabled_source_ids)` 各 ≤ `MAX_SOURCES_PER_ITEM`；`len(conflicts) <= MAX_CONFLICTS_PER_ITEM`（均在迭代前）；`metadata.field_sources` 的 stored key 数 ≤ `MAX_PROVENANCE_KEYS`（M-18，单遍有界扫描，第 9.2 节第 9 条）。
 * **校验顺序（冻结，Design-R3，第 9.0.1 节 V-2）**：(1) 先对 `source_results`、`contributing_source_ids`、`disabled_source_ids`、`conflicts`、`source_execution_traces` 各容器完成 **Phase V**（精确容器类型、结构上限、全部元素精确类型 / 精确 `str`，包括 source id 的 `strip()` 规则）；(2) 之后才做 **Phase R**：source id 唯一性 / 与 `disabled_source_ids` 的重叠、`contributing_source_ids` 与 `successful` 的逐项比较、conflict id 对 `contributing_source_ids` 的成员判定、`source_execution_traces` 与 `source_results` 的逐位置比较；(3) `metadata` 的 M-18（含 `field_sources` 有界 key 扫描与 known-key 查询）在 `contributing_source_ids` 的 Phase V 完成**之后**执行，其 provenance 成员判定（`in contributing_source_ids`）属于 Phase R。
@@ -821,7 +845,7 @@ package 自己的已冻结代码（实例上无法替换 class 级 property）�
 
 * Projection：`source_id`、`status`、`error_kind`。
 * Validation-Only：`metadata`、`elapsed_ms`、`error_detail`、`metadata.number` / `metadata.title`（M-18）。
-* 标量 / 枚举：`source_id` 精确 `str` 且 `strip()` 非空；`status` 精确 `SourceStatus`；`elapsed_ms` 精确 `int` / `float`、≥0（Phase 3 只要求非负；P4-C9 额外要求有限）；`metadata` opt 精确 `NormalizedMetadata`；`error_kind` opt 精确 `SourceErrorKind`；`error_detail` opt 精确 `str`。
+* 标量 / 枚举：`source_id` 精确 `str` 且 `strip()` 非空；`status` 精确 `SourceStatus`；`elapsed_ms` 精确 `int` / `float`、≥0（Phase 3 只要求非负；P4-C9 额外要求 float 有限；第 9.12 节 N-01 / N-04 / N-05；永不发布、无上界、不转换）；`metadata` opt 精确 `NormalizedMetadata`；`error_kind` opt 精确 `SourceErrorKind`；`error_detail` opt 精确 `str`。
 * 跨对象（Phase 1 / Phase 3 resilience 合同的 `SourceResult` 不变量，第 9.8 节表 T-2）：`SUCCESS` ⇒ `metadata` 满足本地 minimum-success（M-18）、`error_kind is None`、`error_detail is None`；非 `SUCCESS` ⇒ `error_kind in T-2[status]`、`error_detail.strip()` 非空；`status in {NOT_FOUND, BLOCKED, RATE_LIMITED, NETWORK_ERROR}` ⇒ `metadata is None`；`status in {PARSE_ERROR, INVALID_RESPONSE}` ⇒ `metadata is None` 或不满足本地 minimum-success。
 * `error_detail` 与 `metadata` 的内容永不进入快照、模型、JSON 或 message。
 
@@ -849,8 +873,8 @@ package 自己的已冻结代码（实例上无法替换 class 级 property）�
 
 * Projection：`sequence`、`status`、`error_kind`、`completed`；`elapsed_ms`、`backoff_before_seconds`（仅 `TimingPolicy.INCLUDE`）。
 * Validation-Only：`elapsed_ms`、`backoff_before_seconds`（任何策略下的数值检查）。
-* 标量 / 枚举：`sequence` int≥1；`status` 精确 `SourceStatus`；`error_kind` opt 精确 `SourceErrorKind`；`elapsed_ms`、`backoff_before_seconds` 精确 `int` / `float`、有限、≥0；`completed` 精确 `bool`。
-* 跨对象：`SUCCESS` ⇔ `error_kind is None`；非 `SUCCESS` ⇒ `error_kind in T-2[status]`；`completed is False` ⇒ `NETWORK_ERROR` / `SOURCE_DEADLINE`；`sequence == 1` ⇒ `backoff_before_seconds == 0`。
+* 标量 / 枚举：`sequence` int≥1；`status` 精确 `SourceStatus`；`error_kind` opt 精确 `SourceErrorKind`；`elapsed_ms`、`backoff_before_seconds` 精确 `int` / `float`、≥0，float 另需有限（第 9.12 节 N-01 / N-04 / N-05；INCLUDE 的发布 gate 与毫秒转换见 N-06 / N-07）；`completed` 精确 `bool`。
+* 跨对象：`SUCCESS` ⇔ `error_kind is None`；非 `SUCCESS` ⇒ `error_kind in T-2[status]`；`completed is False` ⇒ `NETWORK_ERROR` / `SOURCE_DEADLINE`；`sequence == 1` ⇒ `backoff_before_seconds == 0`（同型比较，N-11）。
 
 **M-21 `FieldConflict`**（`fc2_metadata_core.aggregation`）
 
@@ -1033,7 +1057,7 @@ package 自己的已冻结代码（实例上无法替换 class 级 property）�
 
 对**将要进入诊断模型**的值（只针对 Projection Reads）：source id（含 provenance、conflict、disabled、trace）满足第 17.2 节安全 id
 规则；`error_type` 满足标识符规则；`PathPolicy.BASENAME` 下的每个 basename 满足第 18.2 节词法安全规则；`TimingPolicy.INCLUDE`
-下的计时值满足 `0 <= v <= MAX_TIMING_MS`（转换后）。失败抛 `DiagnosticsUnsafeValueError`。`PathPolicy.NONE` 下不计算任何
+下的计时值按第 9.12 节 N-06 / N-07 通过 **safe-bound gate**（先 gate、后 `* 1000` / `int()`；禁止先转换再检查），发布值满足 `0 <= v <= MAX_TIMING_MS`。失败抛 `DiagnosticsUnsafeValueError`。毫秒转换发生在本步，转换结果（exact `int`）进入校验快照，projection 只复制。`PathPolicy.NONE` 下不计算任何
 basename。
 
 ### 9.8 本地冻结表（冻结；测试断言与上游实现相等）
@@ -1085,7 +1109,7 @@ fail closed，固定措辞，无值文本）。
 | D-16 | equality | 两个 exact `tuple` / `list` 的逐元素比较（`contributing_source_ids` 与 `successful`；attempts 序号 `1..n`） | 逐元素 `==` | 两侧容器 Phase V 均已完成，元素全部 exact `str` / exact `int` | 内建 | `DiagnosticsIntegrityError` |
 | D-17 | identity | `is` / `is not`（枚举成员、`None`、`plan is item.plan`、`checkpoint is ...`、`item.metadata is metadata_batch.items[pos]`） | 无（`is` 不可重载） | 无 | `is` 不执行任何调用方代码 | — |
 | D-18 | enum comparison | 枚举成员 | 写成 `==` 会走 `Enum.__eq__`（或子类） | 一律用 `is`（第 9.2 节第 4 条）；枚举值先 `type(v) is Enum` | `is` 不分派 | `DiagnosticsIntegrityError` |
-| D-19 | ordering comparison `<` `<=` `>` `>=` | exact `int` / exact `float`（`0 <= v <= MAX`、index / `sequence` 严格递增、预算 `<=`、计时范围） | 内建数值比较 | `type(v) is int` 或 `type(v) is float`（`bool` 已排除）；`float` 另需 `math.isfinite`（D-29） | 内建 | `DiagnosticsIntegrityError`；计时超出 `MAX_TIMING_MS` → `DiagnosticsUnsafeValueError` |
+| D-19 | ordering comparison `<` `<=` `>` `>=` | exact `int` / exact `float`（`0 <= v <= MAX`、index / `sequence` 严格递增、预算 `<=`、计时范围） | 内建数值比较 | `type(v) is int` 或 `type(v) is float`（`bool` 已排除）；`float` 另需先 `math.isfinite`（D-29）；同型比较（int vs int 常量、float vs float 常量，第 9.12 节 TN-3） | 内建同型比较，不分派到用户代码，不抛异常 | `DiagnosticsIntegrityError`；`INCLUDE` 下计时超出发布上界 → `DiagnosticsUnsafeValueError`（第 9.12 节） |
 | D-20 | sorting / extremum | `sorted` / `min` / `max` / `list.sort` 作用于 caller-originated 值 | 富比较分派 | **NOT USED**（AST 禁止 `sorted` / `min` / `max`，第 7 节）；所有输出顺序来自冻结常量的声明顺序（第 16 节） | N/A | AST 架构测试失败 |
 | D-21 | bool conversion | caller-originated 对象的真值（`if x:`、`not x`、`x and y`、`while x`、`filter`） | `__bool__` / `__len__` | **NOT USED**：只对 exact `bool`（`type(v) is bool`）、比较 / `is None` 的结果、`len(...)` 的比较结果做条件判断；“非空 `str`”以 `len(s) >= 1` 表达，“`strip()` 非空”以 `len(s.strip()) >= 1` 表达（作用于 exact `str`） | N/A | 带 `__bool__` / `__len__` sentinel 的测试失败（第 28.1 节） |
 | D-22 | str formatting / text conversion | 任何 caller-originated 值 | `__str__` / `__repr__` / `__format__` | **NOT USED**：不 `str()` / `repr()` / `format()` / f-string / `%` 插入 caller-originated 值；错误 message 只含固定措辞、常量名与 **P4-C9 自有循环计数器**（`enumerate` 位置，**不是**输入的 `item.index` 值） | N/A | AST + sentinel 测试失败 |
@@ -1095,7 +1119,7 @@ fail closed，固定措辞，无值文本）。
 | D-26 | dataclass field read | `obj.field`（frozen `slots=True` dataclass 的公开字段，且该字段在第 9.5 节被列出） | 子类的 `__getattribute__` / property / 描述符 | `type(obj) is ExactClass`（V-1） | 精确类的 slot 描述符，无调用方代码；未列出字段不被读取（第 9.9 节） | 子类 → `DiagnosticsIntegrityError`，字段不被读取 |
 | D-27 | type test | `type(x) is C`；`type(x) in <本地 frozenset of classes>` | `type()` 不读取 `__class__`；`is` 不可重载；类对象 hash 为身份 hash | 无 | hostile `__class__` / `__eq__` 不影响 `type(x)` | — |
 | D-28 | public property | 第 9.3 节五个批准 property（`BatchPreview.summary`、`BatchExecutionResult.summary` / `outcome`、`ItemPreview.warnings`、`ItemExecution.retry_kind`） | CLOSED package 的已冻结 property 代码；经其读取的字段分派 | 第 9.3.1 节依赖图**全部**已本地校验 PASS；在第 24.2 节第 7 步读取；返回值再本地校验 | 依赖图中每个值 exact 且关系已验证；property 是上游冻结代码，实例上不可替换 | 依赖图未通过时已在到达第 7 步之前 `DiagnosticsIntegrityError` |
-| D-29 | pure function | `math.isfinite(v)` | 数值 | `type(v) is float` 或 `type(v) is int`（`bool` 已排除） | 内建数值 | `DiagnosticsIntegrityError` |
+| D-29 | pure function | `math.isfinite(v)` | 无调用方分派；**对巨大 exact `int` 抛 `OverflowError`（R3 缺陷）** | `type(v) is float`——**只**作用于 exact `float`；**从不**作用于 exact `int`（exact int 没有 NaN / ±inf，范围由与 `int` 常量的比较裁定，第 9.12 节 TN-1 / TN-2） | 对 exact `float`，NaN / ±inf 返回 `False`，不抛异常 | 非有限 → `DiagnosticsIntegrityError`；exact int 不进入本行 |
 | D-30 | pure function | `is_valid_fc2_number(s)`（`fc2_metadata_core.normalize`） | 内部正则 / 字符串处理 | `type(s) is str` | exact `str` | `DiagnosticsIntegrityError` |
 | D-31 | aggregation | `sum(...)` 作用于 exact `int` | 内建 | 来源容器 Phase V 已确认元素为 exact `int`（`bool` 已排除） | 内建 | `DiagnosticsIntegrityError` |
 
@@ -1124,12 +1148,110 @@ fail closed，固定措辞，无值文本）。
 | H-11 | `conflict_with`（`ItemPreview` / `ItemExecution`） | 迭代 D-01；对称性 `idx in other.conflict_with` D-11；按 `index` 的条目索引 D-10 | M-05 / M-06 的 exact `int` 元素 Phase V 先于对称检查 | **PASS** |
 | H-12 | `RetryMaterial.artifacts` / `ExecutionPreflight.artifacts` / retained 字节求和 | 迭代 D-01；`len(content)` D-05；`sum` D-31 | M-24：`type(request) is ArtifactWriteRequest` 且 `type(content) is bytes` 先于 `len` | **PASS** |
 | H-13 | `OrganizePlan` 路径 / `operations` / `LeftoverTemporary.name` / `PlannedPath` | D-24、D-25、D-23、D-14 | `type(p) is str`、`PlannedPath` exact 先于路径字符串操作 | **PASS** |
-| H-14 | 计时字段 | D-19、D-29 | `type(v) is int / float` 先于比较 / `math.isfinite` | **PASS** |
+| H-14 | 计时与全部数值字段 | D-19、D-29；第 9.12 节 N-01..N-15 | `type(v) is int / float` 先于一切数值操作；float 先 `math.isfinite`；转换在 safe-bound gate 之后 | **FINDING = P4-C9-DESIGN-R3-01**（Design-R3 的 D-29 允许 exact int 经 `math.isfinite`；`backoff_before_seconds` 先乘 / `int()` 后检查）——**Design-R4 REMEDIATED — REVIEW REQUIRED**（逐字段数值审计见第 9.12.3 节） |
 | H-15 | 错误 message 构造 | D-22 | 固定措辞；只含 P4-C9 自有循环计数器 | **PASS** |
 
-**审计结论**：`PASS WITH ONE FINDING`——唯一发现项是 H-05（= R2-01），已在本轮闭合；**未发现第二个同类（dispatch-before-validate）真实漏洞**。R2-01 不是只修一个点：同类别的全部 dispatch surface（容器迭代、成员判定、
+**审计结论（dispatch 类，Design-R3）**：`PASS WITH ONE FINDING`——唯一 dispatch 发现项是 H-05（= R2-01），已由 Design-R3 闭合并经 Design-R3 Review 确认；**未发现第二个同类（dispatch-before-validate）真实漏洞**。H-14 的数值类 finding（R3-01）与 dispatch 无关，由第 9.12 节（Design-R4）闭合。R2-01 不是只修一个点：同类别的全部 dispatch surface（容器迭代、成员判定、
 相等、hash 查表、真值转换、文本转换、property）已由第 9.0.1 节统一原则与第 9.10 节矩阵系统审计；H-02 / H-03 / H-04 / H-07 / H-09 / H-10 中被发现“依赖隐含顺序”的位置已被显式冻结（不改变其语义，
 只把隐含顺序写成规范性前置条件）。
+
+### 9.12 Numeric Totality（冻结，Design-R4）
+
+**全局 invariant：TOTAL VALIDATION BEFORE THROWING CONVERSION。**
+
+P4-C9 对**所有**实际消费的 caller-originated 数值，必须满足：任何可能因 magnitude / representation 而抛出 `OverflowError`、`ValueError`、`TypeError` 的 builtin / stdlib 操作
+（例如 `math.isfinite(<巨大 int>)`、`float(<巨大 int>)`、`int(<inf>)`、`int(<NaN>)`、`<巨大 float> * 1000` 之后的 `int(...)`、对超大 int 的 `str` / JSON 编码），都**只能**在
+**exact-type 校验 + 不抛异常的 safe-bound 校验**之后执行。冻结规则：
+
+* **TN-1 exact int**：`type(v) is int`（`bool` 与 `int` 子类拒绝，第 9.2 节第 5 条）之后，**只**与 `int` 常量做 `>=` / `<=` / `>` / `<` / `==` 比较，以及 `+` / `*`（int × int）/ `sum` 等整数算术。Python exact int 没有 NaN / ±inf，
+  因此**不需要、也不得**通过 `float(v)`、`math.isfinite(v)`、`int(float(v))`、`v * 1.0`、`round`、`str(v)` 等任何会先转换为 float / 文本的操作来“证明 finite”；整数的“有限性”是类型事实，范围由与 `int` 常量的比较
+  （对任意精度 int 本身是 total 的）裁定。
+* **TN-2 exact float**：`type(v) is float` 之后，**第一个**数值操作是 `math.isfinite(v)`（对 exact `float`，NaN / ±inf 返回 `False`，不抛异常；`False` -> `DiagnosticsIntegrityError`）；然后才与 `float` 常量比较（`v >= 0.0`、上界 gate）。
+  `math.isfinite` **只**允许作用于 exact `float`，**从不**作用于 exact `int`（第 9.10 节 D-29）。
+* **TN-3 同型比较**：对 caller-originated 数值，exact `int` 只与 `int` 常量比较，exact `float` 只与 `float` 常量比较；不对 caller 数值做 int-vs-float 混合比较（例如“`sequence == 1 ⇒ backoff == 0`”：int 分支 `v == 0`，float 分支 `v == 0.0`）。
+* **TN-4 SAFE BOUND BEFORE MULTIPLY / INT CONVERSION**：`float * 1000` 与 `int(float)` 只能在一个**total、不抛异常**的输入上界 gate 已通过之后执行；该 gate 必须证明转换后的毫秒值**不超过** `MAX_TIMING_MS` 且**不会进入 `inf` / 无效转换状态**。
+  **禁止**“先转换，再检查结果是否过大”。`float(...)` 从不作用于 caller 数值，只作用于本模块常量（见 N-10）。
+* **TN-5 失败类型**：数值校验失败只通过 `DiagnosticsIntegrityError`（类型 / 非有限 / 负数 / 违反字段自己的范围）、`DiagnosticsUnsafeValueError`（`INCLUDE` 下超过计时发布上界）、`DiagnosticsResourceLimitError`（结构上限）或本合同已定义的其它 `Diagnostics*` 错误；**裸 `OverflowError` / `ValueError` / `TypeError`（即 exact type 为 builtin 本身、而非 `Diagnostics*` 子类；`Diagnostics*` 按第 8.4 节继承 `ValueError` / `TypeError` 是合法的）不得逃出任何 public builder / renderer**。实现**不得**以 `try` / `except` 捕获 builtin 异常来实现数值校验（第 8.4 节：唯一允许的 `try` 是 `render.py` 对 `json.JSONEncoder.iterencode` 的包裹）。
+* **TN-6 运行时权威**：以上规则只依赖 Python >= 3.11 的标准语言语义（IEEE-754 binary64 float 的正确舍入与单调性、任意精度 int），不依赖 CPython 专有行为，不使用反射 / 内省。
+
+**内部派生常量（冻结；与 `MAX_PROVENANCE_KEYS` 同为 `models.py` 内部常量，不进任何阶段 `__all__`、不出现在输出）**：`MAX_TIMING_SECONDS = MAX_TIMING_MS // 1000 = 604800`（要求 `MAX_TIMING_MS % 1000 == 0`，测试断言）。
+float gate 常量在模块导入时由小 int 导出：`float(MAX_TIMING_MS + 1) == 604800001.0`、`float(MAX_TIMING_SECONDS) == 604800.0`（二者都对 binary64 精确可表示；对小 int 的 `float()` 是 total 的）。
+
+**Safe bound 的正确性证明（backoff）**：对 exact `float` 秒数 `s`，gate 为 `s > 604800.0 -> DiagnosticsUnsafeValueError`；通过 gate 时 `0.0 <= s <= 604800.0`，而 `604800.0 * 1000` 在 binary64 中**精确**等于 `604800000.0`；
+IEEE-754 乘法是正确舍入且对非负输入单调，故 `fl(s * 1000) <= 604800000.0`，有限（不会是 `inf`），因此 `int(fl(s * 1000)) <= MAX_TIMING_MS`，不会抛 `OverflowError`。对 exact `int` 秒数，gate 为 `s > 604800`，通过后 `s * 1000 <= 604800000`（整数乘法 total）。
+
+#### 9.12.1 Numeric Totality Matrix（冻结）
+
+只覆盖 P4-C9 **实际执行**的数值操作。“Failure” 列均为 `Diagnostics*` 错误；任何 builtin 异常都不是合法结果。
+
+| ID | Field / Operation | Accepted Exact Type | Allowed Range | Potential Builtin Exception Surface | Required Precondition | Safe Operation Order | Expected Diagnostics* Failure |
+|---|---|---|---|---|---|---|---|
+| N-01 | `math.isfinite(v)` | exact `float` | 任意 `float`（`True` 才继续） | 作用于巨大 exact `int` 时 `OverflowError`（R3 缺陷：D-29 曾允许 int）；对 exact `float` 无异常 | `type(v) is float` | float 分支的**第一个**数值操作；**从不**用于 exact `int` | NaN / `+inf` / `-inf` -> `DiagnosticsIntegrityError` |
+| N-02 | exact int 校验（所有 int 字段，含计时字段的 int 分支） | exact `int`（`bool` 拒绝） | 字段自己的 min / max；无 max 的字段（`generation`、`source_size`、`errno`、`ordinal`、`max_attempts`）接受任意 magnitude | 与 `int` 常量比较：无。`float(v)` / `math.isfinite(v)` / `str(v)`：`OverflowError` / `ValueError`（**禁止**） | `type(v) is int` | 仅与 `int` 常量比较，之后才允许 int 算术 / 投影 | 低于 min / 高于字段 max -> `DiagnosticsIntegrityError`；`INCLUDE` 下超过计时发布上界 -> `DiagnosticsUnsafeValueError`（见 N-06 / N-07） |
+| N-03 | numeric comparison（`>=` `<=` `>` `<` `==`） | exact `int` vs `int` 常量；exact `float`（已 `isfinite`）vs `float` 常量 | 同上 | 同型比较无异常；NaN 比较恒 `False`（已被 N-01 在前拒绝）；**不做**混合比较（TN-3） | 精确类型已确认；float 已通过 N-01 | 先 N-01（float），后比较 | 违反范围 -> 同 N-02 |
+| N-04 | negative 检查 | exact `int` / exact `float` | `v >= 0`（int）/ `v >= 0.0`（float）；`-0.0` 接受，发布为 `0` | 无 | float 已通过 N-01 | N-01（float）-> 本行 -> 上界 gate -> 转换 | 负数 -> `DiagnosticsIntegrityError` |
+| N-05 | validation-only 计时字段：`SourceResult.elapsed_ms`、`AggregationResult.elapsed_ms`；以及 `BatchItemResult.elapsed_ms` / `SourceAttempt.elapsed_ms` / `SourceAttempt.backoff_before_seconds` 在 `TimingPolicy.OMIT` 下 | exact `int` / exact `float` | `>= 0`，有限；**无上界**（不发布、不转换，因而没有异常面；巨大 exact int / 巨大有限 float 在此被**接受**） | 无（只有类型确认、N-01、N-04；不执行任何转换） | N-01 / N-02 / N-04 通过 | 类型 -> N-01（float）-> N-04；**不**调用 `float()` / `int()` / `* 1000` | 类型错误 / `bool` / NaN / `±inf` / 负数 -> `DiagnosticsIntegrityError` |
+| N-06 | `elapsed_ms` 发布（`BatchItemResult.elapsed_ms` -> `MetadataDiagnostics.elapsed_ms`；`SourceAttempt.elapsed_ms` -> `elapsed_ms`），仅 `TimingPolicy.INCLUDE` | exact `int` / exact `float` | 发布值 `0..MAX_TIMING_MS`（`604800000`） | `int(float)` 对**有限** float 不抛异常；对 `inf` / NaN 抛（已被 N-01 拒绝）；巨大 int 与 `float` 比较不发生（TN-3） | N-01（float）、N-04 已通过 | **int**：`v > MAX_TIMING_MS` -> 拒绝，否则发布 `v`。**float**：`v >= 604800001.0` -> 拒绝（上界 gate 先于转换），否则发布 `int(v)`（向零截断，`<= MAX_TIMING_MS`） | 超过上界 -> `DiagnosticsUnsafeValueError` |
+| N-07 | `backoff_before_ms`（`SourceAttempt.backoff_before_seconds` -> `backoff_before_ms`），仅 `TimingPolicy.INCLUDE` | exact `int` / exact `float`（单位：秒） | 秒数 `0..604800`（含）；发布值 `0..MAX_TIMING_MS` | `float * 1000` 对约 `1e306` 的有限 float 得 `inf`，随后 `int(inf)` 抛 `OverflowError`（R3 缺陷：先转换后检查）；整数乘法无异常 | N-01（float）、N-04 已通过 | **SAFE BOUND BEFORE MULTIPLY**：**int**：`s > 604800` -> 拒绝，否则 `s * 1000`；**float**：`s > 604800.0` -> 拒绝，否则 `int(s * 1000)`。gate 先于乘法与 `int()`；正确性见上文证明 | 超过上界 -> `DiagnosticsUnsafeValueError` |
+| N-08 | `int(float)` | exact `float`（有限，且已通过 N-06 / N-07 上界 gate） | 仅 N-06 / N-07 的发布路径 | `int(inf)` / `int(NaN)`：`OverflowError` / `ValueError` | N-01 + 上界 gate | 仅在 N-06 / N-07 gate 之后 | N/A（gate 已先行拒绝） |
+| N-09 | `float * 1000` | exact `float`（有限，`0.0 <= s <= 604800.0`） | 仅 N-07 | 乘积溢出为 `inf`（`s` 约 `1e306` 时） | N-07 gate 已通过 | 仅在 gate 之后；结果 `<= 604800000.0` 且有限 | N/A（gate 已先行拒绝） |
+| N-10 | `float(int)` | **模块常量**（`MAX_TIMING_MS + 1`、`MAX_TIMING_SECONDS`，导入时导出） | 常量（小 int，精确可表示） | 对巨大 caller int：`OverflowError`——因此**从不**用于 caller 数值 | 仅作用于本模块常量 | 导入时一次 | 不适用（caller 数值不进入本操作） |
+| N-11 | `sequence == 1 ⇒ backoff_before_seconds == 0` | exact `int` / exact `float` | 等于零 | 无（同型比较，TN-3） | N-01（float）通过 | int：`s == 0`；float：`s == 0.0` | 不成立 -> `DiagnosticsIntegrityError` |
+| N-12 | sum / aggregation（`sum(...)`；M-08 / M-09 / M-14 的恒等式；`stage_counts` 求和） | exact `int`（元素已 Phase V） | 任意 magnitude 的整数算术 | 整数 `+` / `*` / `sum` 无溢出；**无 float 参与** | 来源容器 Phase V 已确认元素为 exact `int` | 先 Phase V，后求和与比较 | 恒等式不成立 -> `DiagnosticsIntegrityError` |
+| N-13 | retained bytes（`sum(len(request.content))`；与 `retention_budget_bytes` / `retry_budget_bytes` 比较） | `len` 结果为 exact `int`（来自 exact `bytes`）；预算为 exact `int` | 预算 `1..MAX_RETAINED_ARTIFACT_BYTES_LIMIT`、`retry_budget_bytes <= retention_budget_bytes`；总和 `<=` 对应预算 | 无（整数） | `type(content) is bytes`；预算已按 M-01 / M-02 校验 | 先 `type(content)`，后 `len`，再求和比较 | 超预算 / 预算越界 -> `DiagnosticsIntegrityError` |
+| N-14 | count / size / index / generation / ordinal / errno / http_status / max_attempts 等 exact `int` 字段 | exact `int` | 各 M-行冻结（例如 `batch_size 0..MAX_DIAGNOSTIC_ITEMS`、`http_status 100..599`、`sequence >= 1`）；仅有下界的字段对任意 magnitude 成立 | 无（只比较，不转换） | `type(v) is int` | N-02 | 越界 -> `DiagnosticsIntegrityError`；结构上限 -> `DiagnosticsResourceLimitError` |
+| N-15 | JSON 整数编码（`render.py`；仅 renderer） | 诊断模型中的 exact `int` | 无额外 gate | 超大 int 转十进制文本时 `ValueError`（Python >= 3.11 的 int→str 位数上限，默认 4300 位）；builder 从不把 int 转文本（D-22） | 在 `render_diagnostics_json` 的单一 `try`（第 24.4 节）内 | 异常在 `except` 块之外转为 `DiagnosticsSerializationError`，不链接 | 编码异常 -> `DiagnosticsSerializationError`（因此 builder 接受的、超过位数上限的 `source_size` / `generation` / `errno` 等，在 render 阶段以类型化错误失败，不裸逃出） |
+
+#### 9.12.2 边界值冻结表（published-capable 计时字段；无 TBD）
+
+“OMIT”列即 N-05；“INCLUDE”列即 N-06 / N-07。`Int` = `DiagnosticsIntegrityError`，`Unsafe` = `DiagnosticsUnsafeValueError`。
+
+| 输入（exact 类型） | OMIT | INCLUDE |
+|---|---|---|
+| 正常 exact int（例：`1500` ms / `2` s） | PASS | PASS（ms 原值 / `2000`） |
+| 正常 exact float（例：`1500.7` ms / `0.25` s） | PASS | PASS（`1500` / `250`） |
+| `elapsed_ms` exact int `604800000`（上界） | PASS | PASS（发布 `604800000`） |
+| `elapsed_ms` exact int `604800001`（上界 + 最小超出） | PASS | Unsafe |
+| `elapsed_ms` exact float `604800000.0`（上界） | PASS | PASS（`604800000`） |
+| `elapsed_ms` exact float `604800000.999`（截断后仍 `604800000`） | PASS | PASS（`604800000`） |
+| `elapsed_ms` exact float `604800001.0`（上界 + 最小超出） | PASS | Unsafe |
+| `backoff_before_seconds` exact int `604800`（上界）/ `604801` | PASS / PASS | PASS（`604800000`）/ Unsafe |
+| `backoff_before_seconds` exact float `604800.0`（上界） | PASS | PASS（`604800000`） |
+| `backoff_before_seconds` exact float `math.nextafter(604800.0, inf)`（上界 + 最小超出） | PASS | Unsafe（严格 gate；R3 曾因先截断而放行此值，见 Design-R4 说明） |
+| 巨大 exact int（`10**400`、`10**4000` 等任意更大值） | PASS（validation-only） | Unsafe（`elapsed_ms` 与 `backoff_before_seconds` 均在 int 比较处即拒绝，不转换） |
+| 巨大有限 exact float（`1e306`、`sys.float_info.max`） | PASS（validation-only） | Unsafe（`backoff_before_seconds` 在乘法之前即拒绝；`elapsed_ms` 在 `int()` 之前即拒绝） |
+| NaN、`+inf`、`-inf`（exact float） | Int | Int（在 N-01 即拒绝，任何策略） |
+| 负数（exact int `-1`、exact float `-0.5`；`-0.0` 例外：接受，发布 `0`） | Int | Int |
+| `bool`、`int` / `float` 子类、`str`、`None` 等其它类型 | Int | Int |
+| `sequence == 1` 且 `backoff_before_seconds` 非零 | Int | Int |
+
+`SourceResult.elapsed_ms` / `AggregationResult.elapsed_ms`（永不发布）：任何策略下恒按 OMIT 列处理（类型 / 有限 / 非负；无上界；不转换）。
+
+**行为说明（Design-R4 对 Design-R3 的唯一语义收紧）**：`backoff_before_seconds` 为 exact float 且严格大于 `604800.0` 的值，R3 的“先 `int(s * 1000)` 再与 `MAX_TIMING_MS` 比较”会让 `(604800.0, 604800.001)` 内的值因截断而被放行；R4 的 SAFE BOUND BEFORE MULTIPLY gate
+对其一律 `DiagnosticsUnsafeValueError`。这是为了得到可证明 total 的输入上界；其余边界与 R3 相同。
+
+#### 9.12.3 数值横向审计（冻结，Design-R4）
+
+对第 9.5 节所有 P4-C9 读取 / 转换的数值字段逐个核对：
+
+| 字段 / 操作 | 实际数值操作 | 矩阵行 | 结论 |
+|---|---|---|---|
+| `BatchItemResult.elapsed_ms`（M-15） | 类型 / isfinite（float）/ `>= 0`；INCLUDE 时 gate + `int()` | N-01、N-04、N-05、N-06 | **FINDING（R3-01）已闭合**：R3 允许 int 经 `math.isfinite` |
+| `AggregationResult.elapsed_ms`（M-16） | 类型 / isfinite（float）/ `>= 0`；不发布 | N-01、N-04、N-05 | **FINDING（R3-01）已闭合**（同上） |
+| `SourceResult.elapsed_ms`（M-17） | 同上；不发布 | N-01、N-04、N-05 | **FINDING（R3-01）已闭合**（同上） |
+| `SourceAttempt.elapsed_ms`（M-20） | 同 `BatchItemResult.elapsed_ms` | N-01、N-04、N-05、N-06 | **FINDING（R3-01）已闭合** |
+| `SourceAttempt.backoff_before_seconds`（M-20） | 类型 / isfinite（float）/ `>= 0`；`sequence == 1 ⇒ == 0`；INCLUDE 时 gate -> `* 1000` -> `int()` | N-01、N-04、N-05、N-07、N-08、N-09、N-11 | **FINDING（R3-01）已闭合**：R3 先乘后 `int()` 再检查 |
+| `MetadataDiagnostics.elapsed_ms` / `SourceAttemptDiagnostics.elapsed_ms` / `backoff_before_ms`（第 11.5 / 11.7 节模型） | 模型构造只比较 `0 <= v <= MAX_TIMING_MS`（exact int） | N-02、N-14 | SAFE |
+| `generation`、`index`、`batch_size`、`sequence`、`max_attempts`、`ordinal`、`errno`、`http_status`、`candidate_index`、`source_size`、`metadata_position`、`new_effect_count`、`conflict_with` 元素 | exact int 比较（min / max） | N-02、N-14 | SAFE（只比较；无转换） |
+| `PreviewSummary` / `ExecutionSummary` 计数恒等式；`MetadataBatchCounts`；`stage_counts` 求和（M-08 / M-09 / M-14） | exact int 算术与相等 | N-12 | SAFE |
+| retained artifact / retry payload 字节（`len(content)` 求和；与预算比较）（第 9.6.1 / 9.6.2 节） | `len`、`sum`、int 比较 | N-13 | SAFE |
+| `retention_budget_bytes`、`retry_budget_bytes`（M-01 / M-02） | exact int 比较 | N-02、N-13 | SAFE |
+| 结构上限（`len(...) <= MAX_*`、`MAX_PROVENANCE_KEYS` 计数） | `len` 与 int 比较 / 计数 | N-14 | SAFE |
+| 毫秒转换 | N-06、N-07、N-08、N-09、N-10 | — | 由 R4 gate 保护，**SAFE** |
+| 输出的 exact int（JSON 编码） | renderer 的 int→str | N-15 | SAFE（异常被类型化为 `DiagnosticsSerializationError`） |
+| `OutputPolicy` / `ImageAcquisitionPolicy` 等 | 仅类型确认，不读取字段 | — | N/A |
+
+**审计结论**：`Raw builtin exception paths remaining: NONE`。仅 R3-01 一类 finding（exact numeric input -> builtin conversion -> 裸异常），所有同类路径（含 reviewer 未举例的 `AggregationResult.elapsed_ms`、`SourceResult.elapsed_ms`、`SourceAttempt.elapsed_ms`、`BatchItemResult.elapsed_ms`）已由 TN-1..TN-6 与 N-01..N-15 一次闭合。
 
 ---
 
@@ -1388,12 +1510,11 @@ class TimingPolicy(Enum):     OMIT = "omit";        INCLUDE = "include"
 ### 12.7 计时（`TimingPolicy`）
 
 * `OMIT`（默认）：所有计时字段为 `None`。
-* `INCLUDE`：只发布 engine / scheduler 测量的计时（P2-R-07）：`SourceAttempt.elapsed_ms` -> `elapsed_ms`；
-  `SourceAttempt.backoff_before_seconds` -> `backoff_before_ms = int(backoff_before_seconds * 1000)`；
-  `BatchItemResult.elapsed_ms` -> `MetadataDiagnostics.elapsed_ms`。转换一律为 `int(value)`（向零截断）；非有限或负值在本地
-  校验阶段（M-15 / M-20，任何计时策略下）已以 `DiagnosticsIntegrityError` 拒绝；转换后超过 `MAX_TIMING_MS` 的值在安全输出检查
-  （第 9.7 节）以 `DiagnosticsUnsafeValueError` 拒绝。`AggregationResult.elapsed_ms` 与 adapter 自报的
-  `SourceResult.elapsed_ms` 不发布。
+* `INCLUDE`：只发布 engine / scheduler 测量的计时（P2-R-07）：`SourceAttempt.elapsed_ms` -> `elapsed_ms`（第 9.12 节 N-06）；
+  `SourceAttempt.backoff_before_seconds` -> `backoff_before_ms`（N-07：**先**以输入秒数 gate——exact int `s > 604800`、exact float `s > 604800.0` 即 `DiagnosticsUnsafeValueError`——**之后**才 `s * 1000`，float 再 `int(...)`；
+  **禁止**先 `int(s * 1000)` 再与 `MAX_TIMING_MS` 比较）；`BatchItemResult.elapsed_ms` -> `MetadataDiagnostics.elapsed_ms`（N-06：exact int `v > MAX_TIMING_MS` 拒绝；exact float `v >= 604800001.0` 拒绝，否则 `int(v)` 向零截断）。
+  非有限、负值、非 `int` / `float` 类型在本地校验阶段（M-15 / M-20，任何计时策略下）已以 `DiagnosticsIntegrityError` 拒绝；超过发布上界的值以 `DiagnosticsUnsafeValueError` 拒绝（第 9.7 节）。逐值边界见第 9.12.2 节边界值冻结表。
+  `AggregationResult.elapsed_ms` 与 adapter 自报的 `SourceResult.elapsed_ms` 不发布、不转换（N-05）。
 * 计时值是输入 evidence：诊断对相同输入仍确定；但两次真实运行的计时不同，因此需要跨运行比较的消费者应使用默认 `OMIT`。
 
 ### 12.8 批级
@@ -1683,7 +1804,10 @@ renderer 先本地重检诊断图（第 24.4 节），再**显式**把模型转�
 | 将被输出的值违反第 17.2 / 18.2 节或计时范围 | `DiagnosticsUnsafeValueError` |
 | 诊断模型构造违反自身不变量（实现缺陷或调用方手工构造了非法模型） | `DiagnosticsContractError` |
 | 渲染前诊断图未通过本地重检 | `DiagnosticsIntegrityError` |
-| JSON 编码阶段的其它 `ValueError` / `TypeError` / `RecursionError` | `DiagnosticsSerializationError` |
+| JSON 编码阶段的其它 `ValueError` / `TypeError` / `RecursionError` / `OverflowError`（含超大 int 转十进制文本的位数上限，第 9.12 节 N-15） | `DiagnosticsSerializationError` |
+
+**Failure model 总则（Design-R4）**：对所有 supported input 与可检测的 tampered exact-type input，public builder / renderer 要么成功，要么只以本节表中的 `Diagnostics*` 错误失败；**裸 `OverflowError` / `ValueError` / `TypeError`（exact type 为 builtin 本身）不得逃出**（第 9.12 节 TN-5）。
+本节表中出现的 builtin 异常名只指 `render.py` 单一 `try` 内捕获并转换为 `DiagnosticsSerializationError` 的编码阶段异常，不是允许逃逸的结果。
 
 ### 24.2 builder 检查顺序（冻结）
 
@@ -1722,7 +1846,7 @@ Local Validation 保证：第 9.5 节 Consumed-Object Validation Map 逐类型�
 2. 本地重检整个诊断图：每个节点精确类型 + 调用 `models.py` 中该模型的模块级本地校验函数（不以属性方式访问 `__post_init__`）；
    诊断图中携带的三种上游值对象按第 9.5 节 M-08 / M-09 / M-25 / M-28 本地校验 -> 失败 `DiagnosticsIntegrityError`；
 3. 转换 JSON 树（第 22.2 节；遇到第 17.2 节之外的 `str` -> `DiagnosticsUnsafeValueError`）；
-4. 有界流式编码（第 21.3 节）；编码异常（`ValueError` / `TypeError` / `RecursionError`）-> 在 `except` 块之外抛
+4. 有界流式编码（第 21.3 节）；编码异常（`ValueError` / `TypeError` / `RecursionError` / `OverflowError`）-> 在 `except` 块之外抛
    `DiagnosticsSerializationError`，不链接。
 
 ### 24.5 诊断失败不影响原结果
@@ -1757,7 +1881,7 @@ logger 修改、环境变量读写、`sys.modules` 修改；不修改任何输�
   `__post_init__`、`__dict__`、`__class__`、`object.__setattr__`），没有任何豁免；`os` 只允许 `os.path.isabs`、`os.path.join`、
   `os.path.basename`、`os.sep`、`os.altsep`，且只在 `validation.py`；**任何模块都不得 import `gc`**，也不得 import / 使用
   `inspect`、`ctypes`、`sys`、`pickle`、`marshal`、`copyreg`、`weakref`、`traceback`、`builtins`、`copy`（No New Introspection，
-  第 7 节；AST 静态断言 + 运行时断言 `gc` 未被 `fc2_organizer.diagnostics` 的任何模块作为属性引用）；`math` 只允许 `math.isfinite`；`json` 只允许在 `render.py` 中使用 `json.JSONEncoder`；`types` 只允许 `types.MappingProxyType`；`sorted`、`min`、`max` 不得被调用（第 9.10 节 D-20）；内部常量 `MAX_PROVENANCE_KEYS` 定义在 `models.py`、不得出现在任何阶段的 `__all__`（第 8.3 节）；`validation.py` 不得调用方法名为 `keys` / `values` / `items` / `get` / `copy` 的方法（第 9.2 节第 9 条 Step 3 的 AST 代理）。
+  第 7 节；AST 静态断言 + 运行时断言 `gc` 未被 `fc2_organizer.diagnostics` 的任何模块作为属性引用）；`math` 只允许 `math.isfinite`（只作用于 exact `float`，第 9.12 节 N-01；由 `math.isfinite` tripwire 测试证明）；`json` 只允许在 `render.py` 中使用 `json.JSONEncoder`；`types` 只允许 `types.MappingProxyType`；`sorted`、`min`、`max` 不得被调用（第 9.10 节 D-20）；内部常量 `MAX_PROVENANCE_KEYS` 定义在 `models.py`、不得出现在任何阶段的 `__all__`（第 8.3 节）；`validation.py` 不得调用方法名为 `keys` / `values` / `items` / `get` / `copy` 的方法（第 9.2 节第 9 条 Step 3 的 AST 代理）。
 * 不 import / 调用 `BatchOrchestrator`、`merge_retry`、`preflight_execution`、`execute_filesystem`、任何 builder / acquirer /
   materializer / adapter（no orchestration ownership）。
 * 模块级赋值只允许不可变常量（no global mutable registry）。
@@ -1828,7 +1952,8 @@ logger 修改、环境变量读写、`sys.modules` 修改；不修改任何输�
 | JSON / schema | 顶层 key 集合；每类对象 key 集合恒定；`null` 表达；`sort_keys`；ASCII-only；无末尾换行；schema 常量 |
 | 资源上限 | 第 21.2 节每项的边界（等于上限成功、上限 + 1 失败、且失败发生在迭代前；`MAX_PROVENANCE_KEYS` 按上一行“R2-01 `MAX_PROVENANCE_KEYS` 边界”：单遍计数、第 65 个 key 即停、不物化）；输出字节上限（第 28.4 节） |
 | 非法输入与检查顺序 | 错误顶层类型、子类、错误策略类型；`items` 非 tuple；第 24.2 节检查顺序（同时违反多条时报告最先的一步） |
-| 计时策略 | OMIT 时全部为 `None`；INCLUDE 时截断规则、范围、NaN / 负数 / 超限 -> `DiagnosticsIntegrityError`（输入不合法）或 `DiagnosticsUnsafeValueError`（超出 `MAX_TIMING_MS`） |
+| 计时策略 | OMIT 时全部为 `None`；INCLUDE 时截断规则（`int(v)` 向零截断）、发布范围 `0..MAX_TIMING_MS`；逐值边界与失败类型以第 9.12.2 节边界值冻结表为准（见下一行 Numeric Totality） |
+| **Numeric Totality（R3-01 non-vacuity，冻结）** | `tests/unit/diagnostics/test_diagnostics_numeric_totality.py`（第 9.12 节；对每个被测字段 `BatchItemResult.elapsed_ms`、`AggregationResult.elapsed_ms`、`SourceResult.elapsed_ms`、`SourceAttempt.elapsed_ms`、`SourceAttempt.backoff_before_seconds`，在 `OMIT` 与 `INCLUDE` 下，经真实公开构造器 / `object.__setattr__`（仅当公开构造器拒绝该值时）植入）：(1) 巨大 exact int `10**400`；(2) 更大 exact int `10**4000`（证明不是偶然边界）；(3) 巨大有限 float（`backoff_before_seconds = 1e306` 使 `* 1000` 溢出为 `inf`；以及 `sys.float_info.max`）；(4) NaN；(5) `+inf`；(6) `-inf`；(7) 负数（`-1`、`-0.5`；`-0.0` 为接受并发布 `0` 的正例）；(8) 各 gate 的 exact 上界（`elapsed_ms` int `604800000` / float `604800000.0` / `604800000.999`；`backoff_before_seconds` int `604800` / float `604800.0`）；(9) 上界 + 最小超出（`elapsed_ms` int `604800001` / float `604800001.0`；`backoff_before_seconds` int `604801` / float `math.nextafter(604800.0, math.inf)`）；(10) 正常 exact int；(11) 正常 exact float；(12) backoff 正常转换正例（例 `2` -> `2000`、`0.25` -> `250`、上界 `604800` / `604800.0` -> `604800000`）；(13) **所有失败输入断言抛 `DiagnosticsError` 层次内的错误（类型符合第 9.12.2 节表），并显式断言**不是裸 builtin 异常**：捕获 `Exception as exc` 后断言 `isinstance(exc, DiagnosticsError)` 且 `type(exc) not in (OverflowError, ValueError, TypeError)`（注意 `DiagnosticsIntegrityError` 等按第 8.4 节本身继承 `ValueError` / `TypeError`，因此判据是“exact type 是否为 builtin”，不是 `isinstance(exc, ValueError)`）**。另有：`math.isfinite` tripwire（测试期间把 `fc2_organizer.diagnostics.validation` 命名空间内的 `math` 遮蔽为“若 `isfinite` 的实参是 `int` 则失败”的包装，合法与巨大 int 输入均不触发）；“先转换后检查”mutation 被杀死（见第 28.5 节）；巨大 int 的 `sequence == 1` / `backoff == 0` 检查（N-11）为 `DiagnosticsIntegrityError`；N-12 / N-13 / N-14 的巨大 int 计数 / 预算 / 字节字段为 `DiagnosticsIntegrityError`；N-15 超过位数上限的输出 int 在 render 阶段为 `DiagnosticsSerializationError`（先 `sys.set_int_max_str_digits` 精确设置并在测试后复位）。 |
 | 无副作用 | 第 28.6 节 |
 
 ### 28.2 Architecture
@@ -1875,6 +2000,7 @@ retry result 仍可 `merge_retry`（未被消费）。每个场景同时证明�
 | 无副作用 | 见第 28.6 节 | mutation “投影时调用 `preflight_execution` / orchestrator / `open`” 被杀死 |
 | fail closed / 本地校验 | 篡改输入、恶意子类 | mutation “跳过某个 M-xx 精确类型检查”（至少覆盖 `SourceResult.metadata`、`OrganizePlan`、`ArtifactWriteRequest`、`BatchResult`）、“跳过第 9.6.5 节 plan 布局检查”、“跳过第 9.6.4 节 `retry_material` 存在性 / 身份 / checkpoint 关系检查”（逐项：存在性、`material.plan is item.plan`、RESUME checkpoint 身份、FRESH 无 checkpoint）、“跳过第 9.6.1 / 9.6.2 节 retained 预算检查”、“信任 `retry_kind` property 而不做本地推导比较”、“跳过条目数上限”、“在第 7 步之前读取 summary” 各自被杀死（sentinel 触发或 fail closed 断言失败） |
 | **R2-01 key 扫描 / dispatch-safety** | R2-01 gate 与边界测试（第 28.1 节） | mutation（测试内 monkeypatch 校验函数，不提交生产改动）各自被杀死：“在 Step 3 之前或之中执行 `name in proxy` / `proxy[name]`（边验边查）”-> `EvilStr` 变体 (a) / (c) 的 `__eq__` sentinel 触发；“跳过 `type(key) is str`”或“只检查 known key 的类型”-> 变体 (b) 不再抛 `DiagnosticsIntegrityError` 或 sentinel 触发；“先 `list()` / `tuple()` / `set()` / `sorted()` / `len()` 物化 proxy 再检查大小”-> tripwire 触发；“去掉 `MAX_PROVENANCE_KEYS` 上限 / `>` 改 `>=` / 计数在检查之后 / unknown key 不计数”-> exact-limit 与 limit + 1 边界失败；“在第 65 个 key 之后继续读取”-> 早停测试得到错误类型 `DiagnosticsIntegrityError` 或 sentinel 触发；“Phase R 成员判定先于同一容器 Phase V 全部完成”-> Phase V→Phase R 非空洞性用例的 `EvilSID.__eq__` sentinel 触发；“不复位 sentinel”不是 mutation（是测试纪律）——测试断言复位后计数的**起点**（UC-2 证明构造期确有触发） |
+| **R3-01 数值 totality** | 第 28.1 节 Numeric Totality 行 | mutation（测试内 monkeypatch 校验 / 转换函数，不提交生产改动）各自被杀死：“对 exact int 调用 `math.isfinite`（或 `float(v)`）”-> `10**400` 用例得到裸 `OverflowError` 或 `isfinite` tripwire 触发；“先 `int(s * 1000)` 再与 `MAX_TIMING_MS` 比较（先转换后检查）”-> `backoff_before_seconds = 1e306` 用例得到裸 `OverflowError`；“去掉 / 偏移 `elapsed_ms` 或 `backoff` 的上界 gate（`>` 改 `>=`、`604800` 改 `604801`、`604800001.0` 改 `604800000.0`）”-> 上界与上界 + 最小超出用例失败；“`OMIT` 下也强加上界”-> 巨大 int / 巨大 float 的 OMIT 正例失败；“`INCLUDE` 下不 gate 巨大 exact int”-> `10**400` 的 INCLUDE 用例失败；“用 `try/except OverflowError` 捕获后吞掉 / 放行”-> 断言 Diagnostics* 类型的用例失败 |
 
 ### 28.6 无副作用证据
 
@@ -1905,7 +2031,7 @@ P4-C9 Independent Level 1 Review 以下列全部满足为 PASS 前提：
 2. 第 12 节每条映射有对应测试；第 1 节问题表每一行可由诊断输出回答（integration 证据）；
 3. 第 9 节输入校验策略逐项实现：0 上游 `__post_init__` / private / dunder / 实例校验方法调用（AST + 运行时 sentinel 双重证明）；
    M-01..M-30 与第 9.6 节每一条有正反例；第 9.0 节 A / B 层的恶意嵌套子类门槛全部 sentinel 未触发；`RetryMaterial` / retained
-   预算门槛通过；0 个 `gc` / 反射原语 import；第 9.0.1 节 validate-before-dispatch 与第 9.10 节 Dispatch Safety Matrix 全部行有对应测试 / AST 证据；R2-01 EvilStr public-constructor gate、Normal-Key Positive Control、`MAX_PROVENANCE_KEYS` 边界与上游 characterization 测试通过；
+   预算门槛通过；0 个 `gc` / 反射原语 import；第 9.0.1 节 validate-before-dispatch 与第 9.10 节 Dispatch Safety Matrix 全部行有对应测试 / AST 证据；R2-01 EvilStr public-constructor gate、Normal-Key Positive Control、`MAX_PROVENANCE_KEYS` 边界与上游 characterization 测试通过；第 9.12 节 Numeric Totality Matrix（N-01..N-15）、边界值冻结表与 `test_diagnostics_numeric_totality.py` 全部通过，且没有裸 `OverflowError` / `ValueError` / `TypeError` 逃出 public builder / renderer；
 4. 字段出处只来自 Phase 3 `field_sources`（先有界单遍 key 扫描与 exact key 验证，再按固定 known 字段名查询；不 introspect `MappingProxyType`）；没有重新聚合；
 5. 没有重新计算 summary / outcome / RetryKind；与 P4-C8 值逐项相等；
 6. 确定性、排序、脱敏（A 类绝对、B 类默认 NONE）、路径策略、异常安全、载荷边界、资源 / 输出上界、fail closed、无副作用全部有
@@ -1938,6 +2064,7 @@ P4-C9 Independent Level 1 Review 以下列全部满足为 PASS 前提：
   默认 `NONE`。
 * 同一失败输入同时违反多条规则时，错误类型由遍历中最先遇到的违规决定（第 9.0.1 节 V-4）；这只影响失败输入的错误类，不影响任何成功输出。
 * `field_sources` 的 stored key 数超过 `MAX_PROVENANCE_KEYS`（64）时 fail closed（`DiagnosticsResourceLimitError`），即使其中只有 known key；真实 Phase 3 producer 至多 15 个 key，不受影响。
+* 数值（Design-R4）：`TimingPolicy.OMIT` 下，validation-only 计时字段接受任意 magnitude 的非负有限值（不发布、不转换）；`INCLUDE` 下超过发布上界 fail closed（`DiagnosticsUnsafeValueError`）。`generation` / `source_size` / `errno` / `ordinal` / `max_attempts` 等无上界整数字段对任意 magnitude 成立于校验；超过 Python int→str 位数上限的值使 `render_diagnostics_json` 以 `DiagnosticsSerializationError` 失败（第 9.12 节 N-15）。`backoff_before_seconds` 的 exact float 严格大于 `604800.0` 时 `INCLUDE` 一律拒绝（第 9.12.2 节）。
 * 本地校验比部分上游构造函数更严格（精确类型、有限计时值）；真实 producer 输出总满足它（integration 证明），但手工构造的、
   上游接受的边缘对象（例如 `int` 子类字段）会被诊断拒绝。
 * 本地校验只覆盖被读取的字段及其冻结不变量（第 9.4 节）；未读取字段（例如 `NormalizedMetadata` 的文本字段、`EntryIdentity`）
@@ -1960,13 +2087,15 @@ Closure 一次同步。
 
 | 项 | 状态 |
 |---|---|
-| P4-C9 Design（本合同 + 施工计划） | DESIGN-R3 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED |
-| Original Design Review / Design-R1 Review / Design-R2 Review | FAIL / FAIL / FAIL |
-| P4-C9-DESIGN-R-01 / R-04 / R-05 | CLOSED（Design-R1 Review 确认；Design-R3 语义 0 回归） |
-| P4-C9-DESIGN-R-03 | CLOSED（Design-R2 Review 确认；Design-R3 语义 0 回归） |
-| P4-C9-DESIGN-R1-01 / R1-02 | CLOSED（Design-R2 Review 确认；Design-R3 语义 0 回归） |
-| P4-C9-DESIGN-R-02 | OPEN → Design-R3 REMEDIATED — REVIEW REQUIRED |
-| P4-C9-DESIGN-R2-01（HIGH / BLOCKING；R-02 的 public-constructor-reachable 具体实例） | Design-R3 REMEDIATED — REVIEW REQUIRED |
+| P4-C9 Design（本合同 + 施工计划） | DESIGN-R4 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED |
+| Original Design Review / Design-R1 Review / Design-R2 Review / Design-R3 Review | FAIL / FAIL / FAIL / FAIL |
+| P4-C9-DESIGN-R-01 / R-04 / R-05 | CLOSED（Design-R1 Review 确认；Design-R4 语义 0 回归） |
+| P4-C9-DESIGN-R-03 | CLOSED（Design-R2 Review 确认；Design-R4 语义 0 回归） |
+| P4-C9-DESIGN-R1-01 / R1-02 | CLOSED（Design-R2 Review 确认；Design-R4 语义 0 回归） |
+| P4-C9-DESIGN-R-02 | CLOSED（Design-R3 Review 确认；Design-R4 语义 0 回归） |
+| P4-C9-DESIGN-R2-01（R-02 的 public-constructor-reachable 具体实例） | CLOSED（Design-R3 Review 确认；Design-R4 语义 0 回归） |
+| P4-C9-DESIGN-R3-01（HIGH / BLOCKING；Numeric Totality） | REMEDIATED — REVIEW REQUIRED |
+| P4-C9-DESIGN-R3-02（MEDIUM / BLOCKING；Stale Design-R2 PASS Activation Conditions） | REMEDIATED — REVIEW REQUIRED |
 | P4-C9 Frozen Contract | NOT YET ACCEPTED |
 | P4-C9 Construction Plan | NOT YET ACCEPTED |
 | P4-C9 Design Accepted Head | NOT ESTABLISHED |
@@ -1977,7 +2106,7 @@ Closure 一次同步。
 | P4-C9 Independent Level 1 Review | NOT STARTED |
 | P4-C9 Production | NOT STARTED |
 
-DESIGN-R3 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW PASS 本身建立 Design Accepted Head；之后不创建“design closure /
+**唯一 authority transition（冻结）**：DESIGN-R4 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW PASS 本身建立 Design Accepted Head（= Design-R4 Candidate），Frozen Contract / Construction Plan = Design-R4 Candidate，之后才允许进入 S1；之后不创建“design closure /
 design accepted”之类的纯状态 docs commit，实现分支直接继续（治理文档第 11.1 节）。
 
 ---
@@ -2015,3 +2144,7 @@ design accepted”之类的纯状态 docs commit，实现分支直接继续（�
 | 27 | `MAX_PROVENANCE_KEYS`（Design-R3） | `64`，内部常量（`models.py`，不进 `__all__`，不出现在输出）；超限 `DiagnosticsResourceLimitError`，观察到第 65 个 key 即停；known 与 unknown key 同等计数 | `>= 15`；覆盖真实 Phase 3 producer（至多 15 个 key）并留约 4 倍余量；每个 `AggregationResult` 最坏 65 个 `type()` 检查，不物化；与 `MAX_SOURCES_PER_ITEM = 64` 同量级；技术设计裁决，无需 Owner |
 | 28 | Dispatch Safety Matrix / Horizontal Audit（Design-R3） | 新增第 9.0.1 节 validate-before-dispatch（V-1..V-4）、第 9.10 节 Dispatch Safety Matrix（D-01..D-31）、第 9.11 节 Horizontal Dispatch Audit（H-01..H-15）；批准 property 的依赖图（第 9.3.1 节）显式化；禁止 `sorted` / `min` / `max`（AST）；`validation.py` 禁止 `keys` / `values` / `items` / `get` / `copy` 方法调用（AST 代理） | 闭合 R-02 的根因（“caller-originated 对象在 exact-type 校验前进入分派”）而不是只修一个点；审计只发现 H-05（= R2-01）一处同类缺口，其余位置把隐含顺序写成规范性前置条件，语义不变 |
 | 29 | 上游 authority 引用方式（Design-R3） | 以稳定 symbol / 函数 + frozen upstream SHA（`a662659…`）+ 上游合同节为 normative authority，源码行号仅为 review evidence；`test_diagnostics_upstream_characterization.py`（UC-1..UC-9）固定所引事实 | 行号会漂移；characterization 使上游行为变化触发合同修订而不是静默失配；不修改上游 |
+| 30 | 数值全域性 invariant（Design-R4） | TOTAL VALIDATION BEFORE THROWING CONVERSION（第 9.12 节 TN-1..TN-6）：exact int 只与 int 常量比较，不经 `float()` / `math.isfinite`；`math.isfinite` 只作用于 exact `float`；`float * 1000` 与 `int(float)` 只在 total 的 safe-bound gate 之后；裸 `OverflowError` / `ValueError` / `TypeError` 不得逃出 | 闭合 R3-01：exact int 本无 NaN / ±inf；对巨大 int 调 `math.isfinite` 抛 `OverflowError`；`1e306 * 1000 = inf` 使 `int()` 抛 `OverflowError`；先转换后检查不可证明 total |
+| 31 | timing 发布上界（Design-R4） | 输入侧 gate：`elapsed_ms` int `> 604800000` / float `>= 604800001.0` 拒绝；`backoff_before_seconds` int `> 604800` / float `> 604800.0` 拒绝（先 gate 后乘）；OMIT 下 validation-only 字段无上界；新增内部常量 `MAX_TIMING_SECONDS = 604800` | gate 对任意精度 int 与全部 binary64 有限 float 都是 total；IEEE 乘法单调 + `604800.0 * 1000` 精确 => 通过 gate 即不溢出、不超 `MAX_TIMING_MS`；OMIT 不发布 / 不转换，保持 R3 行为；唯一收紧是 `(604800.0, 604800.001)` 内的 backoff float |
+| 32 | 不为无上界整数字段新增 `MAX_DIAGNOSTIC_INT`（Design-R4） | `generation` / `source_size` / `errno` / `ordinal` / `max_attempts` 保持仅下界；超位数上限的输出 int 以 `DiagnosticsSerializationError` 类型化失败（N-15） | 校验阶段只做 int 比较，total；避免为 11 个模型新增 schema 级上限（本轮不重新设计公开 schema / 资源模型）；失败仍为 `Diagnostics*` |
+| 33 | authority activation（Design-R4） | 唯一 transition：Design-R4 Independent Closure Review PASS -> Design Accepted Head = Design-R4 Candidate -> Frozen Contract / Construction Plan = Design-R4 Candidate -> 允许进入 S1；R2 / R3 FAIL 仅为历史事实 | 闭合 R3-02：不存在把已 FAIL 的 Design-R2 复查 PASS 作为 implementation activation 的残留 |
