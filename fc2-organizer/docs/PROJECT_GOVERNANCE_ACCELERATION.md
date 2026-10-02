@@ -5,7 +5,9 @@
 Owner Approved        : YES
 Effective From        : P4-C9 及之后尚未冻结的 Phase / Package
 Non-Retroactive       : YES
-Governance Amendment  : IMPLEMENTED — INDEPENDENT GOVERNANCE REVIEW REQUIRED
+Governance Amendment  : R1 IMPLEMENTED — INDEPENDENT GOVERNANCE REVIEW REQUIRED
+GOV-ACCEL-V2-R-01     : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+GOV-ACCEL-V2-R-02     : REMEDIATED — INDEPENDENT REVIEW REQUIRED
 Governance Base       : a662659dfd6e801531b14af7913d84a5f9f859e2（P4-C8 Final Closure Docs Head）
 P4-C9 Frozen Base     : a662659dfd6e801531b14af7913d84a5f9f859e2
 P4-C9                 : NOT STARTED
@@ -137,7 +139,8 @@ S1 -> Review -> docs closure -> S2 -> Review -> docs closure -> S3 -> ...
 
 ### 8.1 A 类：低风险
 
-默认直接并入当前 C，**不得**单独建立 C：
+以下工作通常只是某个较大能力的一部分，**默认并入当前完整 C**；原则上**不应**仅因文件、模块等代码组织边界而机械地拆成
+独立的 C：
 
 * API wiring；
 * model mapping；
@@ -151,6 +154,14 @@ S1 -> Review -> docs closure -> S2 -> Review -> docs closure -> S3 -> ...
 * packaging metadata；
 * install guide；
 * compatibility matrix docs。
+
+默认合并是原则，不是无例外的禁令；但也**不**表示 A 类工作可以自由地单独成 C。单独拆 C 必须有明确的治理依据：
+
+* **完整独立能力边界**：某项工作虽然技术风险仍低，但它本身已经构成完整、独立、可验收的用户能力 / 纵向技术闭环
+  （符合第 7 节）时，可以基于明确记录的治理理由独立形成一个 C；
+* **真实风险分类变化**：实际风险升高时，按 A -> B 或 A -> C 重新分类，并按相应类别的规则处理（第 8.4 节）。
+
+无论是否独立成 C，测试、evidence 与 Independent Review 的要求都不降低。
 
 ### 8.2 B 类：中风险
 
@@ -290,7 +301,11 @@ Reviewer 判 FAIL 后，如果 findings 满足以下全部条件，允许统一�
 * 默认保持**一个 C**，风险默认 **B 类**。
 * 内部允许：S1 diagnostic model / event；S2 orchestration integration；S3 output / redaction / tests。
 * S1-S3 默认连续完成，只做一次 C9 Level 1 Review。
-* 只有当 diagnostics 引入 persistence、敏感信息落盘、不可逆 schema 或新的 security boundary 时，才升级治理颗粒度。
+* 出现以下情况时**必须**升级治理颗粒度，包括但不限于：diagnostics 引入 persistence、敏感信息落盘、不可逆 schema、
+  新的 security boundary。这四项是明确的重要升级触发项，**不是**穷尽清单；任何其它实际达到第 8.3 节 C 类定义的风险，
+  同样必须升级治理颗粒度并按 C 类规则处理。
+* 以上是本治理文档的规划建议。P4-C9 的 Contract / Construction Plan 一旦冻结，若其风险裁决比本建议更细，以 Frozen
+  Contract / Frozen Construction Plan 为准（第 4 节）；本节不构成未来 Frozen P4-C9 不可调整的风险白名单。
 
 ### 14.2 P4-C10 — Phase 4 Final Acceptance
 
@@ -434,3 +449,23 @@ Governance Authority : <本 amendment 独立复查 PASS 后的 Final Reviewed Go
 * 没有功能价值的中间 closure。
 
 v1.0 的全部硬指标保持不变。
+
+## 附录：R1 修复记录
+
+```text
+Original Candidate          : 99254d9c465ad6d42f75f9c079cc35c5fe37e2a2
+Original Governance Review  : FAIL
+Findings                    : GOV-ACCEL-V2-R-01（MEDIUM / BLOCKING）、GOV-ACCEL-V2-R-02（HIGH / BLOCKING）
+当前状态                    : 两项均为 REMEDIATED — INDEPENDENT REVIEW REQUIRED
+```
+
+* **GOV-ACCEL-V2-R-01**：原第 8.1 节把 A 类“默认并入当前 C”写成了“不得单独建立 C”的绝对禁令，与第 7 节的完整能力
+  粒度原则存在歧义。R1 改为默认合并原则：完整、独立、可验收的能力边界，或真实的风险分类变化，可以作为单独成 C 的明确
+  治理依据；A 类工作不能自由单独成 C；风险升级规则与测试 / evidence / Review 强度不变。
+* **GOV-ACCEL-V2-R-02**：原第 14.1 节以“只有当……才”把 P4-C9 的升级条件限制为四项穷举白名单。R1 改为：P4-C9 仍默认
+  Risk Class B、一个 C、S1-S3 连续施工、一次 C9 Level 1 Review；四项是必须升级的明确触发项但不穷尽，任何其它达到第 8.3 节
+  C 类定义的实际风险同样必须升级；未来 Frozen P4-C9 Contract / Construction Plan 的更细裁决优先。
+
+除上述两处直接必要的文字和本状态记录外，本文件其它章节的语义未改变。P4-C9 Frozen Base 仍为
+`a662659dfd6e801531b14af7913d84a5f9f859e2`；Final Reviewed Governance Head、Project Governance Authority Head 与 P4-C9
+Planning Parent 均尚未建立，只有 R1 独立治理复查 PASS 后才建立。P4-C9：NOT STARTED。
