@@ -27,15 +27,21 @@
 * the public API is exactly contract section 7.1 (S5, final): ``__all__`` equals the frozen list item by item and
   in order (also parsed from the contract text); every name exists; no internal name leaks;
 * at runtime, with ``amane`` / ``requests`` / ``sqlite3`` / ``shelve`` / ``dbm`` / ``pickle`` blocked, the
-  package imports, its S1 functions run and a real ``preview`` runs end to end (scripted engine / client).
+  package imports, its S1 functions run and a real ``preview`` runs end to end (scripted engine / client);
+* (S5-R1, finding P4-C8-S5-R-03) every test that re-imports the packages runs inside ``_isolated_imports``, which
+  restores the exact pre-test ``sys.modules`` objects of ``fc2_organizer`` / ``fc2_metadata_core`` / the blocked
+  roots and the exact ``sys.meta_path`` list on every exit (proven for repetition, order and exceptions).
 """
 
 from __future__ import annotations
 
 import ast
+import contextlib
 import importlib
 import sys
 from pathlib import Path
+
+import pytest
 
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src"
 ORGANIZER_SRC_ROOT = SRC_ROOT / "fc2_organizer"
@@ -429,19 +435,44 @@ def test_no_reverse_dependency_on_orchestration():
         assert "orchestration" not in module
 
 
-def _purge() -> None:
+_FC2_ROOTS = frozenset({"fc2_organizer", "fc2_metadata_core"})
+
+
+def _purge(roots: frozenset[str] = _FC2_ROOTS) -> None:
     for name in list(sys.modules):
-        if name.split(".")[0] in {"fc2_organizer", "fc2_metadata_core"}:
+        if name.split(".")[0] in roots:
             del sys.modules[name]
 
 
-def test_bare_import_of_fc2_organizer_does_not_load_orchestration():
-    _purge()
+@contextlib.contextmanager
+def _isolated_imports(*, block: bool = False):
+    """Fresh imports of the packages (and, with ``block``, the forbidden roots unloaded behind a trap). On every
+    exit -- pass, assertion, import error or any other exception -- the exact pre-test module objects of
+    ``fc2_organizer`` / ``fc2_metadata_core`` / the blocked roots and the exact ``sys.meta_path`` list come back, so
+    no test leaves a second copy of a package (whose exact-type checks would reject the first copy's objects)."""
+    roots = _FC2_ROOTS | _BLOCKED_ROOTS
+    saved_modules = {name: module for name, module in sys.modules.items() if name.split(".")[0] in roots}
+    saved_meta_path = list(sys.meta_path)
+    blocker = _BlockFinder() if block else None
     try:
-        importlib.import_module("fc2_organizer")
-        assert _PKG not in sys.modules
+        _purge(_FC2_ROOTS | (_BLOCKED_ROOTS if block else frozenset()))
+        if blocker is not None:
+            sys.meta_path.insert(0, blocker)
+        yield blocker
     finally:
-        _purge()
+        sys.meta_path[:] = saved_meta_path
+        _purge(roots)
+        sys.modules.update(saved_modules)
+
+
+def _bare_import_body() -> None:
+    importlib.import_module("fc2_organizer")
+    assert _PKG not in sys.modules
+
+
+def test_bare_import_of_fc2_organizer_does_not_load_orchestration():
+    with _isolated_imports():
+        _bare_import_body()
 
 
 # --------------------------------------------------------------------------- resource ownership (E0-R1 / E0-R2)
@@ -530,31 +561,32 @@ def test_public_api_is_exactly_the_final_contract_list():
     block = _contract_section("### 7.1 ", "### 7.2 ").split("```text", 1)[1].split("```", 1)[0]
     parsed = tuple(name.strip() for name in block.replace("\n", ",").split(",") if name.strip())
     assert parsed == _FINAL_PUBLIC_API  # the test's list is the contract's list, in order
-    _purge()
-    try:
-        orchestration = importlib.import_module(_PKG)
-        assert type(orchestration.__all__) is list and tuple(orchestration.__all__) == _FINAL_PUBLIC_API
-        assert len(orchestration.__all__) == len(set(orchestration.__all__)) == 37
-        assert set(_FINAL_PUBLIC_API) == _S1_PUBLIC_API | {"BatchOrchestrator", "merge_retry", "PreviewSummary",
-                                                           "ExecutionSummary"}
-        for name in orchestration.__all__:
-            assert hasattr(orchestration, name), name
-        assert callable(orchestration.BatchOrchestrator.execute) and callable(orchestration.merge_retry)
-        assert callable(orchestration.BatchOrchestrator.preview_retry)
-        assert isinstance(orchestration.BatchPreview.summary, property)
-        assert isinstance(orchestration.BatchExecutionResult.summary, property)
-        for name in ("merge_retry", "summary"):
-            assert not hasattr(orchestration.BatchOrchestrator, name), name
-        exported = set(_FINAL_PUBLIC_API)
-        for name in (_LATER_OR_FORBIDDEN_PUBLIC - exported) | {
-                "revalidate", "type_name", "reason_detail", "bounded_snapshot", "retry_payload_bytes",
-                "ConsumptionRegistry", "build_retry_preview", "base_retained", "build_preview", "execute_preview"}:
-            assert name not in orchestration.__all__ and not hasattr(orchestration, name), name
-        public = {name for name in vars(orchestration) if not name.startswith("_")}
-        assert public - exported <= {"cancellation", "errors", "models", "orchestrator", "preview", "execute",
-                                     "retry", "stages", "recognition"}  # only submodule names besides __all__
-    finally:
-        _purge()
+    with _isolated_imports():
+        _public_api_body()
+
+
+def _public_api_body() -> None:
+    orchestration = importlib.import_module(_PKG)
+    assert type(orchestration.__all__) is list and tuple(orchestration.__all__) == _FINAL_PUBLIC_API
+    assert len(orchestration.__all__) == len(set(orchestration.__all__)) == 37
+    assert set(_FINAL_PUBLIC_API) == _S1_PUBLIC_API | {"BatchOrchestrator", "merge_retry", "PreviewSummary",
+                                                       "ExecutionSummary"}
+    for name in orchestration.__all__:
+        assert hasattr(orchestration, name), name
+    assert callable(orchestration.BatchOrchestrator.execute) and callable(orchestration.merge_retry)
+    assert callable(orchestration.BatchOrchestrator.preview_retry)
+    assert isinstance(orchestration.BatchPreview.summary, property)
+    assert isinstance(orchestration.BatchExecutionResult.summary, property)
+    for name in ("merge_retry", "summary"):
+        assert not hasattr(orchestration.BatchOrchestrator, name), name
+    exported = set(_FINAL_PUBLIC_API)
+    for name in (_LATER_OR_FORBIDDEN_PUBLIC - exported) | {
+            "revalidate", "type_name", "reason_detail", "bounded_snapshot", "retry_payload_bytes",
+            "ConsumptionRegistry", "build_retry_preview", "base_retained", "build_preview", "execute_preview"}:
+        assert name not in orchestration.__all__ and not hasattr(orchestration, name), name
+    public = {name for name in vars(orchestration) if not name.startswith("_")}
+    assert public - exported <= {"cancellation", "errors", "models", "orchestrator", "preview", "execute",
+                                 "retry", "stages", "recognition"}  # only submodule names besides __all__
 
 
 _BLOCKED_ROOTS = {"amane", "requests", "sqlite3", "shelve", "dbm", "pickle"}
@@ -602,69 +634,134 @@ def _run_real_preview(orchestration, discovery, tmp_path) -> None:
 
 
 def test_orchestration_imports_and_runs_with_forbidden_modules_blocked(tmp_path):
-    _purge()
-    saved = {name: sys.modules.pop(name) for name in list(sys.modules) if name.split(".")[0] in _BLOCKED_ROOTS}
-    blocker = _BlockFinder()
-    sys.meta_path.insert(0, blocker)
-    try:
-        orchestration = importlib.import_module(_PKG)
-        recognition = importlib.import_module(f"{_PKG}.recognition")
-        discovery = importlib.import_module("fc2_organizer.discovery")
-        import os
+    with _isolated_imports(block=True):
+        _forbidden_run_body(tmp_path)
 
-        root = "C:\\dl" if os.name == "nt" else "/dl"
-        items = [discovery.DiscoveredMediaItem(index=i, source_path=os.path.join(root, name), relative_path=name,
-                                               extension=".mp4", size=1)
-                 for i, name in enumerate(("FC2-PPV-1234567.mp4", "FC2PPV1234567.mp4", "other.mp4"))]
-        verdicts = recognition.recognize(recognition.validate_media_items(recognition.bounded_snapshot(items)))
-        assert [v.reason for v in verdicts] == [orchestration.IssueReason.DUPLICATE_TARGET_IN_BATCH,
-                                                orchestration.IssueReason.DUPLICATE_TARGET_IN_BATCH,
-                                                orchestration.IssueReason.NUMBER_NOT_RECOGNIZED]
-        token = orchestration.CancellationToken()
-        token.cancel()
-        assert token.cancelled and orchestration.OrchestrationConfig().filesystem_workers == 1
-        _run_real_preview(orchestration, discovery, tmp_path)
-        loaded = set(sys.modules)
-        assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in loaded)
-    finally:
-        sys.meta_path.remove(blocker)
-        _purge()
-        sys.modules.update(saved)
+
+def _forbidden_run_body(tmp_path) -> None:
+    orchestration = importlib.import_module(_PKG)
+    recognition = importlib.import_module(f"{_PKG}.recognition")
+    discovery = importlib.import_module("fc2_organizer.discovery")
+    import os
+
+    root = "C:\\dl" if os.name == "nt" else "/dl"
+    items = [discovery.DiscoveredMediaItem(index=i, source_path=os.path.join(root, name), relative_path=name,
+                                           extension=".mp4", size=1)
+             for i, name in enumerate(("FC2-PPV-1234567.mp4", "FC2PPV1234567.mp4", "other.mp4"))]
+    verdicts = recognition.recognize(recognition.validate_media_items(recognition.bounded_snapshot(items)))
+    assert [v.reason for v in verdicts] == [orchestration.IssueReason.DUPLICATE_TARGET_IN_BATCH,
+                                            orchestration.IssueReason.DUPLICATE_TARGET_IN_BATCH,
+                                            orchestration.IssueReason.NUMBER_NOT_RECOGNIZED]
+    token = orchestration.CancellationToken()
+    token.cancel()
+    assert token.cancelled and orchestration.OrchestrationConfig().filesystem_workers == 1
+    _run_real_preview(orchestration, discovery, tmp_path)
+    loaded = set(sys.modules)
+    assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in loaded)
 
 
 def test_the_full_lifecycle_runs_with_forbidden_modules_blocked(tmp_path):
     """S5: preview -> execute -> preview_retry -> execute -> merge_retry -> summaries, end to end, while ``amane`` /
     ``requests`` / ``sqlite3`` / ``shelve`` / ``dbm`` / ``pickle`` cannot be imported (positive control included)."""
-    _purge()
-    saved = {name: sys.modules.pop(name) for name in list(sys.modules) if name.split(".")[0] in _BLOCKED_ROOTS}
-    blocker = _BlockFinder()
-    sys.meta_path.insert(0, blocker)
-    try:
-        for root in sorted(_BLOCKED_ROOTS):  # positive control: the trap really fires
-            try:
-                importlib.import_module(root)
-            except ImportError:
-                continue
-            raise AssertionError(f"the forbidden-module trap did not fire for {root}")
-        import asyncio
+    with _isolated_imports(block=True):
+        _lifecycle_body(tmp_path)
 
-        orchestration = importlib.import_module(_PKG)
-        discovery = importlib.import_module("fc2_organizer.discovery")
-        aggregation = importlib.import_module("fc2_metadata_core.aggregation")
-        (tmp_path / "dl").mkdir()
-        (tmp_path / "dl" / "FC2-PPV-1234567.mp4").write_bytes(b"media")
-        (tmp_path / "lib").mkdir()
-        items = discovery.discover_media(str(tmp_path / "dl")).items
-        orchestrator = orchestration.BatchOrchestrator(_Engine(aggregation), _Client(), str(tmp_path / "lib"))
-        preview = asyncio.run(orchestrator.preview(items))
-        result = orchestrator.execute(preview)
-        retry = asyncio.run(orchestrator.preview_retry(result))
-        merged = orchestration.merge_retry(result, orchestrator.execute(retry))
-        assert preview.summary.unprepared == 1 and merged.summary.retryable == 1 and merged.generation == 1
-        assert merged.outcome is orchestration.BatchOutcome.FAILED
-        assert (tmp_path / "dl" / "FC2-PPV-1234567.mp4").read_bytes() == b"media"
-        assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in sys.modules)
-    finally:
-        sys.meta_path.remove(blocker)
-        _purge()
-        sys.modules.update(saved)
+
+def _lifecycle_body(tmp_path) -> None:
+    for root in sorted(_BLOCKED_ROOTS):  # positive control: the trap really fires
+        try:
+            importlib.import_module(root)
+        except ImportError:
+            continue
+        raise AssertionError(f"the forbidden-module trap did not fire for {root}")
+    import asyncio
+
+    orchestration = importlib.import_module(_PKG)
+    discovery = importlib.import_module("fc2_organizer.discovery")
+    aggregation = importlib.import_module("fc2_metadata_core.aggregation")
+    (tmp_path / "dl").mkdir()
+    (tmp_path / "dl" / "FC2-PPV-1234567.mp4").write_bytes(b"media")
+    (tmp_path / "lib").mkdir()
+    items = discovery.discover_media(str(tmp_path / "dl")).items
+    orchestrator = orchestration.BatchOrchestrator(_Engine(aggregation), _Client(), str(tmp_path / "lib"))
+    preview = asyncio.run(orchestrator.preview(items))
+    result = orchestrator.execute(preview)
+    retry = asyncio.run(orchestrator.preview_retry(result))
+    merged = orchestration.merge_retry(result, orchestrator.execute(retry))
+    assert preview.summary.unprepared == 1 and merged.summary.retryable == 1 and merged.generation == 1
+    assert merged.outcome is orchestration.BatchOutcome.FAILED
+    assert (tmp_path / "dl" / "FC2-PPV-1234567.mp4").read_bytes() == b"media"
+    assert not any(n.split(".")[0] in _BLOCKED_ROOTS for n in sys.modules)
+
+
+# --------------------------------------------------------------------------- S5-R1: import-state isolation
+
+
+def _import_state():
+    roots = _FC2_ROOTS | _BLOCKED_ROOTS
+    return {name: module for name, module in sys.modules.items() if name.split(".")[0] in roots}, list(sys.meta_path)
+
+
+def _assert_restored(before) -> None:
+    modules, meta_path = before
+    now_modules, now_meta_path = _import_state()
+    assert now_modules.keys() == modules.keys()
+    assert all(now_modules[name] is modules[name] for name in modules)  # the very same objects
+    assert len(now_meta_path) == len(meta_path) and all(a is b for a, b in zip(now_meta_path, meta_path))
+
+
+def _baseline():
+    importlib.import_module(_PKG)  # the packages as a normal test session holds them
+    importlib.import_module("pickle")  # a blocked root loaded beforehand must come back as the same object
+    before = _import_state()
+    assert _PKG in before[0] and "fc2_metadata_core" in before[0] and "pickle" in before[0]
+    return before
+
+
+def test_import_isolation_restores_the_exact_module_objects_and_meta_path_repeatedly(tmp_path):
+    before = _baseline()
+    for round_number in range(2):  # repeated lifecycles accumulate no residue
+        with _isolated_imports(block=True) as blocker:
+            assert sys.meta_path[0] is blocker and "pickle" not in sys.modules
+            workspace = tmp_path / f"round{round_number}"
+            workspace.mkdir()
+            _lifecycle_body(workspace)
+            assert sys.modules[_PKG] is not before[0][_PKG]  # it really ran on a fresh copy
+        _assert_restored(before)
+
+
+def test_import_isolation_is_independent_of_test_order(tmp_path):
+    before = _baseline()
+    for order in (("api", "lifecycle"), ("lifecycle", "api")):
+        for step in order:
+            if step == "api":
+                with _isolated_imports():
+                    _public_api_body()
+            else:
+                workspace = tmp_path / "-".join(order)
+                workspace.mkdir()
+                with _isolated_imports(block=True):
+                    _lifecycle_body(workspace)
+            _assert_restored(before)
+
+
+class _Interrupted(Exception):
+    pass
+
+
+class _ExtraFinder:
+    def find_spec(self, fullname, path=None, target=None):
+        return None
+
+
+def test_import_isolation_restores_after_an_exception_and_a_disturbed_meta_path():
+    before = _baseline()
+    with pytest.raises(_Interrupted):
+        with _isolated_imports(block=True) as blocker:
+            assert sys.meta_path[0] is blocker
+            importlib.import_module(_PKG)
+            sys.meta_path.append(_ExtraFinder())
+            sys.meta_path.insert(1, sys.meta_path.pop())  # another finder, and a different order
+            raise _Interrupted()
+    _assert_restored(before)
+    assert not any(isinstance(finder, (_BlockFinder, _ExtraFinder)) for finder in sys.meta_path)

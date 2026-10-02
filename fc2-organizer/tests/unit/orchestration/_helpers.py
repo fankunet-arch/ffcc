@@ -303,13 +303,14 @@ def _execution_projection(execution) -> tuple | None:
     return (execution.status, execution.mode, execution.transfer_mode,
             tuple((e.kind, e.role, e.path, e.artifact_kind, e.ordinal) for e in execution.completed_effects),
             execution.new_effect_count, execution.failure, execution.skipped_steps,
-            tuple((t.directory_role, ) for t in execution.leftover_temporaries))
+            tuple((t.directory_role, t.name) for t in execution.leftover_temporaries))
 
 
 def projection(obj) -> tuple:
     """Contract section 29 deterministic projection of a ``BatchPreview`` / ``BatchExecutionResult``:
-    every item field except ``preview_id`` / ``result_id`` / lineage token / P4-C7 ``preflight_id`` /
-    ``checkpoint_id`` / seals (and leftover temporary names, which carry random tokens)."""
+    every item field except exactly the six identities / seals section 29 excludes -- ``preview_id``,
+    ``result_id``, the lineage token, P4-C7 ``preflight_id`` / ``checkpoint_id`` and seals. Leftover temporaries
+    are projected with their directory role and name."""
     if type(obj) is BatchPreview:
         items = tuple(
             (i.index, i.generation, i.media_item, i.canonical_number, i.metadata_position,

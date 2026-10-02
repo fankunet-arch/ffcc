@@ -12,15 +12,18 @@ that root path by a placeholder.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import errno
 import os
 import threading
 
 from fc2_metadata_core.batch import BatchConfig
-from fc2_organizer.execution import execute_filesystem
+from fc2_organizer.execution import ExecutionStatus, LeftoverTemporary, PathRole, execute_filesystem
 from fc2_organizer.images import ImageInputError
 from fc2_organizer.materialization import ArtifactMappingError, MappingRejectionReason
 from fc2_organizer.orchestration import (
+    ExecutionDisposition as D,
+    ItemWarning,
     OrchestrationConfig,
     PreviewState as S,
     RetryKind as K,
@@ -30,7 +33,17 @@ from fc2_organizer.orchestration import execute as execute_module
 from fc2_organizer.orchestration import preview as preview_module
 from fc2_organizer.orchestration import stages
 
-from ._helpers import Corpus, Film, assert_source_not_lost, by_name, fs_fault, projection, run
+from ._helpers import (
+    Corpus,
+    Film,
+    Lineage,
+    assert_source_not_lost,
+    by_name,
+    fake_execution,
+    fs_fault,
+    projection,
+    run,
+)
 
 WAIT = 30.0
 FILMS = [
@@ -203,3 +216,59 @@ def test_the_mixed_batch_is_deterministic_across_runs_orders_and_budgets(tmp_pat
                                                     K.PREFLIGHT_RECHECK, K.DEFERRED}
     assert [i.index for i in retry.items] == sorted(i.index for i in retry.items)  # retry subset in index order
     assert result.summary.executed == 5 and merged.summary.success >= 6
+
+
+# --------------------------------------------------------------------------- S5-R1 (P4-C8-S5-R-01)
+
+NAME_A = ".fc2tmp-00000000000000000000000000000000.part"
+NAME_B = ".fc2tmp-11111111111111111111111111111111.part"
+
+
+def _leftover_result(lin: Lineage, name: str, status=ExecutionStatus.PARTIAL):
+    """A model-valid main result whose only executed item left one temporary called ``name``."""
+    execution = dataclasses.replace(fake_execution(lin.plans[0], status),
+                                    leftover_temporaries=(LeftoverTemporary(PathRole.TARGET_DIRECTORY, name),))
+    item = lin.execution_item(0, D.EXECUTED, execution=execution, material=True,
+                              warnings=(ItemWarning.LEFTOVER_TEMPORARIES,))
+    return lin.result([item])
+
+
+def test_the_projection_keeps_leftover_temporary_names():
+    """Contract section 29 excludes only preview / result ids, the lineage token, preflight / checkpoint ids and
+    seals: a different leftover temporary name is a different projection."""
+    lin = Lineage(1)
+    a = _leftover_result(lin, NAME_A)
+    b = _leftover_result(lin, NAME_B)
+    assert projection(a) != projection(b)
+    # the difference is exactly the name: rewrite b's name back to a's and the projections agree again
+    execution = b.items[0].execution
+    renamed = dataclasses.replace(execution, leftover_temporaries=(
+        LeftoverTemporary(execution.leftover_temporaries[0].directory_role, NAME_A),))
+    reverted = lin.result([dataclasses.replace(b.items[0], execution=renamed,
+                                               retry_material=b.items[0].retry_material)])
+    assert projection(reverted) == projection(a)
+    leftovers = projection(a)[-1][0][12][-1]
+    assert leftovers == ((PathRole.TARGET_DIRECTORY, NAME_A),)  # directory role and name, both projected
+
+
+def test_the_same_leftover_name_projects_equally():
+    lin = Lineage(1)
+    assert projection(_leftover_result(lin, NAME_A)) == projection(_leftover_result(lin, NAME_A))
+    assert projection(_leftover_result(lin, NAME_B, ExecutionStatus.FAILED)) == projection(
+        _leftover_result(lin, NAME_B, ExecutionStatus.FAILED))
+
+
+def test_only_the_frozen_identities_are_excluded():
+    """Two independently built lineages: every preview / result id, lineage token, preflight id, checkpoint id and
+    seal differs, yet the projections are equal -- and nothing else is normalised away."""
+    first, second = Lineage(1), Lineage(1)
+    a, b = _leftover_result(first, NAME_A), _leftover_result(second, NAME_A)
+    assert a.result_id != b.result_id and a.preview_id != b.preview_id and a.lineage != b.lineage
+    ea, eb = a.items[0].execution, b.items[0].execution
+    assert ea.preflight_id != eb.preflight_id
+    assert ea.checkpoint.checkpoint_id != eb.checkpoint.checkpoint_id
+    assert projection(a) == projection(b)
+    previews = (first.preview([first.preview_item(0)]), second.preview([second.preview_item(0)]))
+    assert previews[0].preview_id != previews[1].preview_id
+    assert previews[0].items[0].preflight.preflight_id != previews[1].items[0].preflight.preflight_id
+    assert projection(previews[0]) == projection(previews[1])

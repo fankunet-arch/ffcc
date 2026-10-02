@@ -1878,7 +1878,7 @@ P4-C8 不关闭、不降级、不重新打开任何延续项。
 | S2 | Preview composition：stages / preview / orchestrator.preview | S2 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `8c5ba6e808a6c45ee2342af497458fe88af5ff09` |
 | S3 | Execution orchestration：execute / selection / cancellation / fatal drain | S3 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `7fb6bfb2d230d90d240a0a4b462332d27afe77d5` |
 | S4 | Retry：RetryKind / preview_retry / merge_retry | S4 ACCEPTED / CLOSED — FINAL REVIEWED CODE HEAD `4933f38bd09101766643af0b66757080565a8619` |
-| S5 | Summary / determinism / race / integration hardening + 最终公开 API | S5 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
+| S5 | Summary / determinism / race / integration hardening + 最终公开 API | S5-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED |
 | S6 | 500-item batch orchestration gate + HANDOFF | NOT STARTED |
 
 ```text
@@ -1895,7 +1895,7 @@ P4-C8 S1             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD e8f83e986d3c
 P4-C8 S2             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 8c5ba6e808a6c45ee2342af497458fe88af5ff09）
 P4-C8 S3             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 7fb6bfb2d230d90d240a0a4b462332d27afe77d5）
 P4-C8 S4             : ACCEPTED / CLOSED（FINAL REVIEWED CODE HEAD 4933f38bd09101766643af0b66757080565a8619）
-P4-C8 S5             : IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
+P4-C8 S5             : S5-R1 IMPLEMENTED — INDEPENDENT REVIEW REQUIRED
 P4-C8 Implementation : IN PROGRESS
 P4-C8                : NOT CLOSED
 P4-C9                : NOT STARTED
