@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 import dataclasses
+import errno
 import io
 import os
 import socket
@@ -25,8 +26,16 @@ from contextlib import contextmanager
 from typing import Callable, Iterable
 
 import httpx
-from fc2_metadata_core.aggregation import AggregationConfig, MultiSourceEngine, RetryPolicy, SourceConfig
+from fc2_metadata_core.aggregation import (
+    AggregationConfig,
+    MultiSourceEngine,
+    RetryPolicy,
+    SourceConfig,
+    default_aggregation_config,
+)
+from fc2_metadata_core.batch import BatchConfig
 from fc2_metadata_core.models.source_result import SourceStatus
+from fc2_metadata_core.sources.adapters import build_default_registry
 from fc2_metadata_core.sources.registry import SourceRegistry
 from fc2_organizer.diagnostics import (
     PathPolicy,
@@ -43,6 +52,8 @@ from fc2_organizer.orchestration import (
     BatchOrchestrator,
     BatchPreview,
     OrchestrationConfig,
+    PreviewState,
+    RetryKind,
     merge_retry,
 )
 from fc2_organizer.orchestration import execute as orchestration_execute
@@ -56,10 +67,13 @@ from ._corpus import FAIL_DETAIL, SOURCE_IDS, Film, image_behavior, image_payloa
 from ._oracles import (
     AcceptanceGateViolation,
     gate_indices_exactly_once,
+    gate_merge_composition,
+    gate_metadata_isolation,
     gate_no_network,
     gate_no_unreported_temporaries,
     gate_path_within,
     gate_result_accounting,
+    gate_resume_converges,
     gate_snapshots_equal,
     gate_source_not_lost,
     gate_write_paths_contained,
@@ -83,6 +97,13 @@ __all__ = [
     "Chain",
     "result_projection",
     "diagnostics_bytes",
+    "diagnostics_model",
+    "CONFIG_4",
+    "CONFIG_2",
+    "CONFIG_1",
+    "relative_cwd",
+    "MixedBatch",
+    "transfer_operation",
 ]
 
 WAIT = 30.0  # hang protection only: every gate is an event / condition, never a correctness sleep
@@ -621,7 +642,7 @@ class Chain:
     def __init__(self, tmp_path, films: Iterable[Film], *, config: OrchestrationConfig | None = None,
                  downloads_name: str = "downloads", library_name: str = "library", hold_items: int = 0,
                  hold_images: int = 0, hold_exec: int = 0, reverse: bool = False, create_tree: bool = True,
-                 instrument: bool = True) -> None:
+                 instrument: bool = True, real_http_client=None) -> None:
         self.films = list(films)
         self.sandbox = Sandbox(tmp_path)
         self.root = self.sandbox.root
@@ -640,13 +661,17 @@ class Chain:
         self.preexisting_temporaries: set[str] = set()
         self.preview_snapshots: list[tuple[dict, dict]] = []
         self.rounds: list[tuple[str, object]] = []
+        self.gate_runs: Counter = Counter()  # shared gate id -> how many times it ran (non-vacuity of the wiring)
         reverse_items = self.config.metadata.max_in_flight_items if reverse else 0
         self.sources = ScriptedSources(self.films, hold=hold_items, reverse=reverse_items)
         self.routes = ImageRoutes(hold=hold_images, reverse=self.config.image_in_flight_items if reverse else 0)
         self.exec_hold, self.exec_reverse = hold_exec, (self.config.filesystem_workers if reverse else 0)
         self.loop = asyncio.new_event_loop()  # created before the socket trap (the loop owns a loopback socket pair)
         self.client = HttpxImageClient(transport=httpx.MockTransport(self.routes.handler))
-        self.engine = self.sources.engine()
+        if real_http_client is None:
+            self.engine = self.sources.engine()
+        else:  # S-20: the shipped adapters over an offline ``FakeHttpClient`` (fixture HTML), default configuration
+            self.engine = MultiSourceEngine(default_aggregation_config(), build_default_registry(), real_http_client)
         self.exec_probe: ExecProbe | None = None
         self._closed = False
         if create_tree:
@@ -657,6 +682,7 @@ class Chain:
         self.orchestrator = BatchOrchestrator(self.engine, self.client, self.sandbox.require(self.library, "library root"),
                                               config=self.config)
         self.instrumented = instrument
+        self.check_metadata = real_http_client is None  # S-20's films carry no scripts (the fixtures answer instead)
         if instrument:
             self._install()
 
@@ -763,24 +789,31 @@ class Chain:
             _violation(f"the engine asked for unscripted numbers: {sorted(set(self.sources.unscripted))[:3]}")
         gate_no_network(self.trap.hits)
 
-    def preview(self, items=None) -> BatchPreview:
+    def preview(self, items=None, *, orchestrator=None) -> BatchPreview:
         items = self.discover() if items is None else items
         before = self.snapshot()
-        preview = self.run(self.orchestrator.preview(items))
+        preview = self.run((orchestrator or self.orchestrator).preview(items))
         after = self.snapshot()
         self.preview_snapshots.append((before, after))
         gate_snapshots_equal(before, after, "SI-21 preview")  # SI-21
+        self.gate_runs["SI-21"] += 1
+        if self.check_metadata:
+            gate_metadata_isolation(preview.items, {f.number: f for f in self.films if f.number}, 0)  # SI-04
+            self.gate_runs["SI-04"] += 1
         self._register(preview)
         self.rounds.append(("preview", preview))
         self._after_model(preview)
         return preview
 
-    def preview_retry(self, previous, scope=None) -> BatchPreview:
+    def preview_retry(self, previous, scope=None, *, orchestrator=None) -> BatchPreview:
         before = self.snapshot()
-        preview = self.run(self.orchestrator.preview_retry(previous, scope=scope))
+        preview = self.run((orchestrator or self.orchestrator).preview_retry(previous, scope=scope))
         after = self.snapshot()
         self.preview_snapshots.append((before, after))
         gate_snapshots_equal(before, after, "SI-21 preview_retry")  # SI-21
+        self.gate_runs["SI-21"] += 1
+        gate_resume_converges(previous, preview)  # SI-13
+        self.gate_runs["SI-13"] += 1
         self._register(preview)
         self.rounds.append(("preview_retry", preview))
         self._after_model(preview)
@@ -797,11 +830,12 @@ class Chain:
             if item.target_directory is not None:
                 self.target_directories.add(item.target_directory)
 
-    def execute(self, preview: BatchPreview, *, selection=None, cancel=None, gates: bool = True) -> BatchExecutionResult:
+    def execute(self, preview: BatchPreview, *, selection=None, cancel=None, gates: bool = True,
+                orchestrator=None) -> BatchExecutionResult:
         self.observer.take()  # nothing before this round counts
         self.faults.armed = True
         try:
-            result = self.orchestrator.execute(preview, selection=selection, cancel=cancel)
+            result = (orchestrator or self.orchestrator).execute(preview, selection=selection, cancel=cancel)
         finally:
             self.faults.armed = False
         self.rounds.append(("execute", result))
@@ -824,8 +858,10 @@ class Chain:
         merged = merge_retry(previous, retry)
         self.rounds.append(("merge", merged))
         self._register(merged)
+        gate_merge_composition(previous, retry, merged)
         gate_result_accounting(merged)
         gate_indices_exactly_once(merged, merged.batch_size)
+        self.gate_runs["SI-22"] += 1
         return merged
 
     def round_gates(self, result: BatchExecutionResult) -> None:
@@ -836,16 +872,31 @@ class Chain:
                 gate_source_not_lost(source, None, original)
             for final in finals or ():
                 gate_source_not_lost(source, final, original)
+        self.gate_runs["SI-01"] += 1
         gate_no_unreported_temporaries(self.root, self.reported_temporaries, self.preexisting_temporaries)
+        self.gate_runs["SI-14"] += 1
         records = self.observer.take()
         allowed_files = set(self.original) | {path for paths in self.final_paths.values() for path in paths}
-        gate_write_paths_contained(records, sandbox_root=self.root,
-                                   allowed_directories=self.target_directories,
+        gate_write_paths_contained(records, sandbox_root=self.root, allowed_directories=self.target_directories,
                                    allowed_files=allowed_files)
+        self.gate_runs["SI-15"] += 1
+        self.gate_runs["SI-19"] += 1  # the same observation proves no write outside the targets (no persistence)
         gate_result_accounting(result)
         if result.is_complete:
             gate_indices_exactly_once(result, result.batch_size)
+        self.gate_runs["SI-22"] += 1
         gate_no_network(self.trap.hits)
+        self.gate_runs["SI-20"] += 1
+
+    def user_hardlink(self, existing: str, link: str) -> None:
+        """The user makes ``link`` a second name of the file ``existing`` (replacing any file at ``link``)."""
+        with self.user_action():
+            self.sandbox.require(existing, "hard link source")
+            self.sandbox.require(link, "hard link name")
+            if os.path.lexists(link):
+                os.remove(link)
+            os.link(existing, link)
+            self.original[link] = sha256_file(link)
 
 
 # --------------------------------------------------------------------------- projections / diagnostics
@@ -890,3 +941,152 @@ def diagnostics_bytes(model, path_policy: PathPolicy = PathPolicy.NONE) -> bytes
     else:
         built = build_execution_diagnostics(model, path_policy=path_policy)
     return render_diagnostics_json(built)
+
+
+def diagnostics_model(model, path_policy: PathPolicy = PathPolicy.NONE):
+    """The immutable ``BatchDiagnostics`` of a preview / result (public P4-C9 builders)."""
+    if isinstance(model, BatchPreview):
+        return build_preview_diagnostics(model, path_policy=path_policy)
+    return build_execution_diagnostics(model, path_policy=path_policy)
+
+
+# the three budgets used by the scenarios: default-ish (4 / 4 / 4), the gated peak scenarios (2 / 2 / 2) and serial (1 / 1 / 1)
+CONFIG_4 = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=4), image_in_flight_items=4,
+                               filesystem_workers=4)
+CONFIG_2 = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=2), image_in_flight_items=2,
+                               filesystem_workers=2)
+CONFIG_1 = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=1), image_in_flight_items=1,
+                               filesystem_workers=1)
+
+
+@contextmanager
+def relative_cwd(directory: str):
+    """Run with ``directory`` (a disposable path) as the current directory, so a relative library root can never
+    resolve to the repository work tree; restores the previous directory."""
+    previous = os.getcwd()
+    os.chdir(directory)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+def transfer_operation() -> str:
+    """The same-volume primitive of the host: ``os.rename`` on Windows, ``os.link`` elsewhere (P4-C7 section 19)."""
+    return "rename" if os.name == "nt" else "link"
+
+
+_G1 = frozenset({RetryKind.RESUME})
+_G2 = frozenset({RetryKind.METADATA_REFETCH, RetryKind.FRESH_REEXECUTE, RetryKind.PREFLIGHT_RECHECK})
+_G3 = frozenset({RetryKind.DEFERRED})
+GENERATION_SCOPES = {"g1": _G1, "g2": _G2, "g3": _G3, "g4": None}
+USER_MOVIE = "FC2-0000001-user/keep.mp4"
+
+
+class MixedBatch:
+    """The mixed batch of contract section 7.4 (G-500) / FX-2 (S-17) driven through ``Chain``: the FX-3 user entries, the
+    GG blocking directories, the g0 faults (GH / GI / GK), the g0 selection (GJ excluded) and the retry generations.
+    All expected counts live in ``_corpus.mixed_expectations``; this class only drives the real chain."""
+
+    def __init__(self, chain: Chain, mixed: "_corpus.MixedCorpus") -> None:
+        self.chain = chain
+        self.mixed = mixed
+        self.by_source = {os.path.normcase(chain.source_path(film)): film for film in mixed.films}
+        self.user_files: dict[str, bytes] = {}
+        self.user_entries: list[str] = []
+        self.main_preview = None
+        self.main_result = None
+        self.generations: list[dict] = []
+
+    def film_of(self, item) -> Film:
+        return self.by_source[os.path.normcase(item.source_path)]
+
+    def group_of(self, item) -> str:
+        return self.film_of(item).group
+
+    def prepare(self) -> None:
+        """The FX-3 user entries: the user's own movie directory and the GG target directories with ``user-note.txt``."""
+        chain = self.chain
+        chain.user_write(os.path.join(chain.library, *USER_MOVIE.split("/")), b"the user's own movie")
+        self.user_files[USER_MOVIE] = b"the user's own movie"
+        self.user_entries += ["library/FC2-0000001-user", "library/" + USER_MOVIE]
+        for film in self.mixed.by_group("G"):
+            chain.user_write(os.path.join(chain.library, film.number, "user-note.txt"), b"mine")
+            self.user_entries += [f"library/{film.number}", f"library/{film.number}/user-note.txt"]
+
+    def _arm_g0_faults(self, preview) -> None:
+        chain = self.chain
+        for item in preview.items:
+            group = self.group_of(item)
+            if group not in ("H", "I", "K") or item.state is not PreviewState.READY:
+                continue
+            film = self.film_of(item)
+            if group == "H":
+                half = self.mixed.by_group("H").index(film) % 2
+                path = item.nfo_target if half == 0 else os.path.join(item.target_directory, "poster.jpg")
+                chain.faults.fail("materialization", "publish", path, OSError(errno.EIO, "injected artifact write failure"))
+            elif group == "I":
+                chain.faults.fail("execution", "lstat", chain.source_path(film), OSError(errno.EIO, "injected"))
+            else:
+                chain.faults.fail("execution", transfer_operation(), chain.source_path(film),
+                                  RuntimeError(_corpus.FX5_CANARIES["exc"]))
+
+    def g0(self):
+        """Main preview + main execute (GJ not selected)."""
+        chain = self.chain
+        preview = chain.preview(chain.discover())
+        self._arm_g0_faults(preview)
+        selection = tuple(sorted(i.index for i in preview.items
+                                 if i.state is PreviewState.READY and self.group_of(i) != "J"))
+        result = chain.execute(preview, selection=selection)
+        chain.faults.assert_all_fired()
+        chain.faults.clear_fired()
+        self.main_preview, self.main_result = preview, result
+        return preview, result
+
+    def user_removes_blockers(self) -> list[Film]:
+        removed = self.mixed.g_removed
+        for film in removed:
+            self.chain.user_remove_tree(os.path.join(self.chain.library, film.number))
+        return removed
+
+    def retry(self, previous, scope):
+        """preview_retry -> execute -> merge for one generation; returns (retry_preview, retry_result, merged)."""
+        chain = self.chain
+        retry_preview = chain.preview_retry(previous, scope)
+        retry_result = chain.execute(retry_preview)
+        merged = chain.merge(previous, retry_result)
+        self.generations.append(dict(preview=retry_preview, result=retry_result, merged=merged))
+        return retry_preview, retry_result, merged
+
+    def run_all_generations(self):
+        """g0 .. g4 exactly as contract section 7.4; returns the list of ``(round preview, round result, merged)``."""
+        self.g0()
+        previous = self.main_result
+        rounds = []
+        for name in ("g1", "g2", "g3", "g4"):
+            if name == "g2":
+                self.user_removes_blockers()
+            retry_preview, retry_result, merged = self.retry(previous, GENERATION_SCOPES[name])
+            rounds.append((retry_preview, retry_result, merged))
+            previous = merged
+        return rounds
+
+    # ---- the expected final state (derived from the definition, never from outputs)
+
+    def final_library_expectation(self):
+        """What the library must hold after g0 .. g4 (and, for FX-2, after the same sequence): ``(organized, user_files,
+        empty_directories)`` for ``gate_library_exact``. GC films that recover are organized from their second
+        aggregation (``call = 1``); the GG directories the user did not remove keep their ``user-note.txt``; every GK entry
+        left an empty target directory (ABORTED)."""
+        mixed = self.mixed
+        organized = []
+        for name in "ABDHIJ":
+            organized += [(film, *_corpus.expectation(film, 0)) for film in mixed.by_group(name)]
+        organized += [(film, *_corpus.expectation(film, 1)) for film in mixed.c_recovering]
+        organized += [(film, *_corpus.expectation(film, 0)) for film in mixed.g_removed]
+        user_files = dict(self.user_files)
+        for film in mixed.by_group("G")[mixed.plan.g_removed:]:
+            user_files[f"{film.number}/user-note.txt"] = b"mine"
+        empty = [film.number for film in mixed.by_group("K")]
+        return organized, user_files, empty

@@ -20,6 +20,8 @@ import xml.dom.minidom
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 
+from . import _corpus
+
 __all__ = [
     "AcceptanceGateViolation",
     "sha256_file",
@@ -44,6 +46,15 @@ __all__ = [
     "gate_no_network",
     "parse_nfo",
     "TEMP_NAME",
+    "gate_film_organized",
+    "gate_library_exact",
+    "repository_digest",
+    "gate_repository_unmodified",
+    "gate_phase_a_conflicts",
+    "gate_resume_converges",
+    "gate_merge_composition",
+    "gate_default_output_clean",
+    "gate_metadata_isolation",
 ]
 
 TEMP_NAME = re.compile(r"\.fc2tmp-[0-9a-f]{32}\.part\Z")
@@ -69,7 +80,8 @@ def sha256_file(path: str) -> str:
 
 
 def snapshot_tree(root: str) -> dict[str, tuple]:
-    """relative path -> (kind, size, mtime_ns, sha256 | None, inode); links are never followed, nothing is read twice."""
+    """relative path (``/``-separated on every platform) -> (kind, size, mtime_ns, sha256 | None, inode); links are never
+    followed, nothing is read twice."""
     result: dict[str, tuple] = {}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         for name in sorted(dirnames + filenames):
@@ -83,7 +95,7 @@ def snapshot_tree(root: str) -> dict[str, tuple]:
                 kind, digest = "dir", None
             else:
                 kind, digest = "other", None
-            result[os.path.relpath(path, root)] = (kind, st.st_size if kind == "file" else None, st.st_mtime_ns,
+            result[os.path.relpath(path, root).replace(os.sep, "/")] = (kind, st.st_size if kind == "file" else None, st.st_mtime_ns,
                                                    digest, st.st_ino)
     return result
 
@@ -353,7 +365,7 @@ def gate_result_accounting(result, what: str = "SI-22") -> dict[str, int]:
     expected_outcome = "success" if success == counts["total"] else ("partial" if success + partial >= 1 else "failed")
     if result.outcome.value != expected_outcome:
         _violation(f"{what}: outcome {result.outcome.value}, the truth table says {expected_outcome}")
-    gate_retry_kinds(result, what)
+    gate_retry_kinds(result)
     return dict(counts)
 
 
@@ -370,9 +382,11 @@ def gate_diagnostics_canaries(rendered: bytes, *, forbidden: Iterable[str], what
 
 
 def gate_diagnostics_structure(rendered: bytes, *, schema: str, schema_version: str, kind: str,
-                               items_expected: int, what: str = "SI-18") -> dict:
+                               items_expected: int | None = None, indices: Sequence[int] | None = None,
+                               what: str = "SI-18") -> dict:
     """The JSON parses, is compact / key-sorted ASCII (deterministic form), carries the schema constants and one
-    entry per input index in ascending order."""
+    entry per input index in ascending order (``items_expected`` = the indices 0..n-1 of a complete batch; ``indices`` =
+    the exact index list of a retry round, which covers only its scope)."""
     try:
         text = rendered.decode("ascii")
     except UnicodeDecodeError:
@@ -383,9 +397,11 @@ def gate_diagnostics_structure(rendered: bytes, *, schema: str, schema_version: 
         _violation(f"{what}: the diagnostics JSON is not compact, key-sorted ASCII")
     if tree.get("schema") != schema or tree.get("schema_version") != schema_version or tree.get("kind") != kind:
         _violation(f"{what}: schema / schema_version / kind differ from the frozen constants")
-    indices = [entry["index"] for entry in tree["items"]]
-    if indices != list(range(items_expected)):
-        _violation(f"{what}: diagnostics items do not cover indices 0..{items_expected - 1} in order")
+    found = [entry["index"] for entry in tree["items"]]
+    wanted = list(indices) if indices is not None else list(range(items_expected))
+    if found != wanted:
+        _violation(f"{what}: diagnostics items do not cover the indices {wanted[:3]}..{wanted[-1:]} exactly once, "
+                   f"in ascending order")
     return tree
 
 
@@ -408,3 +424,149 @@ def gate_peak(observed_peak: int, *, limit: int, expect_reached: bool, what: str
 def gate_no_network(trap_hits: Sequence[str], what: str = "SI-20") -> None:
     if trap_hits:
         _violation(f"{what}: network primitives were used: {sorted(set(trap_hits))}")
+
+
+# --------------------------------------------------------------------------- composite library oracles (S2)
+
+
+def gate_film_organized(library_root: str, film, merged: dict, images: dict, what: str = "layout") -> None:
+    """One organized film: media bytes == the synthetic source bytes, NFO == the independent serialization (and parses),
+    every acquired image == the bytes the transport served for its URL, extrafanart names / order."""
+    base = film.number
+    directory = os.path.join(library_root, base)
+    gate_file_bytes(os.path.join(directory, f"{base}{film.extension}"), film.content, f"{what}: media bytes of {base}")
+    with open(os.path.join(directory, f"{base}.nfo"), "rb") as handle:
+        nfo = handle.read()
+    gate_nfo_matches(nfo, number=base, expected_text=_corpus.expected_nfo_text(base, merged), title=merged["title"],
+                     tags=merged["tags"], premiered=merged["release"], what=f"{what}: NFO of {base}")
+    for role in ("poster", "fanart", "thumb"):
+        if images[role] is not None:
+            gate_file_bytes(os.path.join(directory, f"{role}.jpg"), _corpus.image_payload(images[role][1]),
+                            f"{what}: {role} of {base}")
+    for ordinal, (_index, url) in enumerate(images["extrafanart"], start=1):
+        gate_file_bytes(os.path.join(directory, "extrafanart", f"extrafanart-{ordinal:03d}.jpg"),
+                        _corpus.image_payload(url), f"{what}: extrafanart {ordinal} of {base}")
+
+
+def gate_library_exact(library_root: str, organized: Iterable[tuple], *, user_files: Mapping[str, bytes] | None = None,
+                       empty_directories: Iterable[str] = (), user_directories: Iterable[str] = (),
+                       what: str = "layout") -> None:
+    """The whole library: exactly the organized films (``(film, merged, images)``), the user's files (relative path ->
+    bytes, must be unchanged) and directories, and the empty target directories of ABORTED entries -- nothing else."""
+    organized = list(organized)
+    files, directories = [], []
+    for film, merged, images in organized:
+        film_files, film_dirs = _corpus.expected_library(film, merged, images)
+        files += film_files
+        directories += film_dirs
+    user_files = dict(user_files or {})
+    files += list(user_files)
+    directories += list(empty_directories) + list(user_directories)
+    for relative in list(user_files):  # parents of the user's files are directories too
+        parent = relative.rsplit("/", 1)[0] if "/" in relative else None
+        while parent:
+            directories.append(parent)
+            parent = parent.rsplit("/", 1)[0] if "/" in parent else None
+    gate_layout_exact(library_root, files, sorted(set(directories)), what)
+    for film, merged, images in organized:
+        gate_film_organized(library_root, film, merged, images, what)
+    for relative, data in user_files.items():
+        gate_file_bytes(os.path.join(library_root, *relative.split("/")), data, f"{what}: user file {relative}")
+
+
+# --------------------------------------------------------------------------- repository read-only evidence (SI-19, 3.4.1)
+
+_REPOSITORY = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_DIGEST_ROOTS = ("src", os.path.join("tests", "support"), os.path.join("tests", "fixtures"), "pyproject.toml")
+
+
+def repository_digest() -> dict[str, str]:
+    """sha256 of every file the acceptance may only read (``src``, ``tests/support``, ``tests/fixtures``,
+    ``pyproject.toml``); byte-code caches are ignored."""
+    digest: dict[str, str] = {}
+    for entry in _DIGEST_ROOTS:
+        base = os.path.join(_REPOSITORY, entry)
+        if os.path.isfile(base):
+            digest[entry] = sha256_file(base)
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [name for name in dirnames if name != "__pycache__"]
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                digest[os.path.relpath(path, _REPOSITORY).replace(os.sep, "/")] = sha256_file(path)
+    return digest
+
+
+def gate_repository_unmodified(before: Mapping[str, str], after: Mapping[str, str], what: str = "SI-19") -> None:
+    if before != after:
+        changed = sorted(set(before) ^ set(after)) or sorted(k for k in before if before[k] != after.get(k))
+        _violation(f"{what}: repository files the acceptance may only read changed: {changed[:5]}")
+
+
+# --------------------------------------------------------------------------- cross-package gates added for the mutation matrix
+
+
+def gate_phase_a_conflicts(preview, numbers_called: Mapping[str, int], groups: Iterable[Iterable[int]],
+                           what: str = "SI-10") -> None:
+    """P4-C8 section 14.2: the members of every Phase A conflict group are all BLOCKED with a ``duplicate_*_in_batch``
+    reason, carry no metadata and no preflight, know exactly their peers, and the engine was never asked for their
+    numbers (no winner is selected, nothing is fetched for a conflicted entry)."""
+    for group in groups:
+        members = sorted(group)
+        for index in members:
+            item = preview.items[index]
+            if (item.state.value != "blocked" or item.issue is None
+                    or item.issue.reason.value not in ("duplicate_source_in_batch", "duplicate_target_in_batch")):
+                _violation(f"{what}: Phase A member {index} is not blocked by a batch conflict")
+            if item.metadata is not None or item.preflight is not None:
+                _violation(f"{what}: Phase A member {index} was processed past the conflict check")
+            if sorted(item.conflict_with) != [peer for peer in members if peer != index]:
+                _violation(f"{what}: conflict_with of member {index} is not its exact peer set")
+            if item.canonical_number is not None and numbers_called.get(item.canonical_number, 0):
+                _violation(f"{what}: the engine was asked for the conflicted number {item.canonical_number}")
+
+
+def gate_resume_converges(previous, retry_preview, what: str = "SI-13") -> None:
+    """P4-C7 section 14 / P4-C8 section 25: a RESUME retry item is READY, its preflight is a RESUME preflight and carries
+    the very checkpoint the previous result holds -- a checkpoint of another entry (or none) does not converge."""
+    for item in retry_preview.items:
+        if item.retry_origin is None or item.retry_origin.value != "resume":
+            continue
+        issued = previous.items[item.index].execution.checkpoint
+        if (item.state.value != "ready" or item.preflight is None or item.preflight.mode.value != "resume"
+                or item.preflight.checkpoint is not issued):
+            _violation(f"{what}: the RESUME retry of item {item.index} does not converge on its own checkpoint")
+
+
+def gate_merge_composition(previous, retry, merged, what: str = "SI-22") -> None:
+    """P4-C8 section 26: every index of the merged result holds the retry round's item (when it was retried) or the
+    previous result's item (the very objects), exactly once, in index order."""
+    replacements = {item.index: item for item in retry.items}
+    if [item.index for item in merged.items] != [item.index for item in previous.items]:
+        _violation(f"{what}: the merged result does not cover the previous indices in order")
+    for old, new in zip(previous.items, merged.items):
+        expected = replacements.get(old.index, old)
+        if new is not expected:
+            _violation(f"{what}: merged item {old.index} is not the {'retry' if old.index in replacements else 'previous'} item")
+
+
+def gate_default_output_clean(rendered: bytes, what: str = "SI-18") -> None:
+    """The default (``PathPolicy.NONE``) diagnostics contain no canary text at all (file names included)."""
+    if b"C10CANARY" in rendered:
+        _violation(f"{what}: the default diagnostics output contains canary text")
+
+
+def gate_metadata_isolation(items, films_by_number: Mapping[str, object], call: int = 0, what: str = "SI-04") -> None:
+    """Source isolation (SI-04): the metadata status of every fetched item is the one the independent merge definition
+    gives for its scripted source outcomes -- one failing source never turns a film FAILED."""
+    for item in items:
+        if item.metadata is None or item.canonical_number is None:
+            continue
+        film = films_by_number.get(item.canonical_number)
+        if film is None:
+            continue
+        merged = _corpus.merge_expected(film.outcomes_at(call))
+        expected = "failed" if merged is None else merged["status"]
+        if item.metadata.status.value != expected:
+            _violation(f"{what}: {item.canonical_number} has metadata status {item.metadata.status.value}, "
+                       f"the source outcomes give {expected}")

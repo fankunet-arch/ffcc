@@ -36,6 +36,9 @@ __all__ = [
     "expected_warnings",
     "expected_nfo_text",
     "expected_library",
+    "expected_request_urls",
+    "with_outcomes",
+    "expectation",
     "FX1_FILMS",
     "FX5_CANARIES",
     "FX5_ALWAYS_FORBIDDEN",
@@ -92,9 +95,15 @@ def unsafe_url(key: str, role: str, n: int) -> str:
     return f"http://10.0.0.5/{key}/{role}{n}-unsafe.jpg"
 
 
+_KNOWN_BEHAVIORS = ("ok", "404", "redir", "unsafe", "png", "bad")
+
+
 def image_behavior(url: str) -> str:
-    stem = urlsplit(url).path.rsplit("/", 1)[1]
-    return stem[:-4].rsplit("-", 1)[1]
+    """The route token of a candidate URL (``...-<token>.jpg``); a URL without a known token (the real adapters' image
+    URLs of S-20) is served as a valid JPEG (``ok``)."""
+    stem = urlsplit(url).path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    token = stem.rsplit("-", 1)[-1]
+    return token if token in _KNOWN_BEHAVIORS else "ok"
 
 
 def image_payload(url: str) -> bytes:
@@ -191,6 +200,17 @@ def standard_scripts(key: str, *, poster: tuple[str, ...] = (), fanart: tuple[st
 def _film(key, filename, number, *, directory="", size=64, scripts=None, group="") -> Film:
     return Film(key, filename, number, directory, size,
                 tuple(sorted((scripts or {}).items(), key=lambda pair: SOURCE_IDS.index(pair[0]))), group)
+
+
+def with_outcomes(film: Film, scripts: Mapping[str, tuple[Outcome, ...]], **changes) -> Film:
+    """A copy of ``film`` whose per-source scripts are updated by ``scripts`` (other fields via ``changes``)."""
+    table = dict(film.scripts)
+    table.update(scripts)
+    values = dict(key=film.key, filename=film.filename, number=film.number, directory=film.directory, size=film.size,
+                  group=film.group)
+    values.update(changes)
+    return Film(values["key"], values["filename"], values["number"], values["directory"], values["size"],
+                tuple(sorted(table.items(), key=lambda pair: SOURCE_IDS.index(pair[0]))), values["group"])
 
 
 def full_images(key: str, extra: int = 2) -> dict[str, tuple[str, ...]]:
@@ -336,17 +356,38 @@ def expected_nfo_text(number: str, merged: dict) -> str:
 
 def expected_library(film: Film, merged: dict, images: dict) -> tuple[list[str], list[str]]:
     """(files, directories) the library holds for one successfully organized film, relative and ``/``-separated
-    (P4-C2 section 7 default layout; P4-C6 mapping names)."""
+    (P4-C2 section 7 default layout; P4-C6 mapping names). The ``extrafanart`` directory always exists: P4-C7 section
+    14 step U7 creates it "even when there is no extrafanart image"."""
     base = film.number
     files = [f"{base}/{base}{film.extension}", f"{base}/{base}.nfo"]
     for role in ("poster", "fanart", "thumb"):
         if images[role] is not None:
             files.append(f"{base}/{role}.jpg")
-    directories = [base]
-    if images["extrafanart"]:
-        directories.append(f"{base}/extrafanart")
-        files += [f"{base}/extrafanart/extrafanart-{n:03d}.jpg" for n in range(1, len(images["extrafanart"]) + 1)]
+    directories = [base, f"{base}/extrafanart"]
+    files += [f"{base}/extrafanart/extrafanart-{n:03d}.jpg" for n in range(1, len(images["extrafanart"]) + 1)]
     return files, directories
+
+
+def expected_request_urls(merged: dict | None) -> list[str]:
+    """Every candidate URL the transport must see (a candidate that the URL gate rejects is never requested; after
+    the first success of a single-image role no further candidate of that role is requested)."""
+    if merged is None:
+        return []
+    urls: list[str] = []
+    for field_name in ("poster_urls", "fanart_urls", "thumb_urls"):
+        for url in merged[field_name]:
+            if image_behavior(url) != "unsafe":
+                urls.append(url)
+            if _BEHAVIOR_FAILURE[image_behavior(url)] is None:
+                break
+    urls += [url for url in merged["extrafanart"] if image_behavior(url) != "unsafe"]
+    return urls
+
+
+def expectation(film: Film, call: int = 0):
+    """``(merged, images)`` for the ``call``-th aggregation of ``film`` (``(None, ...)`` when every source failed)."""
+    merged = merge_expected(film.outcomes_at(call))
+    return merged, expected_images(merged)
 
 
 # --------------------------------------------------------------------------- FX-1 small deterministic corpus (12 files)

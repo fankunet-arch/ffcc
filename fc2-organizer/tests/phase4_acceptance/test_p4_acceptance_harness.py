@@ -17,17 +17,16 @@ from types import SimpleNamespace
 
 import pytest
 from fc2_metadata_core.aggregation import MultiSourceEngine
-from fc2_metadata_core.batch import BatchConfig
 from fc2_organizer.diagnostics import DIAGNOSTICS_SCHEMA, DIAGNOSTICS_SCHEMA_VERSION, PathPolicy
 from fc2_organizer.execution import _fs as execution_fs
 from fc2_organizer.images.transport import HttpxImageClient
 from fc2_organizer.materialization import atomic as materialization_atomic
-from fc2_organizer.orchestration import BatchOrchestrator, OrchestrationConfig
+from fc2_organizer.orchestration import BatchOrchestrator
 from fc2_organizer.orchestration import execute as orchestration_execute
 from fc2_organizer.orchestration import preview as preview_module
 
 from . import _corpus as corpus
-from ._harness import Chain, Sandbox, diagnostics_bytes, result_projection, trapped_primitives
+from ._harness import CONFIG_2, CONFIG_4, Chain, Sandbox, diagnostics_bytes, result_projection, trapped_primitives
 from ._oracles import (
     AcceptanceGateViolation,
     expected_retry_kind,
@@ -53,10 +52,6 @@ from ._oracles import (
     snapshot_tree,
 )
 
-CONFIG_4 = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=4), image_in_flight_items=4,
-                               filesystem_workers=4)
-CONFIG_2 = OrchestrationConfig(metadata=BatchConfig(max_in_flight_items=2), image_in_flight_items=2,
-                               filesystem_workers=2)
 
 
 # =========================================================================== corpus consistency
