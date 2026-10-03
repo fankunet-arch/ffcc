@@ -15,32 +15,46 @@ Why Not Merge With Previous C      : P4-C9 已正式 CLOSED（c293ed75…）；P
 Why Not Split Further              : 证据基础设施（harness / oracle）、跨包场景 / 安全 / mutation 门、回归 / 平台 / HANDOFF 共同构成同一个
                                      “Phase 4 是否可以 CLOSED”的裁决；任何一段单独都不构成可验收的结论；拆分只增加等待（第 1 节 Q3）
 Internal Stages                    : S1 / S2 / S3（连续施工；无中间 Review；无 S 级状态 docs）
-Independent Review Plan            : 1 次 Design / Contract / Construction Plan Review（本 Design Candidate）
-                                     + 1 次 C10 Independent Level 1 Final Acceptance Review（S1-S3 全部完成后）
-                                     + 1 次 Phase 4 Final Closure Docs-Only Review（Phase 级 Frozen Base 交接，治理文档第 11.2 节）
-                                     C 内中间 Review：NONE（含生产改动的 C10-R1 例外，见第 12 节）
+Independent Review Plan            : Design Authority Review（Original Design Candidate 17c194a…：FAIL -> Design-R1 增量闭合复查，一次）
+                                     + 1 次 C10 Independent Level 1 Final Acceptance Review（S1-S3 全部完成后；含 F2 路径下的 Failed Acceptance Head）
+                                     + 1 次 Phase 4 Final Closure Docs-Only Review（Phase 级 Frozen Base 交接，治理文档第 11.2 节；亦承接 XD-A08 的 Ledger 修订）
+                                     C 内中间 Review：NONE（含生产改动的统一 C10-R1 例外，见第 12 节；F2 不新增任何中间 Review）
 Owner Question Gate                : BUSINESS DECISIONS ONLY（唯一可能的 Owner 事项：是否授权可选原生跨卷证据目录，非阻塞）
 Evidence Gate                      : 第 10 节（Contract -> 测试映射、diff scope、G-T / G-P4 / G-FULL、skip nodeid 对账、L-01..L-14、
-                                     SI-01..SI-22、S-01..S-22、G-500、M-01..M-14 与恢复证明、PC-01..PC-09、Exit Debt Ledger、
-                                     环境记录、known limitations、evidence gaps）
+                                     SI-01..SI-22、S-01..S-22、G-500、M-01..M-14 与恢复证明、PC-01..PC-09、Exit Debt Ledger
+                                     （A = 8 / B = 17 / C = 15，含 XD-A08 状态）、环境记录、known limitations、evidence gaps；
+                                     失败路径记录：F2 findings、F2 之后收集的安全证据、被 F2 阻塞的场景、Acceptance verdict）
 Python Runtime Authority           : Python >= 3.11（不修改 pyproject.toml；Windows 11 / Python 3.12.x 只是正式验收证据环境）
-Production Change                  : NONE（默认；任何 src/** 改动 = 升级门 U-1）
+Production Change                  : NONE（默认；任何 src/** 改动 = 升级门 U-1，且只可能发生在统一 C10-R1 中）
+Design-R1                          : 只闭合 P4-C10-DESIGN-R-01 / R-02 / R-03；不改变 Risk Class B、G-500、L / SI / S / PC / M 矩阵语义、
+                                     F3 / F5 处置、原生跨卷处置、DF-07、EC-15（见下方“Design-R1 修订记录”）
 ```
+
+### Design-R1 修订记录（本计划侧；与合同“Design-R1 修订记录”一一对应）
+
+| Finding | 本计划的同步内容 | 状态 |
+|---|---|---|
+| P4-C10-DESIGN-R-01（HIGH / BLOCKING） | Evidence Gate / 第 8 节 / 第 10 节 / 第 13 节 / 自审第 5 项：C5-R1-L1 = XD-A08（A 类、OPEN、阻塞 Phase 4 Closure）；Ledger A = 8 / B = 17 / C = 15；Final Closure 前必须取得 authority | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
+| P4-C10-DESIGN-R-02（HIGH / BLOCKING） | 第 4.3 节新增读 / 改访问规则；STOP-02 / STOP-05 / 第 5.1 节 / 第 8 节 PC-08 措辞对齐合同第 3.4 节；原生跨卷例外不变 | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
+| P4-C10-DESIGN-R-03（MEDIUM / BLOCKING） | 第 3 节 S1-S3 规则、第 11 节 Review 计划、第 12 节 C10-R1 路径、第 14 节 STOP-02 / STOP-03 及“F2 流程（非 STOP）”：F2 流程（禁止修复 -> 记录 -> 继续安全证据 -> Failed Acceptance Head -> Level 1 FAIL -> 统一 C10-R1）；F3 / F4 / 真正 U 门仍立即 STOP | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
+
+三项均不得写为 CLOSED / PASS / ACCEPTED / FROZEN；Design Accepted Head 仍为 NOT ESTABLISHED。
 
 ```text
 Package               = P4-C10 Phase 4 Final Acceptance（不新增生产 package）
 Branch                = claude/phase4-c10-final-acceptance（自 c293ed75… 创建；不在 claude/phase4-c9-diagnostics 上工作）
 规范合同              = docs/specifications/PHASE4_FINAL_ACCEPTANCE_CONTRACT.md
-Design Candidate      = 本 docs-only 提交（git log -1 --format=%H -- fc2-organizer/docs/P4_C10_CONSTRUCTION_PLAN.md）
-Frozen Contract       = NOT YET ACCEPTED
-Construction Plan     = NOT YET ACCEPTED（本文件）
+Original Design Cand. = 17c194a71f0292e323591b8849ac65b9e14f7779（Independent Design Review：FAIL；亦为 Design-R1 Base）
+Design-R1 Candidate   = 本 docs-only 提交（git log -1 --format=%H -- fc2-organizer/docs/P4_C10_CONSTRUCTION_PLAN.md）
+Frozen Contract       = NOT ACCEPTED
+Construction Plan     = NOT ACCEPTED（本文件）
 Design Accepted Head  = NOT ESTABLISHED
-Implementation        = NOT STARTED
+Implementation        = NOT AUTHORIZED
 ```
 
 坐标规则（冻结）：Package Frozen Base = Planning Parent = `c293ed75…`；Governance Authority = `3b9d39e…`（`c293ed75…` 的祖先，治理文档自此未变）。
-唯一 authority transition：P4-C10 Independent Design Review PASS -> Design Accepted Head = Design Candidate -> Frozen Contract / Construction Plan =
-Design Candidate -> 才允许进入 S1。不创建 design closure / design accepted 之类的纯状态 docs 提交（治理文档第 11.1 节）。
+唯一 authority transition：P4-C10 Independent Design-R1 Closure Review PASS -> Design Accepted Head = Design-R1 Candidate -> Frozen Contract /
+Construction Plan = Design-R1 Candidate -> 才允许进入 S1（Design-R1 开发者完成修订本身不等于 PASS）。不创建 design closure / design accepted 之类的纯状态 docs 提交（治理文档第 11.1 节）。
 
 Design PASS 之后，开发者只能**执行**本计划：不得重新设计、不得调整 S 边界、不得把任何设计项推迟到“开发时再决定”。合同与本计划
 未写明的实现细节（helper 命名、文件内部组织、fixture 写法、断言写法）由开发者按以下优先级自行裁决，并在 commit message 中记录理由：
@@ -98,9 +112,10 @@ P4-C10：Phase 退出门，主要风险是虚假验收）。
 
 ## 2. Risk Class 与升级门
 
-* **Risk Class = B**（合同第 3.1 节）。保持 B 的前提：Production Change = NONE；全部文件系统修改只在 pytest `tmp_path` 下的可丢弃 fixture
-  上由既有、已复查的 P4-C6 / P4-C7 代码执行；无新安全边界；无持久化。
-* **升级门 U-1..U-7**（合同第 3.2 节，冻结）：任一触发即停止 B 类施工，在状态说明中记录触发项与证据，等待治理裁决；没有治理依据不得降级。
+* **Risk Class = B**（合同第 3.1 节）。保持 B 的前提：Production Change = NONE；全部文件系统**修改**只在 pytest `tmp_path` 或 harness 登记的可丢弃验收根内的
+  可丢弃 fixture 上由既有、已复查的 P4-C6 / P4-C7 代码执行（对仓库内文件只有只读访问，合同第 3.4 节）；无新安全边界；无持久化。
+* **升级门 U-1..U-7**（合同第 3.2 节，冻结）：任一**真正**触发即停止 B 类施工，在状态说明中记录触发项与证据，等待治理裁决；没有治理依据不得降级。
+  U-1 只在 CLOSED package `src/**` 被实际修改时触发；S1-S3 中发现 F2 本身不触发 U-1，走合同第 13.1 节 F2 流程（本计划第 3、14 节）。
 * **C 内中间独立 Review：NONE**（合同第 3.3 节）。唯一例外：含 CLOSED package 生产改动的 C10-R1（U-1）自身需要独立 Review（第 12 节）。
 
 ---
@@ -111,11 +126,18 @@ P4-C10：Phase 退出门，主要风险是虚假验收）。
 
 * 连续施工：S1、S2 完成后不 STOP、不等待 Review、不创建 docs commit。
 * 每个 S 结束时执行 developer checkpoint（不是治理节点）：该 S 的新测试全部通过；G-P4 无回归；`git diff --check` 干净；diff 只触及该 S 允许的
-  文件（第 4 节）。checkpoint 结果写入该 S 的 commit message。
+  文件（第 4 节）。checkpoint 结果写入该 S 的 commit message。F2 流程下的例外：若 checkpoint 失败的原因经分类为 F2（被验收 production 偏离其
+  Frozen Contract），该测试 / 场景按合同第 13.1 节记录为 F2 finding，不得为使 checkpoint 通过而修改 production、修改既有测试、降低断言或添加
+  skip / xfail；其余全部测试仍须通过。
 * 每个 S 一个或多个线性 commit；禁止 rebase、amend、squash、force push、历史改写。
 * 合同与本计划在 S1 / S2 中一律不修改（包括状态行）；S3 的 HANDOFF commit 中允许一次性同步合同第 20 节与本计划第 15 节的状态行（仅状态）。
   任何语义改动 = authority 修订，STOP 并走独立复查。
-* 任何阶段都不得修改 `src/**`；发现生产缺陷时按合同第 13、14 节分类并 STOP 记录（第 14 节 STOP 条件），不得顺手修。
+* 任何阶段都不得修改 `src/**`；发现生产缺陷时按合同第 13、14 节分类，不得顺手修：
+  * **F2**（普通生产缺陷）：按合同第 13.1 节 F2 流程——禁止 production repair、禁止改 affected CLOSED package、记录 `P4-C10-F2-<NN>`、验收转 FAIL、
+    **继续**收集仍安全的 S1 / S2 / S3 证据（可丢弃边界内、不改 production、无 authority amendment、无其它真正 U 门）、被缺陷路径直接阻塞的场景记录
+    `NOT RUN / BLOCKED BY F2 <id>`、S3 形成 Failed Acceptance Head 与 HANDOFF（`FAILED — F2 PRODUCTION FINDING(S)`；`Production repair : NOT PERFORMED`）、
+    Level 1 Review 判 FAIL、统一 C10-R1（第 12 节）。**不**为每个 F2 单独 Review，**不**机械往返。
+  * **F3 / F4 / 真正的 U 门 / 第 14 节其它 STOP 条件**：立即 STOP C10 执行（不属于 F2 流程）。
 * 全部 C10 测试在模块顶层 import `fc2_*` 名称（合同第 12.7 节）。
 
 ### S1 —— Authority 机器核对、基线、acceptance harness、语料与独立 oracle
@@ -197,8 +219,11 @@ S2 完成：继续 S3，不等待 Review，不创建 docs commit。
 1. 在正式证据环境执行 G-T、G-P4、G-FULL（第 7.2 节），完成 skip nodeid 对账（合同第 8.3 节）。
 2. 平台证据（第 8 节）：PC-01..PC-06 结果；PC-07 现状记录；PC-08 / PC-09 按可用性执行或记录为缺口。
 3. mutation 恢复证明：`git hash-object --no-filters` 对 `src/**` 全部文件与 HEAD blob 逐一比较；`git status --porcelain` 为空。
-4. `docs/review/P4_C10_HANDOFF.md`（合同第 17 节 Part I 全部；Part II 除“Phase 4 = CLOSED”与 final closure coordinates 外的全部）。
+4. `docs/review/P4_C10_HANDOFF.md`（合同第 17 节 Part I 全部——**含第 15 项失败路径记录**；Part II 除“Phase 4 = CLOSED”与 final closure coordinates 外的全部）。
 5. 同一 commit 中同步合同第 20 节与本计划第 15 节状态行（仅状态）。
+6. **F2 路径下的 S3**：若 S1-S3 中存在 OPEN F2，S3 在完成全部仍安全的证据收集后照常形成 C10 Acceptance Head 与 HANDOFF，但 HANDOFF 与状态行必须写
+   `P4-C10 Acceptance : FAILED — F2 PRODUCTION FINDING(S)` / `Phase 4 : NOT CLOSED` / `Production repair : NOT PERFORMED`，不得写 PASS（合同第 13.1 节）。
+   若 XD-A08 仍 OPEN，HANDOFF 的 Acceptance verdict 同时写 `INCOMPLETE — XD-A08 OPEN`，且不得写 Phase 4 = CLOSED。
 
 S3 允许改动文件：
 
@@ -241,6 +266,15 @@ fc2-organizer/upstream/**、fc2-organizer/tools/**、fc2-organizer/scripts/**
 
 不新增第三方依赖；不新增任何写文件、访问网络或持久化的**生产**代码（P4-C10 没有生产代码）。
 
+### 4.3 仓库内访问规则（读 / 改，冻结；与合同第 3.4 节逐条一致，Design-R1 新增）
+
+* **只读允许**：`src/**`（import 被验收 production）、`docs/**`（authority 检查）、`tests/support/**`、`tests/fixtures/**`（FX-6 / S-20 加载 `tests/fixtures/sources/**`）、
+  `pyproject.toml`、Git metadata / history。第 4.2 节“禁止”列表里的 `tests/support/**`、`tests/fixtures/**` 等条目指**禁止修改**，不禁止只读复用。
+* **修改只允许在可丢弃验收根内**：pytest `tmp_path`，或 harness 登记且位于 `tmp_path` 之下的可丢弃验收根；合同第 12.3 节经 Owner 授权的原生跨卷目录是唯一例外，
+  且处置不变（无授权 = NOT RUN / accepted evidence gap，XD-B04，不阻塞 Phase 4 Closure）。
+* **STOP-05 只针对修改**：需要对可丢弃验收根之外的路径执行修改性操作、需要真实用户媒体 / 真实 production library / 现存个人目录充当 fixture、或某个
+  blocking acceptance 只有 tmp_path 之外的真实数据才能成立时才 STOP。只读访问仓库内文件**不**触发 STOP-05 / U-2。
+
 ---
 
 ## 5. Acceptance Harness 策略
@@ -251,7 +285,8 @@ fc2-organizer/upstream/**、fc2-organizer/tools/**、fc2-organizer/scripts/**
   `SourceAdapter`（脚本化，或真实 adapter + `FakeHttpClient` + 既有 fixture HTML）与图片层的 `httpx.MockTransport`（注入真实
   `HttpxImageClient`）。
 * **oracle 独立**：期望值来自 `_corpus.py` 的用例定义与被引用合同的冻结规则，门函数由 `_oracles.py` 独立实现，不 import `tests/unit/**`。
-* **可丢弃**：每个场景在自己的 `tmp_path` 中建立 `downloads/`（脏下载目录）与 `library/`（library root），sandbox guard 全程生效。
+* **可丢弃**：每个场景在自己的 `tmp_path` 中建立 `downloads/`（脏下载目录）与 `library/`（library root），sandbox guard 对**修改**全程生效；仓库内
+  fixture / support 只读加载（第 4.3 节）。
 
 ### 5.2 组件
 
@@ -346,7 +381,7 @@ git status --porcelain                                                  # 为空
 | 正式环境记录 | `python -VV`、`platform.platform()`、`sys.getwindowsversion()`、`httpx.__version__`、`pytest --version`、basetemp 所在卷、symlink 权限可用性（以既有 skip 原因为准）、`FC2_EXECUTION_CROSS_VOLUME_ROOT` 是否设置 |
 | PC-01..PC-06 | 由 G-T（含 C10 架构测试）、G-P4、G-FULL 与 S-09 / S-12 / S-13 / S-21 给出 |
 | PC-07 | 从 G-FULL 的 JUnit XML 提取 XD-B01..XD-B07 相关测试的实际状态（执行 / skip + 原因），写入 HANDOFF |
-| PC-08 | 默认**不执行**。只有所有者对专门新建的空目录给出明确授权并满足合同第 12.3 节全部条件时，设置环境变量后重跑 G-FULL；记录 k 与父目录前后列举 |
+| PC-08 | 默认**不执行**（处置不变：无 Owner 授权 = NOT RUN / accepted evidence gap，XD-B04，不阻塞 Phase 4 Closure）。只有所有者对专门新建、初始为空、仅供本轮验收、路径明确的目录给出明确授权并满足合同第 12.3 节全部条件时，设置环境变量后重跑 G-FULL；记录 k 与父目录前后列举。禁止扫描现有第二卷个人文件、复用现存个人目录、自动选择其它盘目录 |
 | PC-09 | 主机若有 Python 3.11.x：运行 G-T 与 G-P4；若有 POSIX 主机：运行 G-T（Windows 原生断言按合同第 8.1 节平台门控）。不可用则记录为 XD-B02 / XD-B08 证据缺口，不伪造 |
 
 不得为获取平台证据而提权、启用 Developer Mode、修改组策略或关闭任何安全功能（CLAUDE.md）。
@@ -367,12 +402,14 @@ git status --porcelain                                                  # 为空
 
 ## 10. HANDOFF 证据要求
 
-`docs/review/P4_C10_HANDOFF.md` 必须满足合同第 17 节全部条目（Part I 1-14、Part II 1-6；Part II 7 与“Phase 4 = CLOSED”只在 Final Closure Docs
-中写入）。另外必须：
+`docs/review/P4_C10_HANDOFF.md` 必须满足合同第 17 节全部条目（Part I 1-15、Part II 1-6；Part II 7 与“Phase 4 = CLOSED”只在 Final Closure Docs
+中写入）。HANDOFF **不得只有成功路径**：第 15 项失败路径记录（XD-A08 状态；F2 findings；F2 之后收集的安全证据；被 F2 阻塞的场景；Production repair；
+Acceptance verdict；F3 / F4 / U 门 STOP 记录）无内容时必须明确写 `NONE`。另外必须：
 
 * 如实记录任何瞬时失败、环境问题（F0）与 C10 自身测试缺陷修复（F1）的经过与重跑结果；
 * 逐项回答升级门 U-1..U-7 是否触发；
 * 明确写出 `Production Modified : NO`（或附 CLOSED package amendment record）；
+* 写出 XD-A08（C5-R1-L1）当前状态；OPEN 时 Acceptance verdict 必含 `INCOMPLETE — XD-A08 OPEN`；
 * 不自我宣布 Review PASS、P4-C10 CLOSED 或 Phase 4 CLOSED。
 
 ---
@@ -380,18 +417,24 @@ git status --porcelain                                                  # 为空
 ## 11. Independent Review Plan
 
 ```text
-1. P4-C10 INDEPENDENT DESIGN / CONTRACT / CONSTRUCTION PLAN REVIEW（本 Design Candidate）
-     PASS -> Design Accepted Head = Design Candidate；Frozen Contract / Construction Plan = Design Candidate；之后才允许进入 S1
+1. P4-C10 INDEPENDENT DESIGN / CONTRACT / CONSTRUCTION PLAN REVIEW（Original Design Candidate 17c194a…）                -> FAIL
+     （P4-C10-DESIGN-R-01 / R-02 / R-03）
+   P4-C10 DESIGN-R1 INCREMENTAL INDEPENDENT DESIGN CLOSURE REVIEW（Design-R1 Candidate）
+     PASS -> Design Accepted Head = Design-R1 Candidate；Frozen Contract / Construction Plan = Design-R1 Candidate；之后才允许进入 S1
              （唯一 authority transition；不创建 design closure docs）
-     FAIL -> Design-R1（authority docs 修订，一次闭合全部 design findings）-> 增量 Design Review
+     FAIL -> 再一轮设计修订（authority docs，一次闭合全部 design findings），再次增量 Design Review
 2. S1 -> S2 -> S3 连续施工（不单独 Review，不创建 S 级 docs）
+     正常路径：S1 -> S2 -> S3 -> Level 1
+     F2 路径（合同第 13.1 节）：S1 / S2 / S3 中发现 F2 -> 不修复 -> 记录 -> 继续收集仍安全的证据 -> S3 形成 Failed Acceptance Head ->
+                              Level 1（FAIL）-> 一个统一 C10-R1；不为每个 F2 设立 Review
+     F3 / F4 / 真正 U 门：立即 STOP C10 执行，authority first
 3. P4-C10 INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW
      Review Range = <Design Accepted Head>..<C10 Acceptance Head>
      Reviewer 必须在正式证据环境（Windows 11 / Python 3.12.x）独立重跑 G-T、G-P4、G-FULL，并抽查 mutation 与 G-500
-     PASS -> Final Reviewed Acceptance Head = C10 Acceptance Head（EC-14）-> 第 13 节 Phase 4 Final Closure
-     FAIL -> 第 12 节 C10-R1
-4. PHASE 4 FINAL CLOSURE DOCS-ONLY REVIEW（独立）
-     PASS -> Phase 4 = CLOSED（EC-15）；Phase 4 Final Closure Docs Head = Phase 5 Frozen Base Candidate
+     PASS -> Final Reviewed Acceptance Head = C10 Acceptance Head（EC-14）-> 第 13 节 Phase 4 Final Closure（另受 XD-A08 约束）
+     FAIL -> 第 12 节 C10-R1（存在 OPEN F2 时 PASS 不可达，Reviewer 应判 FAIL 并确认全部已知 findings）
+4. PHASE 4 FINAL CLOSURE DOCS-ONLY REVIEW（独立；亦承接 XD-A08 的 Ledger 修订）
+     PASS -> Phase 4 = CLOSED（EC-15；前提：XD-A08 已闭合、无 OPEN F2）；Phase 4 Final Closure Docs Head = Phase 5 Frozen Base Candidate
      FAIL -> 修订 closure docs 后再次 docs-only Review
 ```
 
@@ -402,21 +445,25 @@ Phase 4 Final Closure Docs Review：**YES**（它改变下一阶段输入语义�
 
 ## 12. C10-R1 路径
 
-* 触发：Level 1 Final Acceptance Review FAIL。
+* 触发：Level 1 Final Acceptance Review FAIL（含 F2 路径下的 Failed Acceptance Head）。
 * 分类：按合同第 13 节（F1..F6）。
-* 统一 R1：同根因 / 范围明确、不需要新架构设计或 Contract authority 的全部 findings 进入**一个** C10-R1，一次闭合并检查 direct regression。
+* 统一 R1：同根因 / 范围明确、不需要新架构设计或 Contract authority 的全部 findings（含实施期记录的全部 F2 与 Level 1 findings）进入**一个** C10-R1，
+  一次闭合并检查 direct regression。C10-R1 必须重新执行合同第 13.1 节中 `NOT RUN / BLOCKED BY F2` 的 blocking 场景。不得为每个 F2 单独 Review。
 * 只改测试 / docs 的 C10-R1：允许文件 = `tests/phase4_acceptance/**` + `docs/review/P4_C10_HANDOFF.md`（追加 R1 节）+ 合同第 20 节 / 本计划
   第 15 节状态行；Risk Class B；增量 Level 1 Review。
-* 含 CLOSED package 生产改动的 C10-R1（F2，U-1）：Risk Class 升级为 C；必须满足合同第 14 节第 3 条全部要求；允许文件另加被修复 package
+* 含 CLOSED package 生产改动的 C10-R1（F2；生产修复**只可能**发生在这里，触发 U-1）：Risk Class 升级为 C；必须记录 affected CLOSED package、affected Frozen Contract、
+  为什么必须修改、regression scope、compatibility impact、safety impact（合同第 14 节第 2、3 条）；允许文件另加被修复 package
   的 `src/**`（精确列出）与针对该缺陷的回归测试——回归测试只允许新增在 `tests/phase4_acceptance/**`（不修改 CLOSED package 既有测试）；
   回归范围 = 受影响 package 全部测试 + G-T + G-P4 + G-FULL；独立 Review 必须显式审计 CLOSED package 改动。
-* 需要 authority 的 finding（F3 / F4）：STOP Final Acceptance，先完成 authority 修订与独立复查，之后才允许 C10-R1。
+* 需要 authority 的 finding（F3 / F4）：立即 STOP C10 执行，先完成 authority 修订与独立复查，之后才允许 C10-R1；不得当作普通 failed acceptance 继续。
 * C10-R1 不得加入任何新功能（合同第 1.3 节）。
 
 ---
 
 ## 13. Phase 4 Final Closure 路径
 
+0. 前置（缺一不可）：不存在任何 OPEN 的 F2 finding；**XD-A08（C5-R1-L1）已取得可审计 authority 并给出明确 disposition**（合同第 10.1 节 Required closure；其 Ledger 修订
+   最迟并入下面第 3 步的 Docs-Only Review，或先经独立 docs-only 复查）。XD-A08 = OPEN 时不得创建写入 `Phase 4 = CLOSED` 的 Final Closure Docs。
 1. EC-14 满足（Level 1 Final Acceptance Review PASS）。
 2. 创建一个 docs-only 的 **Phase 4 Final Closure Docs** 提交：
    * `docs/review/P4_C10_HANDOFF.md` 追加“P4-C10 最终闭合 / Phase 4 最终闭合”节（快照声明、Final Reviewed Acceptance Head、Review 历史、
@@ -430,20 +477,39 @@ Phase 4 Final Closure Docs Review：**YES**（它改变下一阶段输入语义�
 
 ## 14. STOP 条件（冻结）
 
-出现以下任何一项，立即停止施工，在状态说明 / HANDOFF 中记录证据，等待治理裁决：
+出现以下 STOP-01..STOP-09 任何一项，立即停止 C10 执行，在状态说明 / HANDOFF 中记录证据，等待治理裁决：
 
 ```text
 STOP-01  第 7.1 节任一核对失败（坐标不是祖先、src 漂移、某 package 状态不是 CLOSED、C9 远端 head 不等于 c293ed75…）
-STOP-02  升级门 U-1..U-7 任一触发
-STOP-03  发现 F2 / F3 / F4 类问题（不得顺手修；F2 进入 C10-R1 只能在 Level 1 Review 之后按第 12 节进行）
+STOP-02  升级门 U-1..U-7 任一**真正**触发（U-1 = CLOSED package src/** 被实际修改；U-2 见 STOP-05；S1-S3 中发现 F2 本身不触发 U-1，走 STOP-03 / F2 流程）
+STOP-03  发现 F3（需要 authority 的生产缺陷）或 F4（合同冲突）：立即 STOP，authority first，不得当作普通 failed acceptance 继续。
+         （F2 **不**在此列——F2 走合同第 13.1 节 F2 流程，见下方“F2 流程（非 STOP）”）
 STOP-04  需要修改第 4.2 节任一禁止文件
-STOP-05  任何测试需要触碰 tmp_path 之外的路径（合同第 12.3 节可选证据除外且条件全部满足）
+STOP-05  需要对可丢弃验收根（合同第 3.4.2 节）之外的路径执行**修改性**操作；或真实用户媒体 / 真实 production library / 现存个人目录被当作 fixture；
+         或某个 blocking acceptance 只有 tmp_path 之外的真实数据才能成立（合同第 12.3 节经 Owner 授权的可选原生跨卷目录在其全部条件满足时除外）。
+         只读访问仓库内 `src/**`、`docs/**`、`tests/support/**`、`tests/fixtures/**`、`pyproject.toml`、Git metadata 不触发 STOP-05（第 4.3 节）
 STOP-06  基线测量出现 failed / errors 且无法归类为 F0 / F6
 STOP-07  合同或本计划之间、或与任何 CLOSED 合同之间出现语义冲突
 STOP-08  需要新增依赖或修改 pyproject.toml
 STOP-09  需要 Owner 的业务决策（Owner Question Gate），且该决策阻塞 Exit Criteria
-STOP-10  S3 完成（正常停止点：等待 Level 1 Final Acceptance Review）
+STOP-10  S3 完成（正常停止点：等待 Level 1 Final Acceptance Review；F2 路径下为 Failed Acceptance Head 之后）
 ```
+
+**F2 流程（非 STOP，合同第 13.1 节；冻结）**：
+
+```text
+F2 discovered during S1 / S2 / S3
+  -> STOP PRODUCTION REPAIR（禁止修复；禁止修改 affected CLOSED package）
+  -> MARK ACCEPTANCE FAILING（记录 P4-C10-F2-<NN>；Phase 4 Closure 暂时不可达）
+  -> CONTINUE SAFE EVIDENCE COLLECTION（可丢弃边界内；不改 production；无 authority amendment；无其它真正 U 门）
+  -> 被缺陷路径直接阻塞的场景：NOT RUN / BLOCKED BY F2 <id>（须证明直接依赖；否则必须照常执行）
+  -> Failed Acceptance Head（S3；P4-C10 Acceptance : FAILED — F2 PRODUCTION FINDING(S)；Production repair : NOT PERFORMED）
+  -> Independent Level 1 Review（PASS 不可达 -> FAIL）
+  -> 一个统一 C10-R1（第 12 节）
+```
+
+若继续收集证据会越出可丢弃边界、对真实数据产生 source-loss 风险、需要 production repair、需要 authority amendment、需要新安全设计，或触发其它真正的 U 门，
+则该 F2 流程在该点终止并按 STOP-02 / STOP-03 / STOP-05 处理。
 
 ---
 
@@ -455,24 +521,29 @@ S1 / S2 / S3 施工期间本节**不更新**；整个 C10 implementation 完成�
 P4-C1 .. P4-C9                 : CLOSED
 P4-C10 Frozen Base             : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c
 Governance Authority           : 3b9d39e9adbcc8a009707486eebbb8736a5b1c4d
-P4-C10 Design                  : DESIGN CANDIDATE —— INDEPENDENT DESIGN REVIEW REQUIRED
-Frozen Contract                : NOT YET ACCEPTED
-Construction Plan              : NOT YET ACCEPTED（本文件）
+Original Design Candidate      : 17c194a71f0292e323591b8849ac65b9e14f7779 —— Independent Design Review：FAIL
+P4-C10-DESIGN-R-01             : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+P4-C10-DESIGN-R-02             : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+P4-C10-DESIGN-R-03             : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+P4-C10 Design                  : DESIGN-R1 CANDIDATE —— INDEPENDENT DESIGN-R1 INCREMENTAL CLOSURE REVIEW REQUIRED
+Frozen Contract                : NOT ACCEPTED
+Construction Plan              : NOT ACCEPTED（本文件）
 Design Accepted Head           : NOT ESTABLISHED
 S1 / S2 / S3                   : NOT STARTED
-P4-C10 Implementation          : NOT STARTED
+P4-C10 Implementation          : NOT AUTHORIZED
+XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Closure）
 Production Modified            : NO
 P4-C10                         : NOT CLOSED
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```
 
-Design Candidate 提交之后 **STOP**：不开始 S1、不写 acceptance 测试、不进入 C10-R1、不做 Phase 4 Final Closure、不开始 Phase 5；
-下一步是 P4-C10 INDEPENDENT DESIGN / CONTRACT / CONSTRUCTION PLAN REVIEW。
+Design-R1 Candidate 提交之后 **STOP**：不开始 S1、不写 acceptance 测试、不进入 C10-R1、不做 Phase 4 Final Closure、不开始 Phase 5；
+下一步是 P4-C10 DESIGN-R1 INCREMENTAL INDEPENDENT DESIGN CLOSURE REVIEW。
 
 ---
 
-## 16. Design 静态自审（提交前确认）
+## 16. Design 静态自审（提交前确认；Design-R1 同步）
 
 | # | 自审项 | 结论 | 依据 |
 |---|---|---|---|
@@ -480,7 +551,7 @@ Design Candidate 提交之后 **STOP**：不开始 S1、不写 acceptance 测试
 | 2 | 有没有偷偷新增功能？ | PASS | 合同第 1.3 节 NO FEATURE EXPANSION；第 4.2 节禁止 `src/**`；Production Change = NONE |
 | 3 | 有没有重新定义 CLOSED package semantics？ | PASS | 合同开头 authority 优先级；第 6 节只引用原条款；引用不一致即 finding |
 | 4 | 所有 Phase 4 package 是否有 authority 坐标？ | PASS | 合同第 4.1 节九行全部 Frozen Base / Final Reviewed Head / Final Closure Docs Head；设计阶段已核对祖先关系与 `src` 零漂移 |
-| 5 | 所有历史 Deferred / Evidence Gap 是否有 disposition？ | PASS | 合同第 10 节 XD-A01..A07、XD-B01..B17、XD-C01..C16 与第 10.4 节；定义不在仓库内的 F3 / F5 / C5-R1-L1 如实记录 |
+| 5 | 所有历史 Deferred / Evidence Gap 是否有 disposition？ | PASS | 合同第 10 节：A 类 8（XD-A01..A08）、B 类 17（XD-B01..B17）、C 类 15（XD-C01..C13、C15、C16；XD-C14 已移出且不重用）与第 10.4 节。定义不在仓库内的 F3 / F5 按原裁决（Phase 4 非阻塞、Phase 5 入口阻塞）；C5-R1-L1 因无 authority 不能被判 non-blocking，改为 XD-A08（OPEN、阻塞 Phase 4 Closure） |
 | 6 | Phase 4 Exit Criteria 是否明确？ | PASS | 合同第 16 节 EC-01..EC-15，全部 Blocking |
 | 7 | 真实 filesystem 测试是否只使用 disposable fixtures？ | PASS | 合同第 12.2 节 + sandbox guard + C10 架构测试；唯一例外第 12.3 节为可选、需所有者明确授权、只经既有测试 |
 | 8 | production defect 被发现后的治理路径是否明确？ | PASS | 合同第 13-15 节；本计划第 12、14 节 |
@@ -493,3 +564,7 @@ Design Candidate 提交之后 **STOP**：不开始 S1、不写 acceptance 测试
 | 15 | 是否明确 P5 不在本 C 实施？ | PASS | 合同第 1.4、18 节；本计划第 4.2、13、15 节 |
 | 16 | 是否只有一个 C、无机械拆分、无 C 内中间 Review？ | PASS | 本计划第 1 节；合同第 3.3 节 |
 | 17 | Frozen Base / Planning Parent / Governance Authority 是否与 Frozen Authority 一致？ | PASS | 合同第 2.1 节；未发现冲突 |
+| 18 | （Design-R1 / R-01）未决 authority 债务是否没有被无 authority 地归为 non-blocking？Ledger 计数与全文是否一致？ | PASS | C5-R1-L1 = XD-A08（A 类、OPEN、阻塞）；A = 8 / B = 17 / C = 15；XD-C14 不重用；EC-10、合同第 17 / 18.3 节、DF-04、本计划头部 / 第 13 / 15 节同步；设计阶段已核对：该 ID 在 Phase 3 收口基线上不存在，仓库内最早出现于 `00dc40d…` 的延续清单，无定义 |
+| 19 | （Design-R1 / R-02）全文是否不再同时存在“仓库 fixture 可只读”与“tmp_path 之外任何访问立即 STOP”？ | PASS | 合同第 3.4 节（只读允许 / 可丢弃修改 / FORBIDDEN）为唯一权威；U-2、第 12.2 / 12.4 节、FX-6、STOP-05、本计划第 4.3 / 5.1 节对齐；原生跨卷例外与处置不变 |
+| 20 | （Design-R1 / R-03）实施期 F2 是否有出口、不产生每个 F2 一次 Review、且不放宽 production repair 治理、F3 / F4 仍立即 STOP？ | PASS | 合同第 13.1 节；本计划第 3、11、12、14 节；C10-R1 才触发 U-1 并升级为 C 类；HANDOFF 含失败路径记录（合同第 17 节 Part I 第 15 项） |
+| 21 | Design-R1 是否只改三个 finding 直接相关内容，未改动 Risk Class B、G-500、L / SI / S / PC / M 矩阵语义、F3 / F5、原生跨卷处置、DF-07、EC-15？ | PASS | 合同 / 计划 diff 仅涉及上述章节与引用 / 状态同步 |
