@@ -597,7 +597,7 @@ F2 discovered during S1 / S2 / S3
 
 ## 15. 状态
 
-S1 / S2 / S3 施工期间本节**不更新**；整个 C10 implementation 完成后随 HANDOFF 一次同步。
+S1 / S2 / S3 施工期间本节未更新；整个 C10 implementation 完成后随 HANDOFF 一次同步（本次同步）。
 
 ```text
 P4-C1 .. P4-C9                 : CLOSED
@@ -608,24 +608,28 @@ Design-R1 Candidate            : 5dc80fdebb467f38a852c4501c32ba65c6dd153f（Desi
 P4-C10-DESIGN-R-01 / R-02 / R-03 : CLOSED（经独立 DESIGN-R1 Closure Review 确认）
 Design-R2 Candidate            : c284108c6f4e542e8d5e574bafa8e0815681957c（亦为 Design-R3 Base）
 P4-C10-DESIGN-R1-01            : CLOSED（经独立 DESIGN-R2 Incremental Closure Review 确认）
-P4-C10-DESIGN-R2-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED
-P4-C10 Design                  : DESIGN-R3 CANDIDATE —— INDEPENDENT DESIGN-R3 INCREMENTAL CLOSURE REVIEW REQUIRED
-Frozen Contract                : NOT ACCEPTED
-Construction Plan              : NOT ACCEPTED（本文件）
-Design Accepted Head           : NOT ESTABLISHED
-S1 / S2 / S3                   : NOT STARTED
-P4-C10 Implementation          : NOT AUTHORIZED
-P4-C10 Technical Acceptance    : NOT STARTED（尚无验收；Candidate Status / Verdict 见合同第 16.1a 节，当前均无）
+P4-C10-DESIGN-R2-01            : CLOSED（经独立 DESIGN-R3 Incremental Closure Review 确认；据任务指令记录）
+P4-C10 Design                  : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19b475（Independent Design-R3 Closure Review PASS）
+Frozen Contract                : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19b475
+Construction Plan              : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19b475（本文件）
+Design Accepted Head           : fc59e2020e4df237bf3bed83a07950d67c19b475
+S1 / S2 / S3                   : COMPLETED（S1 f9f95567b9f6ea243e7587219404b1e258023233；S2 eeac4e420202031944d3d0ca8dd405c469b93537；S3 = C10 Acceptance Head）
+P4-C10 Implementation          : S3 CANDIDATE SUBMITTED —— WAITING FOR INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW
+P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
+P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED
+C10 Acceptance Head            : 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C10_HANDOFF.md）
+Final Reviewed Acceptance Head : NOT ESTABLISHED
 XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Phase 4 Exit Authorization     : BLOCKED
+Phase 4 Exit Authorization     : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
 Production Modified            : NO
+Production repair              : NOT PERFORMED
 P4-C10                         : NOT CLOSED
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```
 
-Design-R3 Candidate 提交之后 **STOP**：不开始 S1、不写 acceptance 测试、不进入 C10-R1、不做 Phase 4 Final Closure、不开始 Phase 5；
-下一步是 P4-C10 DESIGN-R3 INCREMENTAL INDEPENDENT DESIGN CLOSURE REVIEW。
+S3 提交之后 **STOP**：不创建 Review 后状态提交、不建立 Final Reviewed Acceptance Head、不关闭 XD-A08、不开始 EC-15、不开始 Phase 5；
+下一步是 P4-C10 INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW。
 
 ---
 
