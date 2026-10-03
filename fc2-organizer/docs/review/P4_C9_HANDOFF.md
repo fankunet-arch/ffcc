@@ -288,3 +288,72 @@ Phase 4                       : NOT CLOSED
 
 Developer 在此 STOP：不自我 Review、不修复 Review finding、不开始 P4-C10；等待 P4-C9 Independent Level 1 Review
 （Review Range = `dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf..<C9 Implementation Head>`）。
+
+---
+
+## P4-C9 最终闭合
+
+**快照声明**：本文件第 1-12 节是对应历史时点（Level 1 Review 之前，Candidate `fa0946206d503ae3656e3721a1762ebb829694dd` 的上一轮 implementation）的 evidence
+snapshot。其中“INDEPENDENT LEVEL 1 REVIEW REQUIRED”“NOT STARTED”“Linux 沙箱数字”“Windows 11 / Python 3.12 evidence gap”以及第 11 节的 diff stat 表述等文字，均不删除、不篡改；
+它们之后的 Review、finding 与 Windows 正式验收的结论以本章节为准。P4-C9 的最终状态以本章节为准。
+
+### 最终状态
+
+```text
+Final Level 1 Review          : PASS
+P4-C9-L1-01                   : CLOSED
+P4-C9-WIN-01                  : CLOSED
+All Level 1 Findings          : CLOSED
+Final Reviewed Package Head   : 9cd7bf56ba98878145cdae95456edd6ef9fb2ae9
+Windows Acceptance            : PASS
+P4-C9 Implementation          : REVIEWED COMPLETE
+P4-C9                         : CLOSED
+P4-C10                        : NOT STARTED
+Phase 4                       : NOT CLOSED
+Final Closure Docs Head       : 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C9_HANDOFF.md）
+```
+
+最终裁决事实：已知代码 finding = NONE；已知合同 finding = NONE；已知安全 finding = NONE；剩余 evidence 阻塞 = NONE；风险升级门 A-K = NONE；Risk Class = B；
+BLOCKED DESIGN ISSUE = NONE。
+
+### 历史记录（如实保留，不改写）
+
+| 轮次 | Candidate | 结论 |
+|---|---|---|
+| Original Level 1 | `fa0946206d503ae3656e3721a1762ebb829694dd` | **FAIL**。Finding `P4-C9-L1-01`（LOW / BLOCKING）：HANDOFF 把 `tests/unit/diagnostics` 的新增文件数写成 26 个（含 helpers），实际为 28 个（26 个 `test_*.py` + `__init__.py` + `_builders.py`） |
+| C9-R1 | `44b9c960a943468566225879ce489983253e2e0c` | `P4-C9-L1-01` CLOSED；Implementation Code Review PASS；Final Verdict **BLOCKED**，唯一阻塞 = Windows 11 / Python 3.12 验收证据 |
+| 首次 Windows 正式验收 | `44b9c960a943468566225879ce489983253e2e0c` | **FAIL**。P4-C9 专项 1578 passed / 2 failed / 0 skipped；全量 7759 passed / 2 failed / 40 skipped / 0 errors。两个失败均在 `test_diagnostics_path_policy.py` 的 `[backslash]` 用例，形成 `P4-C9-WIN-01` |
+| C9-R2 | `9cd7bf56ba98878145cdae95456edd6ef9fb2ae9` | 仅测试修复（只改 `tests/unit/diagnostics/test_diagnostics_path_policy.py`）；Production UNCHANGED；Frozen Contract UNCHANGED。最终 Windows 复验全部通过；`P4-C9-WIN-01` CLOSED；Final Verdict **PASS** |
+
+`P4-C9-WIN-01` 根因：测试契约不一致 / 平台原生 basename 语义——测试把 raw path 中的 `\` 等同于最终披露 basename 中的 `\`。Frozen Contract 第 18.1 节规定
+`os.path.basename` 使用运行平台的路径语义，第 18.2 节 grammar 作用于已提取的最终 basename；因此 Windows 上 `/lib/FC2-1/a\b.mp4` 提取为合法的 `b.mp4`，当时的 production 行为符合 Frozen Contract。
+**不是 production 缺陷，不是 Frozen Contract 缺陷。** C9-R2 把“最终 basename grammar（`/` 与 `\` 在所有平台均禁止）”与“native extraction（由运行平台的 `os.path.basename` 决定）”分开断言，且没有使用 skip / xfail。
+
+### 最终验收环境与结果
+
+```text
+操作系统 : Windows 11（Microsoft Windows NT 10.0.26200.0）
+Python   : 3.12.10（MSC v.1943 64 bit）
+```
+
+| 范围 | 结果 |
+|---|---|
+| 路径策略 fail-fast | 102 passed / 0 failed / 0 skipped / 0 errors |
+| P4-C9 专项 | 1586 passed / 0 failed / 0 skipped / 0 errors |
+| targeted organizer | 1156 passed / 0 failed / 0 skipped / 0 errors |
+| contract | 237 passed / 0 failed / 0 skipped / 0 errors |
+| 全量 | 7767 passed / 0 failed / 40 skipped / 0 errors |
+| 新增 skip | NONE（diagnostics skip = 0） |
+
+冻结 gate：`passed >= 6178`、`failed = 0`、`errors = 0`、`skipped = 40`、新增 skip = NONE —— **全部 PASS**。
+
+Windows 路径语义：Native Windows Backslash Extraction = PASS；Final `/` Basename Grammar = PASS；Final `\` Basename Grammar = PASS；`PathPolicy.NONE` = PASS；`PathPolicy.BASENAME` = PASS；Plan Layout = PASS。
+
+### 最终审查结论摘要
+
+Production correctness review = PASS；Contract conformance = PASS；Dispatch Safety = PASS；Numeric Totality = PASS；Renderer = PASS；Redaction = PASS；Determinism = PASS；
+Resources = PASS；No Side Effects = PASS；Architecture = PASS；Mutation / Non-Vacuity = PASS；Windows path semantics = PASS。
+
+### 停止位置
+
+P4-C9 已 CLOSED。P4-C10 = NOT STARTED，不在本章节范围内；Phase 4 = NOT CLOSED。

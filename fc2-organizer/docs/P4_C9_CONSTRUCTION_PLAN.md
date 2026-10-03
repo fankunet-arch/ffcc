@@ -571,14 +571,39 @@ Implementation Input          : dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf
 S1                            : IMPLEMENTED（0be5201）
 S2                            : IMPLEMENTED（6f01348）
 S3                            : IMPLEMENTED（C9 Implementation Head = 本 S3 提交）
-P4-C9 Implementation        : COMPLETE — INDEPENDENT LEVEL 1 REVIEW REQUIRED
-P4-C9 Production              : NOT STARTED
-P4-C9 Independent L1 Review   : NOT STARTED
+P4-C9 Implementation          : REVIEWED COMPLETE
+P4-C9 Independent L1 Review   : PASS
+P4-C9-L1-01                   : CLOSED
+P4-C9-WIN-01                  : CLOSED
+Windows Acceptance            : PASS（Windows 11 / Python 3.12.10）
+Final Reviewed Package Head   : 9cd7bf56ba98878145cdae95456edd6ef9fb2ae9
+P4-C9                         : CLOSED
 P4-C10                        : NOT STARTED
 Phase 4                       : NOT CLOSED
 ```
 
 S3 完成后 **STOP**：P4-C9 implementation 完成，不自我 Review、不修复 Review finding、不开始 P4-C10；等待 P4-C9 Independent Level 1 Review（Review Range = `dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf..<C9 Implementation Head>`，证据见 `docs/review/P4_C9_HANDOFF.md`）。
+
+### 10.1 P4-C9 最终闭合记录（纯治理状态；不改变施工语义）
+
+上方第 10 节状态块中“S1 / S2 / S3 IMPLEMENTED”及“S3 完成后 STOP”是对应历史时点的状态，保留不删。本节只记录 Level 1 PASS 之后的 Final Closure，
+依据本计划第 9 节 Independent Review Plan（Level 1 PASS -> Final Closure，状态 docs 与 Final Closure 合并）：
+
+```text
+Original Level 1 Review       : FAIL（fa0946206d503ae3656e3721a1762ebb829694dd；P4-C9-L1-01）
+C9-R1                         : 44b9c960a943468566225879ce489983253e2e0c（P4-C9-L1-01 CLOSED；代码审查 PASS；Final Verdict BLOCKED，唯一阻塞 = Windows 验收证据）
+首次 Windows 验收             : FAIL（44b9c960…；2 个测试契约不一致 = P4-C9-WIN-01；非 production、非 Frozen Contract 缺陷）
+C9-R2                         : 9cd7bf56ba98878145cdae95456edd6ef9fb2ae9（仅测试修复；Production / Frozen Contract UNCHANGED）
+最终 Windows 验收             : PASS（Windows 11；Python 3.12.10；P4-C9 专项 1586 passed；targeted organizer 1156 passed；contract 237 passed；全量 7767 passed / 40 skipped / 0 failed / 0 errors；新增 skip = NONE）
+Final Reviewed Package Head   : 9cd7bf56ba98878145cdae95456edd6ef9fb2ae9
+P4-C9-L1-01 / P4-C9-WIN-01    : CLOSED / CLOSED
+P4-C9 Implementation          : REVIEWED COMPLETE
+P4-C9                         : CLOSED
+P4-C10                        : NOT STARTED
+Phase 4                       : NOT CLOSED
+```
+
+本记录不新增 authority amendment，不改变 Frozen Base、施工范围、Risk Class、Evidence Gate 或后续 package 的输入语义。
 
 ## 11. Owner Question Gate
 

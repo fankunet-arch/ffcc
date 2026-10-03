@@ -2103,12 +2103,45 @@ Closure 一次同步。
 | S1 Diagnostic model / schema / projection skeleton | IMPLEMENTED（`0be5201`） |
 | S2 Existing-result integration / local validation / source + field provenance mapping | IMPLEMENTED（`6f01348`） |
 | S3 Safe output / redaction / architecture guards / tests / HANDOFF | IMPLEMENTED（C9 Implementation Head = 本 S3 提交，见 `docs/review/P4_C9_HANDOFF.md`） |
-| P4-C9 Implementation | COMPLETE — INDEPENDENT LEVEL 1 REVIEW REQUIRED |
-| P4-C9 Independent Level 1 Review | NOT STARTED |
-| P4-C9 Production | NOT STARTED |
+| P4-C9 Implementation | REVIEWED COMPLETE |
+| P4-C9 Independent Level 1 Review | PASS |
+| P4-C9-L1-01（LOW / BLOCKING；HANDOFF 计数笔误） | CLOSED |
+| P4-C9-WIN-01（LOW / BLOCKING；Windows 平台原生 basename 的测试契约不一致） | CLOSED |
+| Windows 11 / Python 3.12 Acceptance | PASS |
+| Final Reviewed Package Head | `9cd7bf56ba98878145cdae95456edd6ef9fb2ae9` |
+| P4-C9 | CLOSED |
+| P4-C10 | NOT STARTED |
+| Phase 4 | NOT CLOSED |
 
 **唯一 authority transition（冻结）**：DESIGN-R4 INCREMENTAL DESIGN / CONTRACT / PLAN CLOSURE REVIEW PASS 本身建立 Design Accepted Head（= Design-R4 Candidate），Frozen Contract / Construction Plan = Design-R4 Candidate，之后才允许进入 S1；之后不创建“design closure /
 design accepted”之类的纯状态 docs commit，实现分支直接继续（治理文档第 11.1 节）。
+
+### 32.1 P4-C9 最终闭合记录（纯状态 / evidence，不改变任何合同语义）
+
+本节只记录 Level 1 Review、finding closure 与 Windows 正式验收的结论；第 1-31 节与附录 A 的任何语义（API、schema、校验、路径语义、
+资源上限、安全规则、测试要求）均未因本节而改变。上方第 32 节状态表中“S1 / S2 / S3”等行是对应历史时点的状态，不删除。
+
+```text
+Original Level 1 Review      : FAIL（Candidate fa0946206d503ae3656e3721a1762ebb829694dd；P4-C9-L1-01）
+C9-R1 Level 1 Review         : 代码审查 PASS，Final Verdict BLOCKED（Candidate 44b9c960a943468566225879ce489983253e2e0c；唯一阻塞 = Windows 11 / Python 3.12 验收证据）
+首次 Windows 正式验收        : FAIL（Candidate 44b9c960…；P4-C9 专项 1578 passed / 2 failed；全量 7759 passed / 2 failed / 40 skipped / 0 errors）
+P4-C9-WIN-01                 : 测试契约不一致（平台原生 basename 语义），不是 production 缺陷，也不是 Frozen Contract 缺陷
+C9-R2                        : 仅测试修复（Candidate 9cd7bf56ba98878145cdae95456edd6ef9fb2ae9；只改 tests/unit/diagnostics/test_diagnostics_path_policy.py）
+最终 Windows 复验            : PASS（Windows 11 / Windows NT 10.0.26200.0；Python 3.12.10 MSC v.1943 64 bit）
+  路径策略 fail-fast         : 102 passed / 0 failed / 0 skipped / 0 errors
+  P4-C9 专项                 : 1586 passed / 0 failed / 0 skipped / 0 errors
+  targeted organizer         : 1156 passed / 0 failed / 0 skipped / 0 errors
+  contract                   : 237 passed / 0 failed / 0 skipped / 0 errors
+  全量                       : 7767 passed / 0 failed / 40 skipped / 0 errors；新增 skip = NONE；diagnostics skip = 0
+冻结 gate                    : passed >= 6178、failed = 0、errors = 0、skipped = 40、新增 skip = NONE —— 全部 PASS
+C9-R2 Final Verdict          : PASS
+Final Reviewed Package Head  : 9cd7bf56ba98878145cdae95456edd6ef9fb2ae9
+Risk Class                   : B（风险升级门 A-K 未触发；BLOCKED DESIGN ISSUE = NONE）
+已知代码 / 合同 / 安全 finding : NONE
+P4-C9                        : CLOSED
+P4-C10                       : NOT STARTED
+Phase 4                      : NOT CLOSED
+```
 
 ---
 
