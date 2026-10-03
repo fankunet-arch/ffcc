@@ -15,6 +15,7 @@ from fc2_organizer.diagnostics import (
     PathPolicy,
     build_execution_diagnostics,
     build_preview_diagnostics,
+    models,
     validation,
 )
 from fc2_organizer.execution import ExecutionStatus as X
@@ -125,6 +126,14 @@ def test_the_policy_must_be_an_exact_enum(bad):
 
 
 # ---- 18.2 grammar: forbidden basenames fail only when they would be disclosed
+#
+# Two different concepts are kept apart (contract 18.1 / 18.2):
+#   A. the grammar of the *final, already extracted* basename ``b`` -- platform independent: "/" and "\\" are
+#      forbidden in ``b`` on every platform (FORBIDDEN_NAMES below and the FINAL_BASENAME_* tests);
+#   B. the *native extraction* ``os.path.basename(raw path)`` -- platform native (contract 18.1: "the running
+#      platform's path semantics"): a raw "\\" is a separator on Windows (``a\\b.mp4`` -> ``b.mp4``) but an ordinary
+#      character on POSIX (``a\\b.mp4`` stays, so the final basename is unsafe). The NATIVE_* tests below.
+# FORBIDDEN_NAMES therefore holds only names whose unsafety does not depend on how a raw path is split.
 
 
 FORBIDDEN_NAMES = {
@@ -132,7 +141,7 @@ FORBIDDEN_NAMES = {
     "del": "a\x7fb.mp4", "c1_low": "a\x80b.mp4", "c1_high": "a\x9fb.mp4", "lone_surrogate": "a\ud800b.mp4",
     "surrogate_high": "a\udfffb.mp4", "ls": "a b.mp4", "ps": "a b.mp4", "alm": "a؜b.mp4",
     "lrm": "a‎b.mp4", "rlm": "a‏b.mp4", "lre": "a‪b.mp4", "rlo": "a‮b.mp4",
-    "lri": "a⁦b.mp4", "pdi": "a⁩b.mp4", "bom": "a﻿b.mp4", "backslash": "a\\b.mp4",
+    "lri": "a⁦b.mp4", "pdi": "a⁩b.mp4", "bom": "a﻿b.mp4",
     "dotdot": "..", "dot": ".", "too_long": "x" * (MAX_PATH_TEXT_CHARS + 1),
 }
 ALLOWED_NAMES = {
@@ -178,6 +187,69 @@ def test_the_disclosure_helper_applies_the_same_grammar_to_every_path_derived_te
     9.6.5), so the grammar is exercised on them through the shared helper."""
     with pytest.raises(DiagnosticsUnsafeValueError):
         validation.basename_of("/lib/FC2-1/" + FORBIDDEN_NAMES[name])
+
+
+# ---- A. final basename grammar (platform independent): "/" and "\\" are forbidden in the *extracted* basename
+
+FINAL_BASENAME_SEPARATORS = {"slash": "a/b.mp4", "backslash": "a\\b.mp4", "leading_slash": "/b.mp4",
+                             "trailing_backslash": "b.mp4\\"}
+
+
+@pytest.mark.parametrize("name", sorted(FINAL_BASENAME_SEPARATORS))
+def test_a_separator_in_the_final_basename_is_never_safe_on_any_platform(name):
+    text = FINAL_BASENAME_SEPARATORS[name]
+    assert validation.is_safe_basename(text) is False
+    assert models.is_safe_basename(text) is False  # the same grammar as the diagnostics-model invariant
+    assert models.is_opt_safe_basename(text) is False
+
+
+def test_the_separator_free_counterpart_of_each_final_basename_is_safe():
+    for text in ("b.mp4", "ab.mp4", "a b.mp4"):
+        assert validation.is_safe_basename(text) is True and models.is_safe_basename(text) is True
+
+
+# ---- B. native extraction: the platform's own ``os.path.basename`` decides what is disclosed
+
+RAW_WITH_BACKSLASH = "/lib/FC2-1/a\\b.mp4"
+WINDOWS_NATIVE = "C:\\lib\\FC2-1\\a\\b.mp4"
+POSIX_NATIVE = "/lib/FC2-1/b.mp4"
+
+
+def test_native_extraction_of_a_raw_backslash_follows_the_running_platform():
+    extracted = os.path.basename(RAW_WITH_BACKSLASH)
+    if os.name == "nt":
+        assert extracted == "b.mp4"  # ntpath: "\\" is a separator, the final basename is legal
+        assert validation.basename_of(RAW_WITH_BACKSLASH) == "b.mp4"
+    else:
+        assert extracted == "a\\b.mp4"  # posixpath: "\\" is an ordinary character ...
+        with pytest.raises(DiagnosticsUnsafeValueError) as caught:  # ... so the final basename is unsafe
+            validation.basename_of(RAW_WITH_BACKSLASH)
+        assert type(caught.value) is DiagnosticsUnsafeValueError and "a\\b" not in str(caught.value)
+
+
+def test_native_extraction_positive_controls():
+    if os.name == "nt":
+        assert validation.basename_of(WINDOWS_NATIVE) == "b.mp4"
+    assert validation.basename_of(POSIX_NATIVE) == "b.mp4"  # a forward-slash path works on both platforms
+
+
+def test_end_to_end_a_raw_backslash_in_the_source_path_follows_native_extraction():
+    graph = graph_with_source("a\\b.mp4")
+    if os.name == "nt":
+        assert build_preview_diagnostics(graph, path_policy=PathPolicy.BASENAME).items[0].source_name == "b.mp4"
+    else:
+        with pytest.raises(DiagnosticsUnsafeValueError):
+            build_preview_diagnostics(graph, path_policy=PathPolicy.BASENAME)
+
+
+def test_none_neither_extracts_nor_judges_a_raw_backslash(monkeypatch):
+    calls = []
+    real = validation.basename_of
+    monkeypatch.setattr(validation, "basename_of", lambda text: calls.append(text) or real(text))
+    diag = build_preview_diagnostics(graph_with_source("a\\b.mp4"))  # default PathPolicy.NONE
+    item = diag.items[0]
+    assert (item.source_name, item.target_directory_name, item.target_media_name) == (None, None, None)
+    assert calls == []
 
 
 def test_a_basename_is_never_repaired_or_truncated():
