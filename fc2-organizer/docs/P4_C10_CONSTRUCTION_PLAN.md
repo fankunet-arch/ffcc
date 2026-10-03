@@ -477,7 +477,7 @@ Phase 4 Final Closure Docs Review：**YES**（它改变下一阶段输入语义�
 
 ## 14. STOP 条件（冻结）
 
-出现以下 STOP-01..STOP-09 任何一项，立即停止 C10 执行，在状态说明 / HANDOFF 中记录证据，等待治理裁决：
+出现以下 STOP-01..STOP-10 任何一项，立即停止 C10 执行，在状态说明 / HANDOFF 中记录证据，等待治理裁决：
 
 ```text
 STOP-01  第 7.1 节任一核对失败（坐标不是祖先、src 漂移、某 package 状态不是 CLOSED、C9 远端 head 不等于 c293ed75…）
