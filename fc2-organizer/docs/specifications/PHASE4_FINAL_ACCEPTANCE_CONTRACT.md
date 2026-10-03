@@ -1,11 +1,12 @@
 # FC2 Organizer -- Phase 4 / P4-C10 Phase 4 最终验收合同（Phase 4 Final Acceptance Contract）
 
 ```text
-文档状态              : DESIGN-R2 CANDIDATE —— INDEPENDENT DESIGN-R2 INCREMENTAL CLOSURE REVIEW REQUIRED
+文档状态              : DESIGN-R3 CANDIDATE —— INDEPENDENT DESIGN-R3 INCREMENTAL CLOSURE REVIEW REQUIRED
 Original Design Candidate : 17c194a71f0292e323591b8849ac65b9e14f7779（Independent Design Review：FAIL）
 Design-R1 Candidate   : 5dc80fdebb467f38a852c4501c32ba65c6dd153f（R-01 / R-02 / R-03 经独立 DESIGN-R1 Closure Review 确认 CLOSED；同时发现 R1-01）
-Design-R1a Candidate  : 18e6e54fc6ba016a5a5e1b0b262b7a5e23210792（STOP 范围文字修正；亦为 Design-R2 Base）
-Design-R2 修订范围    : 只闭合 P4-C10-DESIGN-R1-01（见“Design-R2 修订记录”）
+Design-R1a Candidate  : 18e6e54fc6ba016a5a5e1b0b262b7a5e23210792（STOP 范围文字修正）
+Design-R2 Candidate   : c284108c6f4e542e8d5e574bafa8e0815681957c（R1-01 经独立 DESIGN-R2 Incremental Closure Review 确认 CLOSED；同时发现 R2-01；亦为 Design-R3 Base）
+Design-R3 修订范围    : 只闭合 P4-C10-DESIGN-R2-01（见“Design-R3 修订记录”）
 Package               : P4-C10 Phase 4 Final Acceptance（不新增任何生产 package）
 Package Frozen Base   : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c（P4-C9 Final Closure Docs Head）
 Planning Parent       : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c
@@ -43,7 +44,19 @@ Review 已确认 R-01 / R-02 / R-03 CLOSED，见下一节。）
 
 Design-R2 **不**改变：Technical Acceptance 的技术强度（EC-02..EC-09、EC-11..EC-13 全部沿用）、XD-A08 作为“未知 authority 债务”的本质、Ledger 计数
 A = 8 / B = 17 / C = 15、U-2、仓库只读 / 可丢弃修改边界、F2 流程（OPEN F2 时 Technical Acceptance PASS 仍不可达）、F3 / F4 立即 STOP、G-500、
-L / SI / S / PC / M 矩阵、F3 / F5 处置、原生跨卷处置、Risk Class B、EC-15 的独立 docs-only 复查。R1-01 不得写为 CLOSED / PASS / ACCEPTED / FROZEN。
+L / SI / S / PC / M 矩阵、F3 / F5 处置、原生跨卷处置、Risk Class B、EC-15 的独立 docs-only 复查。（R1-01 后经独立 DESIGN-R2 Incremental Closure Review 确认 CLOSED，见下一节。）
+
+### Design-R3 修订记录
+
+独立 DESIGN-R2 Incremental Closure Review 确认 P4-C10-DESIGN-R1-01 = CLOSED（原 R-01 / R-02 / R-03 保持 CLOSED），但发现新的 blocking finding：
+
+| Finding | 严重度 | 问题 | 修订 | 状态 |
+|---|---|---|---|---|
+| P4-C10-DESIGN-R2-01 | MEDIUM / BLOCKING（Verdict Lifecycle / HANDOFF Constructibility / Review Ordering） | S3 先于 Level 1 Review 生成 HANDOFF；但 `Technical Acceptance Verdict = PASS` 与 `Final Reviewed Acceptance Head` 只有 Review PASS 之后才合法成立。“S3 完成、Level 1 未发生”这一合法时点上，PASS 尚未成立、FAIL 若技术证据全通过则不真实、BLOCKED 又不符合其定义——没有合法的 pre-review verdict 状态；EC-13 也被错误地与 reviewed PASS 耦合 | 采用 Model 1：把 **candidate status** 与 **reviewed verdict** 分成两套不同字段（第 16.1a 节）：新增 `P4-C10 Technical Acceptance Candidate Status`（READY FOR LEVEL 1 REVIEW / FAILED — F2 PRODUCTION FINDING(S) / BLOCKED — \<reason\>；不复用 PASS / FAIL / BLOCKED；READY != PASS）；`Technical Acceptance Verdict` 取值 NOT ESTABLISHED / PASS / FAIL / BLOCKED，S3 恒为 NOT ESTABLISHED，只由独立 Level 1 Review 建立；Final Reviewed Acceptance Head S3 恒为 NOT ESTABLISHED，Level 1 PASS 后为 C10 Acceptance Head SHA，FAIL / BLOCKED 保持 NOT ESTABLISHED；EC-13 = Final HANDOFF candidate evidence complete，可在 Verdict = NOT ESTABLISHED 时满足；新增第 16.1b 节 authority carrier（S3 HANDOFF = candidate evidence snapshot；Review Report = reviewed verdict authority；Final Closure Docs = closure history；Reviewer 不修改 S3 commit；不制造纯状态 review loop）；第 13.1 节 Failed Acceptance Head、第 16.4 / 16.5 / 16.6 节、第 17 节 HANDOFF 字段、第 20 节同步 | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
+
+Design-R3 **不**改变：Technical Acceptance / Phase Exit 双裁决模型、XD-A08 语义（OPEN 不阻塞 Technical Acceptance、阻塞 Phase Exit）、EC-10 的 Phase Exit 角色、EC-14 的含义、
+EC-15 的独立 authority review、XD-A08 fail-closed 发现路径、Risk Class B、Ledger A = 8 / B = 17 / C = 15、U-2、读 / 改边界、F2 流程（OPEN F2 时 PASS 始终不可达）、
+F3 / F4 立即 STOP、G-500、L / SI / S / PC / M 矩阵、F3 / F5 处置、原生跨卷处置、DF-07、Phase 5 边界。R2-01 不得写为 CLOSED / PASS / ACCEPTED / FROZEN。
 
 ---
 
@@ -877,10 +890,10 @@ F2 discovered during S1 / S2 / S3
  2. 禁止修改 affected CLOSED package（src、合同、施工计划、HANDOFF 一律不改）
  3. 记录 F2 finding（第 14 节第 2 条全部字段：affected package / affected Frozen Contract 条款 / 最小复现 /
     regression scope / compatibility impact / safety impact），分配 ID `P4-C10-F2-<NN>`
- 4. Phase 4 Closure 必然暂时不满足；P4-C10 Acceptance 当前预期结果转为 FAIL
+ 4. Phase 4 Closure 必然暂时不满足；P4-C10 Technical Acceptance 的预期 reviewed 结果转为 FAIL（此刻只是 candidate 层的 FAILED 状态，不是 reviewed verdict）
  5. 不因 F2 自动停止全部 evidence collection：继续完成仍安全的 S1 / S2 / S3 acceptance evidence（见下）
- 6. 全部仍安全且有意义的证据收集完毕后，S3 形成 Failed Acceptance Head 与 HANDOFF（状态见下，不得写 PASS）
- 7. 独立 Level 1 Final Acceptance Review：因存在未闭合 F2，PASS 不可达，Reviewer 应判 FAIL 并确认全部已知 findings
+ 6. 全部仍安全且有意义的证据收集完毕后，S3 形成 Failed Acceptance Head 与 HANDOFF（Candidate Status = FAILED；Verdict = NOT ESTABLISHED；状态见下，不得写 PASS）
+ 7. 独立 Level 1 Final Acceptance Review：因存在未闭合 F2，PASS 不可达，Reviewer **必须**判 `Technical Acceptance Verdict : FAIL` 并确认全部已知 findings
  8. 一个统一 C10-R1 一次闭合全部同根因 / 范围明确且不需要 authority amendment 的 findings（第 15 节）
 ```
 
@@ -900,13 +913,16 @@ authority amendment；不触发 U-2..U-7 的任何真正升级门。可继续的
 **Failed Acceptance Head 的状态（冻结措辞）**：
 
 ```text
-P4-C10 Technical Acceptance : FAIL — F2 PRODUCTION FINDING(S)
-Phase 4 Exit Authorization  : BLOCKED — OPEN F2（若 XD-A08 同时 OPEN，一并列出）
-Phase 4                     : NOT CLOSED
-Production repair           : NOT PERFORMED
+P4-C10 Technical Acceptance Candidate Status : FAILED — F2 PRODUCTION FINDING(S)
+P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（S3 快照；独立 Level 1 Review 之后必须为 FAIL）
+Final Reviewed Acceptance Head               : NOT ESTABLISHED
+Phase 4 Exit Authorization                   : BLOCKED — OPEN F2（若 XD-A08 同时 OPEN，一并列出）
+Phase 4                                      : NOT CLOSED
+Production repair                            : NOT PERFORMED
 ```
 
-不得写 Technical Acceptance PASS（OPEN F2 时 PASS 不可达，第 16.4 节）。F2 未闭合期间 `Phase 4 = CLOSED` 被禁止（第 16 节）。F2 流程**不**降低 production repair 的治理：C10-R1 中任何 CLOSED package
+S3 / 开发者不得在 Failed Acceptance Head 上写 reviewed verdict（既不得写 PASS，也不得抢先写 FAIL）；随后独立 Level 1 Review **必须**判
+`Technical Acceptance Verdict : FAIL`（第 16.1a 节），再进入统一 C10-R1。不得写 Technical Acceptance PASS（OPEN F2 时 PASS 不可达，第 16.4 节）。F2 未闭合期间 `Phase 4 = CLOSED` 被禁止（第 16 节）。F2 流程**不**降低 production repair 的治理：C10-R1 中任何 CLOSED package
 `src/**` 修改仍触发 U-1、Risk Class = C，并满足第 14 节第 3 条与独立 Review。F2 流程**不**适用于 F3 / F4。
 
 ---
@@ -952,7 +968,7 @@ Production repair           : NOT PERFORMED
 A. P4-C10 Technical Acceptance
    回答：P4-C1..P4-C9 的生产实现，作为一个整体技术系统，是否通过 P4-C10 的 integration / safety / regression /
          compatibility / mutation / acceptance scenario 技术门。
-   取值：PASS / FAIL / BLOCKED
+   取值（Reviewed Technical Verdict，只能由独立 Level 1 Review 建立）：NOT ESTABLISHED / PASS / FAIL / BLOCKED
    它不等于 Phase 4 = CLOSED，不授权 Phase 4 Closure，不授权 Phase 5 开始。
 
 B. Phase 4 Exit / Closure Authorization
@@ -961,10 +977,11 @@ B. Phase 4 Exit / Closure Authorization
    另保留状态字段：Phase 4 : CLOSED / NOT CLOSED
 ```
 
-Technical Acceptance 的取值（冻结）：
+Reviewed Technical Verdict（`P4-C10 Technical Acceptance Verdict`）的取值（冻结；**只能由独立 Level 1 Final Acceptance Review 建立**；Review 之前恒为 `NOT ESTABLISHED`）：
 
 | 取值 | 条件 |
 |---|---|
+| NOT ESTABLISHED | 独立 Level 1 Review 尚未发生（S3 之前、S3 完成后但 Review 未发生期间的唯一合法值） |
 | PASS | 第 16.2 节全部 Technical Acceptance gate 满足；不存在 OPEN F2；不存在 F3 / F4；独立 Level 1 Final Acceptance Review 判 PASS |
 | FAIL | 存在 OPEN F2（第 13.1 节 Failed Acceptance Head 路径），或任一 Technical Acceptance gate 未满足而可由统一 C10-R1 修复 |
 | BLOCKED | 发生 F3 / F4 / 真正的 U 门 / 其它 STOP（施工计划第 14 节）而需要 authority 先行；或正式证据环境前提无法满足 |
@@ -973,9 +990,66 @@ Phase 4 Exit Authorization 的取值（冻结）：`AUTHORIZED` 当且仅当 Tec
 其余一切情形（含 Technical Acceptance = PASS 但 XD-A08 = OPEN、或 EC-15 尚未完成）均为 `BLOCKED`，并必须列出阻塞原因（例如 `BLOCKED — XD-A08`）。
 `Phase 4 : CLOSED` 只在 Exit Authorization = AUTHORIZED（经 EC-15）之后才可写。
 
-### 16.2 Technical Acceptance gate（决定 P4-C10 Technical Acceptance = PASS）
+### 16.1a 三层状态字段与 verdict 生命周期（冻结，Design-R3 新增；P4-C10-DESIGN-R2-01）
 
-下列**全部**满足才可 PASS（强度不因 verdict 分离而降低；本节全部条目沿用原冻结定义）：
+三个层级**严格分开**，不得互相复用取值，也不得再用任何单一字段同时混合“技术复查状态”与“Phase 退出状态”：
+
+```text
+层 1  P4-C10 Technical Acceptance Candidate Status     —— developer / S3 的证据收集状态（无 review authority、无 acceptance authority、无 closure authority）
+        取值：READY FOR LEVEL 1 REVIEW
+              FAILED — F2 PRODUCTION FINDING(S)
+              BLOCKED — <F3 / F4 / U-GATE / ENVIRONMENT / OTHER AUTHORIZED REASON>
+        不复用 PASS / FAIL / BLOCKED：READY FOR LEVEL 1 REVIEW != PASS。
+层 2  P4-C10 Technical Acceptance Verdict               —— reviewed verdict（只能由独立 Level 1 Review 建立）
+        取值：NOT ESTABLISHED / PASS / FAIL / BLOCKED
+层 3  Phase 4 Exit Authorization                         —— Phase 退出裁决
+        取值：AUTHORIZED / BLOCKED — <原因列表>
+```
+
+`READY FOR LEVEL 1 REVIEW` 只表示：developer / S3 的证据收集已完成；全部已知 technical gate 在 candidate evidence 中满足；现在可以交给独立 Level 1
+Reviewer。它不是 PASS，不建立 Final Reviewed Acceptance Head，不满足 EC-14，不授权任何 closure。
+
+**生命周期（冻结）**：
+
+| 时点 | Candidate Status | Technical Acceptance Verdict | Final Reviewed Acceptance Head | Phase 4 Exit Authorization | Phase 4 / Phase 5 |
+|---|---|---|---|---|---|
+| S3 之前 | -- | NOT ESTABLISHED | NOT ESTABLISHED | BLOCKED — LEVEL 1 / EC-15 PENDING | NOT CLOSED / NOT STARTED |
+| S3 完成、Level 1 未发生（证据完整、无 OPEN F2） | READY FOR LEVEL 1 REVIEW | NOT ESTABLISHED | NOT ESTABLISHED | BLOCKED — LEVEL 1 / EC-15 PENDING（XD-A08 OPEN 则一并列出） | NOT CLOSED / NOT STARTED |
+| S3 完成、存在 OPEN F2（Failed Acceptance Head） | FAILED — F2 PRODUCTION FINDING(S) | NOT ESTABLISHED | NOT ESTABLISHED | BLOCKED — OPEN F2；LEVEL 1 / EC-15 PENDING | NOT CLOSED / NOT STARTED |
+| 无法形成完整 S3 candidate | BLOCKED — <reason> | NOT ESTABLISHED | NOT ESTABLISHED | BLOCKED — <reason> | NOT CLOSED / NOT STARTED |
+| Level 1 PASS | （保持 S3 快照，不改写） | **PASS** | **\<C10 Acceptance Head SHA\>**（EC-14 SATISFIED） | BLOCKED — EC-15 PENDING（XD-A08 OPEN 则 BLOCKED — XD-A08） | NOT CLOSED / NOT STARTED |
+| Level 1 FAIL | （保持 S3 快照） | **FAIL** | NOT ESTABLISHED | BLOCKED | NOT CLOSED / NOT STARTED |
+| Level 1 BLOCKED | （保持 S3 快照） | **BLOCKED** | NOT ESTABLISHED | BLOCKED | NOT CLOSED / NOT STARTED |
+| EC-15 PASS（XD-A08 CLOSED、全部 Exit gate 满足） | -- | PASS（沿用） | 沿用 | AUTHORIZED | CLOSED / Phase 5 Frozen Base Candidate 建立后方可开始 |
+
+规则：
+
+* **S3 / 开发者不得写 `Technical Acceptance Verdict : PASS`**（亦不得写 FAIL / BLOCKED 的 reviewed 含义）；S3 阶段该字段恒为 `NOT ESTABLISHED`。
+* **Level 1 FAIL / BLOCKED 时 Final Reviewed Acceptance Head 保持 `NOT ESTABLISHED`**；不得自行创造 reviewed head。统一 C10-R1 之后形成新的 C10 Acceptance Head，
+  其 Candidate Status 重新按本表确定，并经增量 Level 1 Review 重新建立 reviewed verdict。
+* **Failed Acceptance Head**（OPEN F2）：Candidate Status = `FAILED — F2 PRODUCTION FINDING(S)`，Verdict = `NOT ESTABLISHED`；随后独立 Level 1 Review **必须**
+  判 `Technical Acceptance Verdict : FAIL`，再进入统一 C10-R1。OPEN F2 时 PASS 始终不可达。该修订不削弱第 13.1 节 F2 流程。
+* 若无法形成完整 S3 candidate，可写 `Candidate Status : BLOCKED — <reason>`；reviewed verdict 仍为 `NOT ESTABLISHED`，直到独立 Review 真正发生。
+* `Candidate Status` 与 `Technical Acceptance Verdict` 的取值集合不同，不得互相替代；也不得用 `INCOMPLETE` 之类的字段混合技术复查状态与 Phase 退出状态。
+
+### 16.1b 裁决的 authority carrier（冻结）
+
+```text
+S3 HANDOFF（docs/review/P4_C10_HANDOFF.md）     = candidate evidence snapshot（S3 时点历史快照；其中 Verdict = NOT ESTABLISHED 是正确的，不需要事后改写）
+Independent Level 1 Review Report              = reviewed verdict authority（建立 PASS / FAIL / BLOCKED 与 Final Reviewed Acceptance Head；引用 C10 Acceptance Head SHA）
+Phase 4 Final Closure Docs                      = 把 reviewed verdict 与 Final Reviewed Acceptance Head 作为最终 closure history 正式记录（EC-15 复查）
+```
+
+* Reviewer **不修改** S3 commit；Review PASS 的效力来自 Review Report 对 C10 Acceptance Head 的明确裁决，**不**依赖对 S3 HANDOFF 的 retroactive 修改。
+* 不为纯状态制造“Review PASS -> 状态 docs commit -> docs review”循环（治理文档第 11.1 节）：reviewed verdict 的正式记录并入 Final Closure Docs（经 EC-15）；
+  Level 1 FAIL 后的状态记录并入统一 C10-R1 的 HANDOFF 追加节。
+* Level 1 Reviewer 必须核对：S3 HANDOFF 的 Candidate Status 与 Verdict 字段符合第 16.1a 节（若 S3 HANDOFF 写了 `Technical Acceptance Verdict : PASS`，或写了
+  任何提前的 reviewed 结论，则这本身是一个 finding）。
+
+### 16.2 Technical Acceptance gate（决定 P4-C10 Technical Acceptance Verdict = PASS）
+
+Reviewer 判定 `PASS` 的依据：下列 gate **全部**满足（强度不因 verdict 分离而降低；本节全部条目沿用原冻结定义）。其中 EC-02..EC-09、EC-11..EC-13 是 Reviewer 判定的**依据**，
+在 S3 的 candidate evidence 阶段即可满足；EC-14 是该判定本身的**结果**：
 
 | ID | 条件 |
 |---|---|
@@ -989,8 +1063,8 @@ Phase 4 Exit Authorization 的取值（冻结）：`AUTHORIZED` 当且仅当 Tec
 | EC-09 | Compatibility 技术处置完整：PC-01..PC-06 PASS；PC-07..PC-09 处置完整 |
 | EC-11 | Production Modified = NO；或每一处 CLOSED package 生产改动都已按第 14、15 节处理且独立 Review PASS；且**不存在任何 OPEN 的 F2 finding**（第 13.1 节）；不存在 F3 / F4 |
 | EC-12 | 全部 P4-C10 **technical** blocking findings CLOSED（code / contract / safety / test correctness；含全部 F2 findings、Level 1 findings 与 C10-R1 findings）。XD-A08 是历史未决 authority 债务，**不是**技术 finding，不计入 EC-12 |
-| EC-13 | Final HANDOFF 按第 17 节完整（含两维度 verdict 字段与失败路径记录） |
-| EC-14 | **P4-C10 Technical Acceptance 经独立 Level 1 Final Acceptance Review PASS，Final Reviewed Acceptance Head 已建立**（上述 EC-02..EC-09、EC-11..EC-13 已满足的 reviewed 结论） |
+| EC-13 | **Final HANDOFF candidate evidence complete**：HANDOFF 按第 17 节完整（含三层状态字段与失败路径记录）。EC-13 **可以且必须**在 `Technical Acceptance Verdict : NOT ESTABLISHED` 时满足——它先于 EC-14，因此不得要求 reviewed PASS 已经存在 |
+| EC-14 | **P4-C10 Technical Acceptance 经独立 Level 1 Final Acceptance Review PASS，Final Reviewed Acceptance Head 已建立**（上述 EC-02..EC-09、EC-11..EC-13 已满足的 reviewed 结论；建立方式见第 16.1a / 16.1b 节） |
 
 此外，Technical Acceptance 还要求 Ledger 中全部**技术性** A 类项（XD-A01..XD-A07）的证据已产出；它们随 EC-14 一并 CLOSED（其证据即 EC-03..EC-08 与 S1 机器核对）。
 
@@ -1020,8 +1094,9 @@ XD-A08 OPEN  ->  禁止 Phase 4 Exit Authorization = AUTHORIZED；禁止 Phase 4
 
 ```text
 S1 -> S2 -> S3 -> C10 Acceptance Head
+ S3：Candidate Status = READY FOR LEVEL 1 REVIEW；Technical Acceptance Verdict = NOT ESTABLISHED；Final Reviewed Acceptance Head = NOT ESTABLISHED
  -> Independent Level 1 Review
- -> Technical Acceptance PASS；Final Reviewed Acceptance Head established；EC-14 satisfied
+ -> Technical Acceptance Verdict = PASS；Final Reviewed Acceptance Head = <C10 Acceptance Head SHA>；EC-14 satisfied
  如果 XD-A08 OPEN：
  -> Phase 4 Exit Authorization = BLOCKED — XD-A08；Phase 4 remains NOT CLOSED
  -> 取得 C5-R1-L1 的可审计 authority（第 10.1 节 Required closure）
@@ -1052,17 +1127,24 @@ F3 / F4     : 立即 STOP，authority first（不因本节的 verdict 分离而�
 
 ### 16.5 Level 1 Final Acceptance Review 的两个裁决（冻结）
 
-独立 Level 1 Final Acceptance Review 必须**分别**给出：
+独立 Level 1 Final Acceptance Review 是 reviewed verdict 的**唯一**建立者（第 16.1a / 16.1b 节），必须**分别**给出：
 
 ```text
-P4-C10 Technical Acceptance : PASS / FAIL / BLOCKED
-Phase 4 Exit Authorization  : AUTHORIZED / BLOCKED
+P4-C10 Technical Acceptance Verdict : PASS / FAIL / BLOCKED
+Final Reviewed Acceptance Head      : <C10 Acceptance Head SHA>（仅 PASS）/ NOT ESTABLISHED（FAIL / BLOCKED）
+Phase 4 Exit Authorization          : AUTHORIZED / BLOCKED
 ```
+
+Review 的输入是 S3 HANDOFF（candidate evidence snapshot，`Candidate Status` 为 READY FOR LEVEL 1 REVIEW / FAILED / BLOCKED，`Verdict` 为 NOT ESTABLISHED）。
+Reviewer 不修改 S3 commit；Review Report 对 C10 Acceptance Head 的裁决即为 reviewed verdict 的 authority。存在 OPEN F2（Candidate Status = FAILED）时 Reviewer
+**必须**判 `FAIL`。
 
 典型情况（全部技术门 PASS，但 XD-A08 OPEN）必须是：
 
 ```text
-P4-C10 Technical Acceptance    : PASS
+（S3 HANDOFF 快照：Candidate Status = READY FOR LEVEL 1 REVIEW；Verdict = NOT ESTABLISHED；Final Reviewed Acceptance Head = NOT ESTABLISHED）
+（Level 1 Review 之后：）
+P4-C10 Technical Acceptance Verdict : PASS
 Final Reviewed Acceptance Head : <sha>（ESTABLISHED）
 EC-14                          : SATISFIED
 XD-A08                         : OPEN
@@ -1078,6 +1160,7 @@ Closure 记录中。
 
 * 禁止写 `Technical Acceptance PASS => Phase 4 自动 CLOSED`；Technical Acceptance PASS 不授权 Phase 4 Closure、不建立 Phase 5 Frozen Base Candidate。
 * 禁止写 `XD-A08 OPEN => Technical Acceptance 不可 PASS`。
+* 禁止 S3 / 开发者写 `Technical Acceptance Verdict : PASS`；`Candidate Status : READY FOR LEVEL 1 REVIEW` 不等于 PASS（第 16.1a 节）。
 * 在 EC-15 满足之前，任何文档都不得写 `Phase 4 = CLOSED`。只要 **XD-A08 = OPEN** 或存在**任何 OPEN 的 F2 finding**，`Phase 4 = CLOSED` 一律被禁止
   （前者由 EC-10 推出，后者由 EC-11 / EC-12 与 Technical Acceptance 不可 PASS 推出）；此时 Phase 5 也不能从“已验收的 Phase 4 Frozen Base”开始（第 18 节）。
 * Phase 5 Frozen Base Candidate 只在 XD-A08 CLOSED、全部 Phase Exit gate 满足且 EC-15 PASS 之后才建立；在此之前 Phase 5 = NOT STARTED。
@@ -1113,16 +1196,28 @@ Closure 记录中。
     * **F2 之后收集的安全证据**：F2 发现之后仍然执行并得到结果的测试 / 场景清单；
     * **被 F2 阻塞的测试 / 场景**：每个 `NOT RUN / BLOCKED BY F2 <finding-id>` 及其对缺陷路径的直接依赖说明（第 13.1 节）；
     * **Production repair**：`NONE`（S1-S3 / Level 1 之前任何生产修复都被禁止）；
-    * **两维度 verdict 字段（Design-R2；取代原单一的 `Acceptance verdict`，禁止再使用 `INCOMPLETE` 承担两种含义）**，必须分别写出：
-      * `P4-C10 Technical Acceptance Verdict`：`PASS` / `FAIL — F2 PRODUCTION FINDING(S)` / `BLOCKED — <F3 / F4 / U 门 / 环境>`；
-        `PASS` 当且仅当第 16.2 节全部 gate 满足、不存在 OPEN F2 / F3 / F4——**与 XD-A08 是否 OPEN 无关**；
-      * `Final Reviewed Acceptance Head`：`<sha>`（Technical Acceptance 经 Level 1 PASS 后确立）/ `NOT ESTABLISHED`；
+    * **三层状态字段（Design-R2 / R3；取代原单一的 `Acceptance verdict`，禁止再使用 `INCOMPLETE` 承担两种含义）**。S3 HANDOFF 是 **candidate evidence snapshot**
+      （第 16.1b 节），必须分别写出（字段取值集合不同，不得互相替代）：
+      * `P4-C10 Technical Acceptance Candidate Status`：`READY FOR LEVEL 1 REVIEW` / `FAILED — F2 PRODUCTION FINDING(S)` /
+        `BLOCKED — <F3 / F4 / U-GATE / ENVIRONMENT / OTHER AUTHORIZED REASON>`；`READY FOR LEVEL 1 REVIEW` 不是 PASS，
+        只表示 S3 证据收集已完成、全部已知 technical gate 在 candidate evidence 中满足、可交给独立 Level 1 Reviewer；
+      * `P4-C10 Technical Acceptance Verdict`：S3 HANDOFF 中**恒为** `NOT ESTABLISHED`——**开发者不得写 PASS**（亦不得抢先写 FAIL / BLOCKED 的 reviewed 含义）；
+        reviewed verdict（`PASS` / `FAIL` / `BLOCKED`）只由独立 Level 1 Review 建立（第 16.1a、16.5 节），`PASS` 当且仅当第 16.2 节全部 gate 满足、
+        不存在 OPEN F2 / F3 / F4——**与 XD-A08 是否 OPEN 无关**；
+      * `C10 Acceptance Head`：S3 的 candidate 提交（HANDOFF 所在提交）；因文档不能内嵌自身 SHA，HANDOFF 以自指方式记录
+        （“本提交，见 `git log -1 --format=%H -- fc2-organizer/docs/review/P4_C10_HANDOFF.md`”，与 P4-C9 HANDOFF 的先例一致），Level 1 Review Report 记录其确切 SHA；
+        与 `Final Reviewed Acceptance Head` 不同（后者只在 Level 1 PASS 后确立）；
+      * `Final Reviewed Acceptance Head`：S3 HANDOFF 中**恒为** `NOT ESTABLISHED`；Level 1 PASS 后由 Review Report 确立为 `<C10 Acceptance Head SHA>`；
+        Level 1 FAIL / BLOCKED 时保持 `NOT ESTABLISHED`；
       * `XD-A08`：`OPEN` / `CLOSED（附 authority 来源与 disposition）`；
-      * `Phase 4 Exit Authorization`：`AUTHORIZED` / `BLOCKED — <原因列表，例如 XD-A08 / OPEN F2 / EC-15 尚未完成>`；
-      * `Phase 4`：`NOT CLOSED` / `CLOSED`（`CLOSED` 只在 EC-15 PASS 之后的 Final Closure 记录中写入）；
+      * `Phase 4 Exit Authorization`：S3 HANDOFF 中恒为 `BLOCKED — <原因列表>`，至少含 `LEVEL 1 / EC-15 PENDING`（XD-A08 OPEN / OPEN F2 则一并列出）；
+        `AUTHORIZED` 只可能出现在 EC-15 PASS 之后的 Final Closure 记录中；
+      * `Phase 4`：`NOT CLOSED`（`CLOSED` 只在 EC-15 PASS 之后的 Final Closure 记录中写入）；
       * `Phase 5`：`NOT STARTED`（直至 Phase 5 Frozen Base Candidate 建立）。
-      典型：全部技术门 PASS 且 XD-A08 OPEN -> `Technical Acceptance : PASS` / `Final Reviewed Acceptance Head : <sha>` / `XD-A08 : OPEN` /
-      `Phase 4 Exit Authorization : BLOCKED — XD-A08` / `Phase 4 : NOT CLOSED` / `Phase 5 : NOT STARTED`。
+      典型（全部技术门在 candidate evidence 中满足且 XD-A08 OPEN）：`Candidate Status : READY FOR LEVEL 1 REVIEW` / `Technical Acceptance Verdict : NOT ESTABLISHED` /
+      `Final Reviewed Acceptance Head : NOT ESTABLISHED` / `XD-A08 : OPEN` / `Phase 4 Exit Authorization : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08` /
+      `Phase 4 : NOT CLOSED` / `Phase 5 : NOT STARTED`。Level 1 之后的 reviewed verdict 与 Final Reviewed Acceptance Head 由 Review Report 承载，
+      并在 Final Closure Docs 中记录为 closure history；Reviewer 不修改 S3 commit（第 16.1b 节）。
     * **F3 / F4 / 真正 U 门的 STOP 记录**（若发生）。
 
 **Part II —— Phase 4 Final HANDOFF**
@@ -1133,7 +1228,8 @@ Closure 记录中。
 4. safety invariants summary、platform / compatibility evidence、full test evidence、skip baseline、mutation / non-vacuity 摘要。
 5. Exit Debt Ledger（含 accepted deferred items 与 known limitations；XD-A08 的最终 disposition 与其 authority 来源）。
 6. Phase 5 input boundary（第 18 节）。
-7. final closure coordinates（Final Reviewed Acceptance Head、Phase 4 Final Closure Docs Head、Phase 5 Frozen Base Candidate）。
+7. final closure coordinates（Final Reviewed Acceptance Head、Phase 4 Final Closure Docs Head、Phase 5 Frozen Base Candidate），以及由独立 Level 1 Review Report 建立的
+   reviewed `Technical Acceptance Verdict`（作为 closure history 正式记录于此，经 EC-15 复查；S3 HANDOFF 快照不被改写，第 16.1b 节）。
 
 Part II 中“Phase 4 = CLOSED”与 final closure coordinates 只能在 EC-14 满足（Technical Acceptance PASS）之后的 Final Closure Docs 提交中写入，并以 EC-15 为生效条件；
 XD-A08 = OPEN 或存在 OPEN F2 时不得写入。失败路径与“Technical PASS 但 Exit BLOCKED”路径下，Part II 只记录 Part I 第 15 项所列状态，不写 CLOSED。
@@ -1205,15 +1301,17 @@ P4-C10 Frozen Base             : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c
 Governance Authority           : 3b9d39e9adbcc8a009707486eebbb8736a5b1c4d
 Original Design Candidate      : 17c194a71f0292e323591b8849ac65b9e14f7779 —— Independent Design Review：FAIL
 Design-R1 Candidate            : 5dc80fdebb467f38a852c4501c32ba65c6dd153f（Design-R1a：18e6e54fc6ba016a5a5e1b0b262b7a5e23210792）
+Design-R2 Candidate            : c284108c6f4e542e8d5e574bafa8e0815681957c（亦为 Design-R3 Base）
 P4-C10-DESIGN-R-01 / R-02 / R-03 : CLOSED（经独立 DESIGN-R1 Closure Review 确认）
-P4-C10-DESIGN-R1-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED
-P4-C10 Design                  : DESIGN-R2 CANDIDATE —— INDEPENDENT DESIGN-R2 INCREMENTAL CLOSURE REVIEW REQUIRED
+P4-C10-DESIGN-R1-01            : CLOSED（经独立 DESIGN-R2 Incremental Closure Review 确认）
+P4-C10-DESIGN-R2-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+P4-C10 Design                  : DESIGN-R3 CANDIDATE —— INDEPENDENT DESIGN-R3 INCREMENTAL CLOSURE REVIEW REQUIRED
 P4-C10 Frozen Contract         : NOT ACCEPTED（本文件）
 P4-C10 Construction Plan       : NOT ACCEPTED
 Design Accepted Head           : NOT ESTABLISHED
 S1 / S2 / S3                   : NOT STARTED
 P4-C10 Implementation          : NOT AUTHORIZED
-P4-C10 Technical Acceptance    : NOT STARTED（尚无验收）
+P4-C10 Technical Acceptance    : NOT STARTED（尚无验收；Candidate Status / Verdict 见第 16.1a 节，当前均无）
 XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
 Phase 4 Exit Authorization     : BLOCKED
 Production Modified            : NO
