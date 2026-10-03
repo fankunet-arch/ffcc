@@ -401,8 +401,10 @@ def test_s12_execution_success_variants(tmp_path, forced_cross_volume):
             kinds = [e.kind.value for e in execution.completed_effects]
             artifacts = 1 + sum(images[r] is not None for r in ("poster", "fanart", "thumb")) + len(images["extrafanart"])
             assert kinds.count("artifact_published") == artifacts and kinds.count("media_published") == 1
-            # Windows same-volume is one atomic rename (no separate source removal); link + unlink on POSIX; copy + unlink
-            assert kinds.count("source_removed") == (1 if forced_cross_volume or os.name != "nt" else 0)
+            # Every success records exactly one SOURCE_REMOVED (P4-C7 section 18.2): on Windows same-volume one atomic
+            # rename produces both MEDIA_PUBLISHED and SOURCE_REMOVED (no separate unlink); link + unlink on POSIX;
+            # copy + unlink across volumes
+            assert kinds.count("source_removed") == 1
             assert kinds.count("target_directory_created") == 1 and kinds.count("extrafanart_directory_created") == 1
             assert execution.new_effect_count == len(execution.completed_effects)
             assert not os.path.exists(chain.source_path(film))
