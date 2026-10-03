@@ -23,6 +23,7 @@ from fc2_organizer.orchestration import (
     RetryKind as K,
 )
 
+from fc2_organizer.images import ImageCandidateFailure, ImageFailureKind, ImageRole
 from . import _builders as b
 
 
@@ -159,7 +160,6 @@ def test_warnings_come_from_the_approved_property_in_declaration_order():
 
 
 def test_image_failures_are_grouped_by_role_and_kind_with_distinct_ascending_http_statuses():
-    from fc2_organizer.images import ImageCandidateFailure, ImageFailureKind, ImageRole
 
     def failure(role, kind, index, status=None):
         return ImageCandidateFailure(role=role, candidate_index=index, kind=kind, http_status=status)

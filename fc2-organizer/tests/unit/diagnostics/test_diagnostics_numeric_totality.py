@@ -360,6 +360,20 @@ def test_mutation_float_conversion_of_a_huge_elapsed_int_is_detected(monkeypatch
     assert outcome("item", 10**400, INCLUDE) is Unsafe
 
 
+def test_mutation_omit_imposing_the_publication_bound_is_detected(monkeypatch):
+    def bounded(value, message):
+        if type(value) is int and value > 604800000:
+            validation.fail(message)
+        if type(value) is float and value >= 604800001.0:
+            validation.fail(message)
+
+    _mutated(monkeypatch, "check_number", bounded)
+    assert outcome("item", 10**400, OMIT) is Int  # the mutant rejects what OMIT must accept
+    monkeypatch.undo()
+    assert outcome("item", 10**400, OMIT) is None
+    assert outcome("item", 1e306, OMIT) is None
+
+
 def test_mutation_isfinite_on_every_number_is_detected(monkeypatch):
     def isfinite_everything(value, message):
         if not math.isfinite(value):

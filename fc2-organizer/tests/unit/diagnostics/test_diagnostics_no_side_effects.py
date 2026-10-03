@@ -19,6 +19,7 @@ import pytest
 from fc2_organizer.diagnostics import PathPolicy, TimingPolicy
 from fc2_organizer.orchestration import BatchOrchestrator
 
+import fc2_organizer.execution as execution_package
 from . import _builders as b
 from . import _builders as h
 
@@ -37,7 +38,6 @@ def arm_everything(monkeypatch):
     for cls, name in ((BatchOrchestrator, "preview"), (BatchOrchestrator, "execute"),
                       (BatchOrchestrator, "preview_retry")):
         monkeypatch.setattr(cls, name, trip("BatchOrchestrator.%s" % name))
-    import fc2_organizer.execution as execution_package
 
     monkeypatch.setattr(execution_package, "preflight_execution", trip("preflight_execution"))
     monkeypatch.setattr(execution_package, "execute_filesystem", trip("execute_filesystem"))
@@ -81,7 +81,6 @@ def test_both_builders_succeed_with_every_side_effect_entry_point_turned_into_a_
 
 
 def test_the_traps_are_not_vacuous(monkeypatch):
-    import fc2_organizer.execution as execution_package
 
     with monkeypatch.context() as patch:
         arm_everything(patch)

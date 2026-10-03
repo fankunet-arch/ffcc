@@ -15,6 +15,7 @@ from fc2_organizer.diagnostics import (
     DiagnosticsUnsafeValueError,
 )
 
+import fc2_organizer.diagnostics.errors as errors
 from . import _builders as b
 
 _HIERARCHY = [
@@ -39,7 +40,6 @@ def test_every_error_derives_from_the_base_and_its_builtin(error, builtin):
 
 
 def test_there_are_exactly_seven_error_classes():
-    import fc2_organizer.diagnostics.errors as errors
 
     assert errors.__all__ == [
         "DiagnosticsError", "DiagnosticsInputError", "DiagnosticsIntegrityError", "DiagnosticsContractError",
@@ -51,7 +51,6 @@ def test_errors_module_imports_nothing_but_future():
     import ast
     from pathlib import Path
 
-    import fc2_organizer.diagnostics.errors as errors
 
     tree = ast.parse(Path(errors.__file__).read_text(encoding="utf-8"))
     imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]

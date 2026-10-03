@@ -52,6 +52,11 @@ from fc2_organizer.orchestration import (
     RetryKind,
 )
 
+from fc2_organizer.diagnostics.models import ISSUE_TABLE
+from fc2_organizer.execution import PreflightBlocker
+from fc2_organizer.diagnostics.models import failure_problem
+from fc2_organizer.execution import ExecutionFailure
+from fc2_organizer.orchestration import PreviewSummary
 from . import _builders as b
 
 
@@ -128,7 +133,6 @@ def test_metadata_batch_counts_fields_are_exact_non_negative_ints(name, bad):
 
 
 def test_issue_follows_the_t1_table_for_every_reason():
-    from fc2_organizer.diagnostics.models import ISSUE_TABLE
 
     for reason, (stage, needs_error_type, detail_types, needs_detail) in ISSUE_TABLE:
         error_type = "SomeError" if needs_error_type else None
@@ -401,7 +405,6 @@ def test_preflight_rules():
 
 
 def test_carried_blockers_and_failures_are_validated_values():
-    from fc2_organizer.execution import PreflightBlocker
 
     rejects(b.make_preflight, ready=False, blockers=(object(),))
 
@@ -447,8 +450,6 @@ def _tampered(value, **fields):
 
 
 def test_failure_validation_covers_the_p4_c7_cross_field_rules():
-    from fc2_organizer.diagnostics.models import failure_problem
-    from fc2_organizer.execution import ExecutionFailure
 
     assert failure_problem(b.make_failure()) is None
     assert failure_problem(b.make_failure(kind=ExecutionFailureKind.ARTIFACT_WRITE_FAILED, write_stage="flush")) is None
@@ -659,7 +660,6 @@ def test_batch_summary_total_equals_len_items():
 
 
 def test_batch_summaries_are_validated_p4_c8_values():
-    from fc2_organizer.orchestration import PreviewSummary
 
     bad_counts = dataclasses.replace  # noqa: F841 (documentation of intent)
     summary = b.make_preview_summary(total=1)

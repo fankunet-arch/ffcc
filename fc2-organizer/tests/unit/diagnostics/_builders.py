@@ -55,6 +55,7 @@ from fc2_organizer.orchestration import (
     PreviewSummary,
     RetryKind,
 )
+from fc2_organizer.orchestration import IssueReason as R, PreviewState as S
 
 NUMBER = "FC2-1234567"
 
@@ -772,7 +773,6 @@ def preview_graph():
 def execution_graph():
     """Eight execution items covering EXECUTED (SUCCESS / PARTIAL with material, checkpoint, leftover / FAILED),
     NOT_SELECTED / CANCELLED with material, REJECTED / ABORTED and a blocked NOT_READY with material."""
-    from fc2_organizer.orchestration import IssueReason as R, PreviewState as S
 
     lineage = Lineage(8)
     partial = rich_execution(lineage.plans[1], X.PARTIAL, leftovers=1)

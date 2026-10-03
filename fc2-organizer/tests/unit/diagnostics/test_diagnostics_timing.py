@@ -13,6 +13,8 @@ from fc2_organizer.diagnostics import (
     build_preview_diagnostics,
 )
 
+from fc2_organizer.orchestration import ExecutionDisposition as D
+from fc2_organizer.execution import ExecutionStatus
 from . import _builders as b
 
 
@@ -75,8 +77,6 @@ def test_the_timing_policy_must_be_an_exact_enum(bad):
     with pytest.raises(DiagnosticsInputError):
         build_preview_diagnostics(preview(), timing_policy=bad)
     lineage = b.Lineage(1)
-    from fc2_organizer.orchestration import ExecutionDisposition as D
-    from fc2_organizer.execution import ExecutionStatus
     result = lineage.result([lineage.execution_item(0, D.EXECUTED, status=ExecutionStatus.SUCCESS)])
     with pytest.raises(DiagnosticsInputError):
         build_execution_diagnostics(result, timing_policy=bad)

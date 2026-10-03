@@ -13,6 +13,7 @@ import pytest
 from fc2_organizer.diagnostics import DiagnosticsIntegrityError
 from fc2_organizer.orchestration import RetryKind
 
+from fc2_metadata_core.models import SourceResult, SourceStatus
 from . import _builders as b
 from . import _builders as h
 
@@ -130,7 +131,6 @@ def test_an_evil_str_source_id_built_through_the_public_constructors_is_rejected
     """The upstream constructors accept the ``str`` subclass in ``SourceResult.source_id``, in the contributing ids
     and in the provenance value tuple (UC-6 / UC-7); the sentinels are reset after *all* of them ran."""
     evil = b.EvilStr("src_a")
-    from fc2_metadata_core.models import SourceResult, SourceStatus
 
     result = SourceResult(source_id=evil, status=SourceStatus.SUCCESS, metadata=b.make_metadata_core(), elapsed_ms=1.0)
     aggregation = b.make_aggregation([result], field_sources={"number": (evil,), "title": (evil,)})

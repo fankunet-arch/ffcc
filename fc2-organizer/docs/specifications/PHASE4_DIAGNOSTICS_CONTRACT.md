@@ -2087,22 +2087,23 @@ Closure 一次同步。
 
 | 项 | 状态 |
 |---|---|
-| P4-C9 Design（本合同 + 施工计划） | DESIGN-R4 IMPLEMENTED — INDEPENDENT DESIGN REVIEW REQUIRED |
-| Original Design Review / Design-R1 Review / Design-R2 Review / Design-R3 Review | FAIL / FAIL / FAIL / FAIL |
+| P4-C9 Design（本合同 + 施工计划） | DESIGN-R4 REVIEW PASS（Design Accepted Head `dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf`） |
+| Original Design Review / Design-R1 Review / Design-R2 Review / Design-R3 Review / Design-R4 Review | FAIL / FAIL / FAIL / FAIL / PASS |
 | P4-C9-DESIGN-R-01 / R-04 / R-05 | CLOSED（Design-R1 Review 确认；Design-R4 语义 0 回归） |
 | P4-C9-DESIGN-R-03 | CLOSED（Design-R2 Review 确认；Design-R4 语义 0 回归） |
 | P4-C9-DESIGN-R1-01 / R1-02 | CLOSED（Design-R2 Review 确认；Design-R4 语义 0 回归） |
 | P4-C9-DESIGN-R-02 | CLOSED（Design-R3 Review 确认；Design-R4 语义 0 回归） |
 | P4-C9-DESIGN-R2-01（R-02 的 public-constructor-reachable 具体实例） | CLOSED（Design-R3 Review 确认；Design-R4 语义 0 回归） |
-| P4-C9-DESIGN-R3-01（HIGH / BLOCKING；Numeric Totality） | REMEDIATED — REVIEW REQUIRED |
-| P4-C9-DESIGN-R3-02（MEDIUM / BLOCKING；Stale Design-R2 PASS Activation Conditions） | REMEDIATED — REVIEW REQUIRED |
-| P4-C9 Frozen Contract | NOT YET ACCEPTED |
-| P4-C9 Construction Plan | NOT YET ACCEPTED |
-| P4-C9 Design Accepted Head | NOT ESTABLISHED |
-| Implementation Input | NOT ESTABLISHED |
-| S1 Diagnostic model / schema / projection skeleton | NOT STARTED |
-| S2 Existing-result integration / local validation / source + field provenance mapping | NOT STARTED |
-| S3 Safe output / redaction / architecture guards / tests / HANDOFF | NOT STARTED |
+| P4-C9-DESIGN-R3-01（HIGH / BLOCKING；Numeric Totality） | CLOSED（Design-R4 Review 确认） |
+| P4-C9-DESIGN-R3-02（MEDIUM / BLOCKING；Stale Design-R2 PASS Activation Conditions） | CLOSED（Design-R4 Review 确认） |
+| P4-C9 Frozen Contract | ACCEPTED（`dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf`） |
+| P4-C9 Construction Plan | ACCEPTED（`dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf`） |
+| P4-C9 Design Accepted Head | `dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf` |
+| Implementation Input | `dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf` |
+| S1 Diagnostic model / schema / projection skeleton | IMPLEMENTED（`0be5201`） |
+| S2 Existing-result integration / local validation / source + field provenance mapping | IMPLEMENTED（`6f01348`） |
+| S3 Safe output / redaction / architecture guards / tests / HANDOFF | IMPLEMENTED（C9 Implementation Head = 本 S3 提交，见 `docs/review/P4_C9_HANDOFF.md`） |
+| P4-C9 Implementation | COMPLETE — INDEPENDENT LEVEL 1 REVIEW REQUIRED |
 | P4-C9 Independent Level 1 Review | NOT STARTED |
 | P4-C9 Production | NOT STARTED |
 

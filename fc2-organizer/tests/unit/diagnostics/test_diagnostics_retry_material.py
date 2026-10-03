@@ -21,6 +21,7 @@ from fc2_organizer.orchestration import (
     RetryMaterial,
 )
 
+from fc2_organizer.orchestration import BatchExecutionResult
 from . import _builders as b
 from . import _builders as h
 
@@ -40,7 +41,6 @@ def material_of(g, position):
 
 def counted(monkeypatch):
     """Counters for projection and for the approved ``retry_kind`` / ``summary`` property reads."""
-    from fc2_organizer.orchestration import BatchExecutionResult
 
     reached = []
     original = build_module.project_batch

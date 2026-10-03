@@ -1,7 +1,7 @@
 """Contract test: ``fc2_organizer.diagnostics`` architecture boundary (P4-C9 contract sections 6, 7, 8, 27.1).
 
 Stage-aware (``_STAGE``): the exact module set, the exact ``__all__`` and the per-module import allow-lists
-are asserted for the current construction stage; S2 / S3 only switch ``_STAGE`` and add assertions.
+are asserted for the current construction stage (S3 = final); S2 / S3 only switch ``_STAGE`` and add assertions.
 
 * import allow-lists: standard library per module; only the *bare* public upstream packages and only the
   contract section 8.5 names -- never a submodule, a private name or a package module object;
@@ -30,7 +30,7 @@ DIAG_ROOT = ORGANIZER_SRC_ROOT / "diagnostics"
 CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 _PKG = "fc2_organizer.diagnostics"
 
-_STAGE = "S2"
+_STAGE = "S3"
 _S1_MODULES = {"__init__.py", "errors.py", "models.py"}
 _S2_MODULES = _S1_MODULES | {"validation.py", "projection.py", "build.py"}
 _S3_MODULES = _S2_MODULES | {"render.py"}
@@ -412,3 +412,87 @@ def test_diagnostics_imports_with_amane_and_requests_blocked():
         module = importlib.import_module(_PKG)
         assert module.__all__ == _ALL_SETS[_STAGE]
         assert not any(name.split(".")[0] in _BLOCKED_ROOTS for name in sys.modules)
+
+
+# --------------------------------------------------------------------------- S3: the renderer (contract 22 / 24.4)
+
+
+def _render_tree() -> ast.Module:
+    return _tree(DIAG_ROOT / "render.py")
+
+
+def test_render_has_exactly_one_try_catching_only_the_four_encoding_exceptions():
+    """No ``except Exception`` / bare ``except``: only ValueError / TypeError / RecursionError / OverflowError."""
+    tries = [n for n in ast.walk(_render_tree()) if isinstance(n, ast.Try)]
+    assert len(tries) == 1
+    handlers = tries[0].handlers
+    assert len(handlers) == 1 and tries[0].finalbody == [] and tries[0].orelse == []
+    kinds = handlers[0].type
+    assert isinstance(kinds, ast.Tuple)
+    assert [e.id for e in kinds.elts] == ["ValueError", "TypeError", "RecursionError", "OverflowError"]
+    for module, tree in _modules():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ExceptHandler) and module != "render.py":
+                raise AssertionError("%s catches an exception: the builders never catch (contract 19)" % module)
+
+
+def test_render_raises_the_serialization_error_outside_the_except_block_and_without_chaining():
+    tree = _render_tree()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Raise):
+            assert node.cause is None, "no exception chaining (contract 8.4)"
+    handler = next(n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler))
+    assert not any(isinstance(n, ast.Raise) for n in ast.walk(handler)), "the handler only records the failure"
+
+
+def test_render_encodes_only_through_json_jsonencoder_with_the_frozen_parameters():
+    calls = [n for n in ast.walk(_render_tree()) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute) and n.func.attr == "JSONEncoder"]
+    assert len(calls) == 1
+    keywords = {k.arg: k.value.value if isinstance(k.value, ast.Constant) else k.value for k in calls[0].keywords}
+    assert keywords["skipkeys"] is False and keywords["ensure_ascii"] is True
+    assert keywords["check_circular"] is True and keywords["allow_nan"] is False and keywords["sort_keys"] is True
+    assert keywords["indent"] is None
+    assert [e.value for e in keywords["separators"].elts] == [",", ":"]
+    assert "default" not in keywords  # no ``default=`` callback
+
+
+def test_render_never_opens_writes_or_walks_the_filesystem():
+    names = {n.id for n in ast.walk(_render_tree()) if isinstance(n, ast.Name)}
+    attrs = {n.attr for n in ast.walk(_render_tree()) if isinstance(n, ast.Attribute)}
+    assert not names & {"open", "print", "exec", "eval", "compile"}
+    assert not attrs & {"write", "write_bytes", "write_text", "dump", "dumps", "mkdir", "rename", "unlink", "fsync"}
+
+
+_RUNTIME_SCRIPT = """
+import sys
+sys.path[:0] = [@SRC@, @TESTS@, @UNIT@]
+
+
+class Block:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in {"amane", "requests"}:
+            raise ImportError("blocked " + name)
+
+
+sys.meta_path.insert(0, Block())
+from diagnostics import _builders as b
+from fc2_organizer.diagnostics import build_execution_diagnostics, build_preview_diagnostics, render_diagnostics_json
+
+for build, graph in ((build_preview_diagnostics, b.preview_graph()), (build_execution_diagnostics, b.execution_graph())):
+    data = render_diagnostics_json(build(graph))
+    assert type(data) is bytes and data.startswith(b"{") and data.isascii()
+assert not [m for m in sys.modules if m.split(".")[0] in {"amane", "requests"}]
+print("OK")
+"""
+
+
+def test_the_package_builds_and_renders_with_amane_and_requests_blocked():
+    """Contract 27.1 (runtime): a real build + render in a clean interpreter with ``amane`` / ``requests`` blocked."""
+    import subprocess
+
+    tests_root = Path(__file__).resolve().parents[1]
+    script = (_RUNTIME_SCRIPT.replace("@SRC@", repr(str(SRC_ROOT))).replace("@TESTS@", repr(str(tests_root)))
+              .replace("@UNIT@", repr(str(tests_root / "unit"))))
+    done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120, check=False)
+    assert done.returncode == 0 and done.stdout.strip() == "OK", done.stderr[-2000:]

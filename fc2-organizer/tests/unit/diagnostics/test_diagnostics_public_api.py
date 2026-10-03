@@ -1,4 +1,4 @@
-"""P4-C9 contract sections 8.1 / 8.3 / 23 / 28.1: the public API (S2 stage: the two builders, no renderer), constants and enum snapshots."""
+"""P4-C9 contract sections 8.1 / 8.3 / 23 / 28.1: the final public API (two builders + renderer), signatures, constants and enum snapshots."""
 
 from __future__ import annotations
 
@@ -10,9 +10,12 @@ import fc2_organizer.diagnostics.models as models
 from fc2_metadata_core.aggregation import AggregateStatus
 from fc2_metadata_core.aggregation import policy as aggregation_policy
 from fc2_organizer.orchestration import MAX_BATCH_ITEMS
+from fc2_organizer.orchestration import models as orchestration_models
+from fc2_metadata_core.models import source_result
+from fc2_organizer.execution import models as execution_models
 
-_S2_ALL = [
-    "build_preview_diagnostics", "build_execution_diagnostics",
+_FINAL_ALL = [
+    "build_preview_diagnostics", "build_execution_diagnostics", "render_diagnostics_json",
     "DiagnosticsKind", "ResultShape", "PathPolicy", "TimingPolicy",
     "BatchDiagnostics", "MetadataBatchCounts", "ItemDiagnostics", "IssueDiagnostics", "MetadataDiagnostics",
     "SourceDiagnostics", "SourceAttemptDiagnostics", "FieldProvenance", "FieldConflictDiagnostics",
@@ -25,8 +28,8 @@ _S2_ALL = [
 ]
 
 
-def test_s2_all_is_exactly_the_contract_section_8_1_s2_set_in_order():
-    assert diagnostics.__all__ == _S2_ALL
+def test_all_is_exactly_the_contract_section_8_1_final_set_in_order():
+    assert diagnostics.__all__ == _FINAL_ALL
     assert len(set(diagnostics.__all__)) == len(diagnostics.__all__)
 
 
@@ -35,10 +38,22 @@ def test_every_exported_name_resolves():
         assert hasattr(diagnostics, name), name
 
 
-def test_the_builders_exist_and_the_renderer_does_not_exist_in_s2():
-    assert callable(diagnostics.build_preview_diagnostics) and callable(diagnostics.build_execution_diagnostics)
-    assert "render_diagnostics_json" not in diagnostics.__all__
-    assert not hasattr(diagnostics, "render_diagnostics_json")
+def test_builder_and_renderer_signatures_are_frozen():
+    preview = inspect.signature(diagnostics.build_preview_diagnostics)
+    execution = inspect.signature(diagnostics.build_execution_diagnostics)
+    for signature in (preview, execution):
+        names = list(signature.parameters)
+        assert names[1:] == ["path_policy", "timing_policy"]
+        first = signature.parameters[names[0]]
+        assert first.kind is inspect.Parameter.POSITIONAL_ONLY
+        assert signature.parameters["path_policy"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert signature.parameters["timing_policy"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert signature.parameters["path_policy"].default is diagnostics.PathPolicy.NONE
+        assert signature.parameters["timing_policy"].default is diagnostics.TimingPolicy.OMIT
+    assert list(preview.parameters)[0] == "preview" and list(execution.parameters)[0] == "result"
+    render = inspect.signature(diagnostics.render_diagnostics_json)
+    assert list(render.parameters) == ["diagnostics"]
+    assert render.parameters["diagnostics"].kind is inspect.Parameter.POSITIONAL_ONLY
 
 
 def test_public_constants_have_the_frozen_values():
@@ -184,7 +199,6 @@ def test_the_aggregate_status_used_by_the_models_is_the_phase_3_enum():
 
 
 def test_t1_issue_table_equals_the_p4_c8_table():
-    from fc2_organizer.orchestration import models as orchestration_models
 
     assert dict(models.ISSUE_TABLE) == orchestration_models._ISSUE_TABLE
     assert len(models.ISSUE_TABLE) == len(orchestration_models._ISSUE_TABLE)
@@ -192,21 +206,18 @@ def test_t1_issue_table_equals_the_p4_c8_table():
 
 
 def test_t2_allowed_error_kinds_equal_the_phase_3_table():
-    from fc2_metadata_core.models import source_result
 
     assert dict(models.ALLOWED_ERROR_KINDS) == dict(source_result.ALLOWED_ERROR_KINDS)
     assert type(models.ALLOWED_ERROR_KINDS) is tuple
 
 
 def test_t3_artifact_role_equals_the_p4_c7_table():
-    from fc2_organizer.execution import models as execution_models
 
     assert dict(models.ARTIFACT_ROLE) == execution_models._ARTIFACT_ROLE
     assert type(models.ARTIFACT_ROLE) is tuple
 
 
 def test_t4_blocked_and_duplicate_reasons_equal_the_p4_c8_sets():
-    from fc2_organizer.orchestration import models as orchestration_models
 
     assert models.BLOCKED_REASONS == orchestration_models._BLOCKED_REASONS
     assert models.DUPLICATE_REASONS == orchestration_models._DUPLICATE_REASONS
