@@ -42,7 +42,7 @@ S1 / S2 没有修改合同、施工计划、HANDOFF 或任何状态行；只有 
 
 ## 2. 变更范围与 diff scope 核对（施工计划第 5 节）
 
-`git diff --stat dbb0c138 HEAD`：46 个文件、约 +1.2 万行 / -30 行（精确数字以 reviewer 在 C9 Implementation Head 上执行该命令的结果为准；本文件自身计入其中）。
+`git diff --stat dbb0c138 HEAD`：46 个文件、约 +1.2 万行 / -30 行（构成：3 个 docs + 7 个 production + 8 个 contract 测试文件〔1 个新增 diagnostics architecture test + 7 个已有 architecture guard 修改〕+ 28 个 tests/unit/diagnostics 新增文件 = 46；精确行数以在 C9 Implementation Head 上执行该命令的结果为准，本文件自身计入其中）。
 
 ```text
 src（只含 diagnostics，7 个新增模块）
@@ -53,7 +53,7 @@ A tests/contract/test_diagnostics_architecture.py
 M tests/contract/test_{discovery,planning,publication,nfo}_architecture.py            顶层集合加入 "diagnostics"（合同第 27.3 节）
 M tests/contract/test_{execution,materialization,orchestration}_architecture.py        exempt / 跳过 diagnostics + 更严格的 import 名称断言（合同第 27.3 节）
 
-tests/unit/diagnostics（26 个新增文件，含 __init__.py 与 _builders.py）
+tests/unit/diagnostics（28 个新增文件 = 26 个 test_*.py + __init__.py + _builders.py）
 
 docs
 A docs/review/P4_C9_HANDOFF.md
