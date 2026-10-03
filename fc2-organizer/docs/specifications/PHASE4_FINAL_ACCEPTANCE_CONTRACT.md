@@ -1312,15 +1312,22 @@ P4-C10 Construction Plan       : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19
 Design Accepted Head           : fc59e2020e4df237bf3bed83a07950d67c19b475
 S1 / S2 / S3                   : COMPLETED（S1 f9f95567b9f6ea243e7587219404b1e258023233；S2 eeac4e420202031944d3d0ca8dd405c469b93537；S3 = C10 Acceptance Head）
 P4-C10 Implementation          : S3 CANDIDATE SUBMITTED（1012968e…）；Independent Level 1 Final Acceptance Review 已完成：Final Verdict = BLOCKED
-P4-C10-F4-01                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（第 21.1 节）
-P4-C10-F4-02                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（第 21.2 节）
-P4-C10-AUTH-A1                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT AUTHORITY AMENDMENT REVIEW REQUIRED
-Active Authority Amendment Head : NOT ESTABLISHED —— REVIEW REQUIRED
+P4-C10 原 Level 1 Final Acceptance Review : COMPLETED — BLOCKED（针对 S3 candidate 1012968e…；已完成，不再是当前下一步）
+P4-C10-F4-01                   : CLOSED（经 AUTH-A1 Independent Review 确认；第 21.1 节）
+P4-C10-F4-02                   : CLOSED（经 AUTH-A1 Independent Review 确认；第 21.2 节）
+P4-C10-AUTH-A1                 : INDEPENDENT REVIEW COMPLETED — FAIL（仅因 P4-C10-AUTH-A1-R-01；candidate 5c3479a14d34fa90789921646f203d3bf0bf03b7）
+P4-C10-AUTH-A1-R-01            : CLOSED（经 AUTH-A2 Incremental Independent Review 确认；计划第 15 节“下一步”顺序歧义已闭合）
+P4-C10-AUTH-A2                 : INCREMENTAL INDEPENDENT REVIEW COMPLETED — FAIL（仅因 P4-C10-AUTH-A2-R-01；candidate c552a937494e121b1dde16fd587b1782ddff7971）
+P4-C10-AUTH-A2-R-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED（Current Authority / Status Synchronization：本合同第 20 节仍保存 AUTH-A1 candidate 时点的当前状态；由 AUTH-A3 同步）
+P4-C10-AUTH-A3                 : CURRENT STATUS SYNCHRONIZATION CANDIDATE —— INDEPENDENT CLOSURE REVIEW REQUIRED（仅同步本合同第 20 节状态；不改任何规范语义）
+Active Authority Amendment Head : NOT ESTABLISHED —— INDEPENDENT REVIEW REQUIRED（仅在 AUTH-A3 Independent Review PASS 后由 Reviewer 建立；作者不得自行建立）
+Next                           : P4-C10-AUTH-A3 INCREMENTAL INDEPENDENT AUTHORITY AMENDMENT CLOSURE REVIEW（该 Review PASS 后：P4-C10 FORMAL EVIDENCE REVALIDATION（Windows 11 / Python 3.12.x / 普通用户）-> Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review；顺序与计划第 15 / 17.3 节一致）
 P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
-P4-C10 Technical Acceptance Verdict          : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING（Level 1 Review 建立；原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写）
+P4-C10 Technical Acceptance Verdict          : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；FORMAL WINDOWS EVIDENCE NOT OBTAINED（Level 1 Review 建立；原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写；非 PASS）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
 Final Reviewed Acceptance Head : NOT ESTABLISHED
 XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
+Formal Windows Evidence        : NOT RUN（Active Authority Amendment Head 建立之前不运行；正式环境证据未取得）
 Phase 4 Exit Authorization     : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
 Production Modified            : NO
 Production repair              : NOT PERFORMED
