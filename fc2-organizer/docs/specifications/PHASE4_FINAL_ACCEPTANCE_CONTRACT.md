@@ -1,9 +1,11 @@
 # FC2 Organizer -- Phase 4 / P4-C10 Phase 4 最终验收合同（Phase 4 Final Acceptance Contract）
 
 ```text
-文档状态              : DESIGN-R1 CANDIDATE —— INDEPENDENT DESIGN-R1 INCREMENTAL CLOSURE REVIEW REQUIRED
-Original Design Candidate : 17c194a71f0292e323591b8849ac65b9e14f7779（Independent Design Review：FAIL；亦为 Design-R1 Base）
-Design-R1 修订范围    : 只闭合 P4-C10-DESIGN-R-01 / R-02 / R-03（见“Design-R1 修订记录”）
+文档状态              : DESIGN-R2 CANDIDATE —— INDEPENDENT DESIGN-R2 INCREMENTAL CLOSURE REVIEW REQUIRED
+Original Design Candidate : 17c194a71f0292e323591b8849ac65b9e14f7779（Independent Design Review：FAIL）
+Design-R1 Candidate   : 5dc80fdebb467f38a852c4501c32ba65c6dd153f（R-01 / R-02 / R-03 经独立 DESIGN-R1 Closure Review 确认 CLOSED；同时发现 R1-01）
+Design-R1a Candidate  : 18e6e54fc6ba016a5a5e1b0b262b7a5e23210792（STOP 范围文字修正；亦为 Design-R2 Base）
+Design-R2 修订范围    : 只闭合 P4-C10-DESIGN-R1-01（见“Design-R2 修订记录”）
 Package               : P4-C10 Phase 4 Final Acceptance（不新增任何生产 package）
 Package Frozen Base   : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c（P4-C9 Final Closure Docs Head）
 Planning Parent       : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c
@@ -11,7 +13,7 @@ Governance Authority  : docs/PROJECT_GOVERNANCE_ACCELERATION.md @ 3b9d39e9adbcc8
 Branch                : claude/phase4-c10-final-acceptance（自 c293ed75… 创建）
 施工计划              : docs/P4_C10_CONSTRUCTION_PLAN.md
 Risk Class            : B（第 3 节；带强制升级门）
-P4-C10 Implementation : NOT STARTED
+P4-C10 Implementation : NOT AUTHORIZED
 Phase 4               : NOT CLOSED
 ```
 
@@ -28,7 +30,20 @@ CLOSED package 修改规则、EC-15）：
 | P4-C10-DESIGN-R-02 | HIGH / BLOCKING | 新增第 3.4 节“仓库只读访问与可丢弃修改边界”，U-2 / 第 12.2 节 / 第 12.4 节 / FX-6 / S-20 / STOP-05 对齐：仓库内只读访问**允许**，修改性访问只允许在可丢弃根内；原生跨卷例外与处置不变 | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
 | P4-C10-DESIGN-R-03 | MEDIUM / BLOCKING | 新增第 13.1 节“实施期 F2 流程”：F2 禁止修复 -> 记录 -> 验收转为 FAIL -> 继续收集安全证据 -> Failed Acceptance Head -> Level 1 FAIL -> 一个统一 C10-R1；F3 / F4 / 真正的 U 门仍立即 STOP；第 14 节、第 15 节、EC-10 / EC-11 / EC-12、第 17 节 HANDOFF 同步 | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
 
-三项均**不得**写为 CLOSED / PASS / ACCEPTED / FROZEN；Design Accepted Head 仍为 NOT ESTABLISHED。
+三项均**不得**写为 CLOSED / PASS / ACCEPTED / FROZEN；Design Accepted Head 仍为 NOT ESTABLISHED。（上表是 Design-R1 提交时的状态；其后独立 DESIGN-R1 Closure
+Review 已确认 R-01 / R-02 / R-03 CLOSED，见下一节。）
+
+### Design-R2 修订记录
+
+独立 DESIGN-R1 Closure Review 确认 P4-C10-DESIGN-R-01 / R-02 / R-03 = CLOSED，但发现新的 blocking finding：
+
+| Finding | 严重度 | 问题 | 修订 | 状态 |
+|---|---|---|---|---|
+| P4-C10-DESIGN-R1-01 | HIGH / BLOCKING（Authority / Closure Ordering / Constructibility） | Design-R1 同时冻结：XD-A08 的 disposition 最迟并入 EC-15；EC-10 要求 XD-A08 CLOSED；XD-A08 OPEN 时 Acceptance verdict 不得 PASS；Level 1 PASS / EC-14 必须先于 EC-15。状态机成为 XD-A08 OPEN -> Acceptance INCOMPLETE -> Level 1 PASS 不可达 -> EC-14 不可达 -> EC-15 不可达 -> 无法用 EC-15 关闭 XD-A08（排序循环） | 采用方案 B：把 **P4-C10 Technical Acceptance** 与 **Phase 4 Exit / Closure Authorization** 冻结地分成两个裁决维度（第 16 节重写）：EC-10 / EC-01 / EC-15 是 Phase Exit gate，不是 Technical Acceptance PASS 的前置条件；EC-14 只证明 technical acceptance reviewed PASS；XD-A08 OPEN 允许 Technical Acceptance PASS 但阻塞 Phase Exit；EC-15 Review 显式承担 XD-A08 authority disposition review，并 fail closed；Final HANDOFF verdict 字段拆分（第 17 节）；第 13.1 节、第 18 节、第 19 节、第 20 节同步 | REMEDIATED — INDEPENDENT REVIEW REQUIRED |
+
+Design-R2 **不**改变：Technical Acceptance 的技术强度（EC-02..EC-09、EC-11..EC-13 全部沿用）、XD-A08 作为“未知 authority 债务”的本质、Ledger 计数
+A = 8 / B = 17 / C = 15、U-2、仓库只读 / 可丢弃修改边界、F2 流程（OPEN F2 时 Technical Acceptance PASS 仍不可达）、F3 / F4 立即 STOP、G-500、
+L / SI / S / PC / M 矩阵、F3 / F5 处置、原生跨卷处置、Risk Class B、EC-15 的独立 docs-only 复查。R1-01 不得写为 CLOSED / PASS / ACCEPTED / FROZEN。
 
 ---
 
@@ -595,7 +610,10 @@ authority 不足的债务（定义、严重度、期限、范围或与 Phase 4 s
 
 ### 10.1 A 类：MUST CLOSE BEFORE PHASE 4 CLOSURE
 
-| ID | 项 | Origin | Reason / Authority | P4-C10 证据 | 阻塞 Phase 4 Closure |
+XD-A01..XD-A07 是**技术性**项：其证据由 P4-C10 Technical Acceptance 产出，随 EC-14（Technical Acceptance reviewed PASS）一并 CLOSED，因此同时阻塞
+Technical Acceptance 与 Phase Exit。XD-A08 是**历史未决 authority 债务**：只阻塞 Phase Exit（EC-10），不阻塞 Technical Acceptance（第 16 节）。
+
+| ID | 项 | Origin | Reason / Authority | P4-C10 证据 | 阻塞 Phase 4 Exit / Closure |
 |---|---|---|---|---|---|
 | XD-A01 | Phase 4 跨 package 500-item 全局门槛 | P4-C8 合同 §3、§37 | 被明确划归 P4-C10；v1.0 规格书 500 项注入失败验收 | G-500（第 7.4 节） | YES（直至 PASS） |
 | XD-A02 | 跨包集成门槛对 diagnostics 的覆盖 | P4-C9 合同 §30 | “P4-C10 自行规划” | S-18、G-500 诊断断言 | YES |
@@ -604,7 +622,7 @@ authority 不足的债务（定义、严重度、期限、范围或与 Phase 4 s
 | XD-A05 | 40 个基线 skip 的逐项对账 | 各 package HANDOFF 只给数字 | EC-08 | 第 8.3 节 | YES |
 | XD-A06 | Phase 4 Package Authority Matrix 机器核对 | 本合同第 4 节 | EC-01 | 坐标祖先关系、`src` 零漂移、状态行 CLOSED 的命令输出（施工计划第 7.1 节） | YES |
 | XD-A07 | v1.0 关键验收中 Phase 4 层面的部分 | v1.0 规格书“关键验收” | “500 项注入单源 / 单项失败整体仍完成”、“Failed / Partial 可单独批量重刮”、“整理冲突、跨盘、目标不可写不得导致源视频静默丢失”在 Phase 4（离线、接缝级）层面的验证 | G-500、S-13/S-14/S-17、S-12（接缝跨卷）、S-14（接缝 `EACCES`）、S-21 | YES（Phase 4 层面）；真实环境部分见 XD-B04 / XD-B05 |
-| XD-A08 | **C5-R1-L1 未决 authority 债务（unresolved authority debt）** | 历史 carry-forward finding ID（见下方 Known fact） | 见下方“冻结语义”：authority 不足，无法合法给出 non-blocking / OUT OF PHASE 4 disposition；“未知 authority 债务尚未被合法 disposition”本身阻止宣布 Phase 4 CLOSED | 取得 authority 并据此给出明确 disposition 的记录（见下方 Required closure）；P4-C10 不猜测其内容、不产生与其内容相关的测试 | **YES（XD-A08 = OPEN）** |
+| XD-A08 | **C5-R1-L1 未决 authority 债务（unresolved authority debt）** | 历史 carry-forward finding ID（见下方 Known fact） | 见下方“冻结语义”：authority 不足，无法合法给出 non-blocking / OUT OF PHASE 4 disposition；“未知 authority 债务尚未被合法 disposition”本身阻止宣布 Phase 4 Exit / CLOSED（**不**阻塞 P4-C10 Technical Acceptance，第 16 节） | 取得 authority 并据此给出明确 disposition 的记录（见下方 Required closure）；P4-C10 不猜测其内容、不产生与其内容相关的测试 | **YES（XD-A08 = OPEN；阻塞 Phase Exit，不阻塞 Technical Acceptance）** |
 
 **XD-A08 冻结语义**
 
@@ -631,11 +649,16 @@ Required closure before Phase 4 CLOSED（二选一，且必须来自可审计 au
   该 Ledger 修订属于 authority 文档变更（治理文档第 11.2 节不可压缩）：必须经独立 docs-only 复查——最迟并入 EC-15 的 Phase 4 Final Closure
   Docs-Only Review，也可更早以独立 docs-only Review 先行；在该复查 PASS 之前 XD-A08 仍为 OPEN。XD-A08 的取得与闭合不要求、也不允许
   借机修改任何其它 Ledger 项的分类。
+  该复查（EC-15）必须显式审查 authority source、disposition legitimacy、Ledger change 与 Phase 4 Exit Criteria，不得只审格式 / 状态；
+  若 definition 显示 C5-R1-L1 实际要求 Phase 4 内的 production repair、safety work、contract change 或额外 acceptance evidence，则不得仅以 docs
+  disposition 关闭，必须按其真实性质进入 F2 / F3 / F4 / F5 或 authority amendment 处理（第 16.4 节）。
 
 状态:
-  XD-A08 = OPEN；Blocking Phase 4 Closure = YES。
-  这不是声称 C5-R1-L1 本身一定是 HIGH 或一定影响 source loss；而是“未知 authority 债务尚未被合法 disposition”阻止 Final Acceptance 宣布
-  Phase 4 CLOSED。在 XD-A08 闭合前 Phase 5 不能从“已验收的 Phase 4 Frozen Base”开始（第 18 节）。
+  XD-A08 = OPEN；Blocks Phase 4 Exit / Closure = YES；Blocks P4-C10 Technical Acceptance = NO。
+  它是历史未决 authority 债务，不是当前 Phase 4 production correctness finding（其 definition 尚不可知）。
+  这不是声称 C5-R1-L1 本身一定是 HIGH 或一定影响 source loss；而是“未知 authority 债务尚未被合法 disposition”阻止宣布 Phase 4 Exit /
+  Phase 4 CLOSED。XD-A08 OPEN 时允许 Technical Acceptance = PASS，但 Phase 4 Exit Authorization = BLOCKED — XD-A08（第 16 节）。
+  在 XD-A08 闭合前 Phase 5 不能从“已验收的 Phase 4 Frozen Base”开始（第 18 节）。
 ```
 
 ### 10.2 B 类：ACCEPTED DEFERRED TO LATER PHASE
@@ -877,12 +900,13 @@ authority amendment；不触发 U-2..U-7 的任何真正升级门。可继续的
 **Failed Acceptance Head 的状态（冻结措辞）**：
 
 ```text
-P4-C10 Acceptance     : FAILED — F2 PRODUCTION FINDING(S)
-Phase 4               : NOT CLOSED
-Production repair     : NOT PERFORMED
+P4-C10 Technical Acceptance : FAIL — F2 PRODUCTION FINDING(S)
+Phase 4 Exit Authorization  : BLOCKED — OPEN F2（若 XD-A08 同时 OPEN，一并列出）
+Phase 4                     : NOT CLOSED
+Production repair           : NOT PERFORMED
 ```
 
-不得写 PASS。F2 未闭合期间 `Phase 4 = CLOSED` 被禁止（第 16 节）。F2 流程**不**降低 production repair 的治理：C10-R1 中任何 CLOSED package
+不得写 Technical Acceptance PASS（OPEN F2 时 PASS 不可达，第 16.4 节）。F2 未闭合期间 `Phase 4 = CLOSED` 被禁止（第 16 节）。F2 流程**不**降低 production repair 的治理：C10-R1 中任何 CLOSED package
 `src/**` 修改仍触发 U-1、Risk Class = C，并满足第 14 节第 3 条与独立 Review。F2 流程**不**适用于 F3 / F4。
 
 ---
@@ -918,13 +942,43 @@ Production repair     : NOT PERFORMED
 
 ---
 
-## 16. Phase 4 Exit Criteria（冻结）
+## 16. Phase 4 Exit Criteria 与验收裁决模型（冻结；Design-R2 重写，分离 Technical Acceptance 与 Phase Exit）
 
-只有下列**全部** Blocking 项满足，才允许宣布 `Phase 4 = CLOSED`：
+### 16.1 两个独立的裁决维度（冻结）
+
+本合同把两个问题的裁决**冻结地分开**，不得再用同一个 verdict 同时承担两种含义（Design-R2 / P4-C10-DESIGN-R1-01）：
+
+```text
+A. P4-C10 Technical Acceptance
+   回答：P4-C1..P4-C9 的生产实现，作为一个整体技术系统，是否通过 P4-C10 的 integration / safety / regression /
+         compatibility / mutation / acceptance scenario 技术门。
+   取值：PASS / FAIL / BLOCKED
+   它不等于 Phase 4 = CLOSED，不授权 Phase 4 Closure，不授权 Phase 5 开始。
+
+B. Phase 4 Exit / Closure Authorization
+   回答：Phase 4 是否可以被宣布 CLOSED，并建立 Phase 4 → Phase 5 的输入边界与 Phase 5 Frozen Base Candidate。
+   取值：AUTHORIZED / BLOCKED
+   另保留状态字段：Phase 4 : CLOSED / NOT CLOSED
+```
+
+Technical Acceptance 的取值（冻结）：
+
+| 取值 | 条件 |
+|---|---|
+| PASS | 第 16.2 节全部 Technical Acceptance gate 满足；不存在 OPEN F2；不存在 F3 / F4；独立 Level 1 Final Acceptance Review 判 PASS |
+| FAIL | 存在 OPEN F2（第 13.1 节 Failed Acceptance Head 路径），或任一 Technical Acceptance gate 未满足而可由统一 C10-R1 修复 |
+| BLOCKED | 发生 F3 / F4 / 真正的 U 门 / 其它 STOP（施工计划第 14 节）而需要 authority 先行；或正式证据环境前提无法满足 |
+
+Phase 4 Exit Authorization 的取值（冻结）：`AUTHORIZED` 当且仅当 Technical Acceptance = PASS **且** EC-01、EC-10、EC-15 全部满足；
+其余一切情形（含 Technical Acceptance = PASS 但 XD-A08 = OPEN、或 EC-15 尚未完成）均为 `BLOCKED`，并必须列出阻塞原因（例如 `BLOCKED — XD-A08`）。
+`Phase 4 : CLOSED` 只在 Exit Authorization = AUTHORIZED（经 EC-15）之后才可写。
+
+### 16.2 Technical Acceptance gate（决定 P4-C10 Technical Acceptance = PASS）
+
+下列**全部**满足才可 PASS（强度不因 verdict 分离而降低；本节全部条目沿用原冻结定义）：
 
 | ID | 条件 |
 |---|---|
-| EC-01 | P4-C1..P4-C9 均 CLOSED，第 4.1 节坐标全部机器核对通过（祖先关系、`src` 自各 Final Reviewed Code Head 零漂移，或任何漂移都来自经第 14 节处理的 C10-R1） |
 | EC-02 | P4-C10 Contract 与 Construction Plan 经独立 Design Review PASS（Design Accepted Head 已建立） |
 | EC-03 | Cross-Package Integration Gate PASS：L-01..L-14 全部有 P4-C10 真实链路证据 |
 | EC-04 | Acceptance Scenario Matrix S-01..S-22 全部 PASS |
@@ -932,16 +986,102 @@ Production repair     : NOT PERFORMED
 | EC-06 | Phase 4 Safety Gate PASS：SI-01..SI-22 全部 Blocking 项 PASS |
 | EC-07 | Non-Vacuity PASS：M-01..M-14 全部被杀死；harness 正 / 负向对照通过；恢复证明通过 |
 | EC-08 | Regression PASS：G-T、G-P4、G-FULL 在正式证据环境中全部通过；skip 基线逐项对账通过；新增 skip = NONE；0 failed、0 errors |
-| EC-09 | Compatibility disposition complete：PC-01..PC-06 PASS；PC-07..PC-09 处置完整 |
-| EC-10 | Exit Debt Ledger complete：XD-A01..XD-A08 全部 CLOSED 并有证据（**XD-A08 = OPEN 时本项不满足**）；每个 B / C 项都有 disposition；无未处置的阻塞性 evidence gap |
-| EC-11 | Production Modified = NO；或每一处 CLOSED package 生产改动都已按第 14、15 节处理且独立 Review PASS；且**不存在任何 OPEN 的 F2 finding**（第 13.1 节） |
-| EC-12 | 全部 P4-C10 blocking findings CLOSED（含全部 F2 findings、Level 1 findings 与 C10-R1 findings） |
-| EC-13 | Final HANDOFF 按第 17 节完整 |
-| EC-14 | Final Reviewed Acceptance Head 已建立（P4-C10 Level 1 Final Acceptance Review PASS） |
-| EC-15 | Phase 4 Final Closure Docs 经独立 docs-only closure review PASS（它确立下一阶段输入边界与 Phase 5 Frozen Base Candidate，治理文档第 11.2 节不可压缩） |
+| EC-09 | Compatibility 技术处置完整：PC-01..PC-06 PASS；PC-07..PC-09 处置完整 |
+| EC-11 | Production Modified = NO；或每一处 CLOSED package 生产改动都已按第 14、15 节处理且独立 Review PASS；且**不存在任何 OPEN 的 F2 finding**（第 13.1 节）；不存在 F3 / F4 |
+| EC-12 | 全部 P4-C10 **technical** blocking findings CLOSED（code / contract / safety / test correctness；含全部 F2 findings、Level 1 findings 与 C10-R1 findings）。XD-A08 是历史未决 authority 债务，**不是**技术 finding，不计入 EC-12 |
+| EC-13 | Final HANDOFF 按第 17 节完整（含两维度 verdict 字段与失败路径记录） |
+| EC-14 | **P4-C10 Technical Acceptance 经独立 Level 1 Final Acceptance Review PASS，Final Reviewed Acceptance Head 已建立**（上述 EC-02..EC-09、EC-11..EC-13 已满足的 reviewed 结论） |
 
-在 EC-15 满足之前，任何文档都不得写 `Phase 4 = CLOSED`。此外，只要 **XD-A08 = OPEN** 或存在**任何 OPEN 的 F2 finding**，`Phase 4 = CLOSED`
-一律被禁止（由 EC-10 / EC-11 / EC-12 直接推出）；此时 Phase 5 也不能从“已验收的 Phase 4 Frozen Base”开始（第 18 节）。
+此外，Technical Acceptance 还要求 Ledger 中全部**技术性** A 类项（XD-A01..XD-A07）的证据已产出；它们随 EC-14 一并 CLOSED（其证据即 EC-03..EC-08 与 S1 机器核对）。
+
+**EC-14 的含义（冻结）**：EC-14 只证明“P4-C10 technical acceptance reviewed PASS”并确立 Final Reviewed Acceptance Head；它**不**表示 EC-01 … EC-15
+全部满足，**不**自动授权 Phase 4 Closure。EC-14 可以先于 EC-10 满足。
+
+### 16.3 Phase Exit / Closure gate（决定 Phase 4 Exit Authorization = AUTHORIZED）
+
+Phase 4 Exit 要求 Technical Acceptance = PASS（即 EC-14 及其所依赖的第 16.2 节全部 gate）**加上**下列 closure gate：
+
+| ID | 条件 |
+|---|---|
+| EC-01 | P4-C1..P4-C9 均 CLOSED，第 4.1 节坐标全部机器核对通过（祖先关系、`src` 自各 Final Reviewed Code Head 零漂移，或任何漂移都来自经第 14 节处理的 C10-R1）；S1 的机器核对提供证据，Final Closure 时复核 |
+| EC-10 | Exit Debt Ledger complete：XD-A01..XD-A08 全部 CLOSED 并有证据（**XD-A08 = OPEN 时本项不满足**）；每个 B / C 项都有 disposition；无未处置的阻塞性 evidence gap。**EC-10 是 Phase 4 Exit gate，不是 Technical Acceptance PASS 的前置条件** |
+| EC-15 | Phase 4 Final Closure Docs 经独立 docs-only closure review PASS（它确立下一阶段输入边界与 Phase 5 Frozen Base Candidate，治理文档第 11.2 节不可压缩）。该 Review 必须同时承担第 16.4 节规定的 XD-A08 authority disposition review（若 XD-A08 的 disposition 首次在 Final Closure Docs 中写入） |
+
+### 16.4 XD-A08 的关闭与 EC-15 Review 的责任（冻结）
+
+XD-A08 = 历史未决 authority 债务（definition 未知），**不是**当前 Phase 4 production correctness finding。因此：
+
+```text
+XD-A08 OPEN  ->  允许 P4-C10 Technical Acceptance = PASS（若全部 Technical gate 满足）
+XD-A08 OPEN  ->  禁止 Phase 4 Exit Authorization = AUTHORIZED；禁止 Phase 4 = CLOSED；禁止 Phase 5 开始
+```
+
+合法路径（完整可达，冻结）：
+
+```text
+S1 -> S2 -> S3 -> C10 Acceptance Head
+ -> Independent Level 1 Review
+ -> Technical Acceptance PASS；Final Reviewed Acceptance Head established；EC-14 satisfied
+ 如果 XD-A08 OPEN：
+ -> Phase 4 Exit Authorization = BLOCKED — XD-A08；Phase 4 remains NOT CLOSED
+ -> 取得 C5-R1-L1 的可审计 authority（第 10.1 节 Required closure）
+ -> 在 Phase 4 Final Closure authority docs 中写入 XD-A08 disposition（Ledger 修订）
+ -> Independent Final Closure Docs-Only Review（EC-15）
+      Review 必须同时验证：XD-A08 authority source、disposition legitimacy、Ledger change、Phase 4 Exit Criteria（EC-01、EC-10 及对 EC-14 的承接）
+    PASS ->  XD-A08 CLOSED -> EC-10 satisfied -> EC-15 satisfied -> 全部 Exit gate 满足
+          -> Phase 4 Exit Authorization = AUTHORIZED；Phase 4 CLOSED
+          -> Final Closure Docs Head 成为 Phase 5 Frozen Base Candidate
+```
+
+**EC-15 Review 对 XD-A08 的实质责任**：若 XD-A08 的 disposition 首次写入 Final Closure Docs，EC-15 Review 必须显式审查 authority source（exact source、
+exact SHA / 文档）、disposition 的合法性（definition、severity、deadline、scope、disposition authority 是否被来源真正支持）、Ledger 变更、以及 Phase 4
+Exit Criteria；**不得只审格式 / 状态**。在该 Review PASS 之前：XD-A08 = OPEN，Phase 4 = NOT CLOSED。
+
+**fail closed（冻结）**：若取得 definition 后发现 C5-R1-L1 实际要求 Phase 4 内的 production repair、safety work、contract change 或额外的 acceptance
+evidence，则 EC-15 Review **不得简单 PASS**：Phase 4 Closure 保持 BLOCKED，并按其真实性质进入 F2 / F3 / F4 / F5 或 authority amendment 处理
+（第 13、14 节）。不得仅靠 docs disposition 关闭真实的技术 obligation。若该 obligation 影响已 PASS 的 Technical Acceptance 证据，则该 Technical
+Acceptance 在受影响范围内失效，必须在修复 / authority 解决后重新执行并重新 Review。
+
+**严格区分 XD-A08 OPEN 与 F2 OPEN**：
+
+```text
+XD-A08 OPEN : Technical Acceptance PASS 可以成立；Phase Exit BLOCKED
+F2 OPEN     : Technical Acceptance PASS 不可成立（第 13.1 节：Failed Acceptance Head -> Level 1 FAIL -> 统一 C10-R1）
+F3 / F4     : 立即 STOP，authority first（不因本节的 verdict 分离而弱化）
+```
+
+### 16.5 Level 1 Final Acceptance Review 的两个裁决（冻结）
+
+独立 Level 1 Final Acceptance Review 必须**分别**给出：
+
+```text
+P4-C10 Technical Acceptance : PASS / FAIL / BLOCKED
+Phase 4 Exit Authorization  : AUTHORIZED / BLOCKED
+```
+
+典型情况（全部技术门 PASS，但 XD-A08 OPEN）必须是：
+
+```text
+P4-C10 Technical Acceptance    : PASS
+Final Reviewed Acceptance Head : <sha>（ESTABLISHED）
+EC-14                          : SATISFIED
+XD-A08                         : OPEN
+Phase 4 Exit Authorization     : BLOCKED — XD-A08
+Phase 4                        : NOT CLOSED
+Phase 5                        : NOT STARTED
+```
+
+这不是矛盾。Level 1 Review 在 Exit Authorization 上只能给出 `BLOCKED`（因为 EC-15 尚未发生）；`AUTHORIZED` 只可能出现在 EC-15 PASS 之后的 Final
+Closure 记录中。
+
+### 16.6 禁止与不变量
+
+* 禁止写 `Technical Acceptance PASS => Phase 4 自动 CLOSED`；Technical Acceptance PASS 不授权 Phase 4 Closure、不建立 Phase 5 Frozen Base Candidate。
+* 禁止写 `XD-A08 OPEN => Technical Acceptance 不可 PASS`。
+* 在 EC-15 满足之前，任何文档都不得写 `Phase 4 = CLOSED`。只要 **XD-A08 = OPEN** 或存在**任何 OPEN 的 F2 finding**，`Phase 4 = CLOSED` 一律被禁止
+  （前者由 EC-10 推出，后者由 EC-11 / EC-12 与 Technical Acceptance 不可 PASS 推出）；此时 Phase 5 也不能从“已验收的 Phase 4 Frozen Base”开始（第 18 节）。
+* Phase 5 Frozen Base Candidate 只在 XD-A08 CLOSED、全部 Phase Exit gate 满足且 EC-15 PASS 之后才建立；在此之前 Phase 5 = NOT STARTED。
+* 禁止再使用单一的 `Acceptance verdict` / `INCOMPLETE` 字段承担两种含义；全部技术门 PASS 时不得写 `Acceptance = INCOMPLETE`。
 
 ---
 
@@ -973,8 +1113,16 @@ Production repair     : NOT PERFORMED
     * **F2 之后收集的安全证据**：F2 发现之后仍然执行并得到结果的测试 / 场景清单；
     * **被 F2 阻塞的测试 / 场景**：每个 `NOT RUN / BLOCKED BY F2 <finding-id>` 及其对缺陷路径的直接依赖说明（第 13.1 节）；
     * **Production repair**：`NONE`（S1-S3 / Level 1 之前任何生产修复都被禁止）；
-    * **Acceptance verdict**：`PASS` 仅当不存在 OPEN F2 且 XD-A08 已闭合；否则 `FAILED — F2 PRODUCTION FINDING(S)` 或 `INCOMPLETE — XD-A08 OPEN`
-      （二者可并存）；
+    * **两维度 verdict 字段（Design-R2；取代原单一的 `Acceptance verdict`，禁止再使用 `INCOMPLETE` 承担两种含义）**，必须分别写出：
+      * `P4-C10 Technical Acceptance Verdict`：`PASS` / `FAIL — F2 PRODUCTION FINDING(S)` / `BLOCKED — <F3 / F4 / U 门 / 环境>`；
+        `PASS` 当且仅当第 16.2 节全部 gate 满足、不存在 OPEN F2 / F3 / F4——**与 XD-A08 是否 OPEN 无关**；
+      * `Final Reviewed Acceptance Head`：`<sha>`（Technical Acceptance 经 Level 1 PASS 后确立）/ `NOT ESTABLISHED`；
+      * `XD-A08`：`OPEN` / `CLOSED（附 authority 来源与 disposition）`；
+      * `Phase 4 Exit Authorization`：`AUTHORIZED` / `BLOCKED — <原因列表，例如 XD-A08 / OPEN F2 / EC-15 尚未完成>`；
+      * `Phase 4`：`NOT CLOSED` / `CLOSED`（`CLOSED` 只在 EC-15 PASS 之后的 Final Closure 记录中写入）；
+      * `Phase 5`：`NOT STARTED`（直至 Phase 5 Frozen Base Candidate 建立）。
+      典型：全部技术门 PASS 且 XD-A08 OPEN -> `Technical Acceptance : PASS` / `Final Reviewed Acceptance Head : <sha>` / `XD-A08 : OPEN` /
+      `Phase 4 Exit Authorization : BLOCKED — XD-A08` / `Phase 4 : NOT CLOSED` / `Phase 5 : NOT STARTED`。
     * **F3 / F4 / 真正 U 门的 STOP 记录**（若发生）。
 
 **Part II —— Phase 4 Final HANDOFF**
@@ -987,8 +1135,10 @@ Production repair     : NOT PERFORMED
 6. Phase 5 input boundary（第 18 节）。
 7. final closure coordinates（Final Reviewed Acceptance Head、Phase 4 Final Closure Docs Head、Phase 5 Frozen Base Candidate）。
 
-Part II 中“Phase 4 = CLOSED”与 final closure coordinates 只能在 EC-14 满足后的 Final Closure Docs 提交中写入，并以 EC-15 为生效条件；
-XD-A08 = OPEN 或存在 OPEN F2 时不得写入。失败路径下 Part II 只记录 Part I 第 15 项所列状态，不写 CLOSED。
+Part II 中“Phase 4 = CLOSED”与 final closure coordinates 只能在 EC-14 满足（Technical Acceptance PASS）之后的 Final Closure Docs 提交中写入，并以 EC-15 为生效条件；
+XD-A08 = OPEN 或存在 OPEN F2 时不得写入。失败路径与“Technical PASS 但 Exit BLOCKED”路径下，Part II 只记录 Part I 第 15 项所列状态，不写 CLOSED。
+首次写入 XD-A08 disposition 的 Final Closure Docs 必须附 authority source（exact source、exact SHA / 文档、finding definition、severity、deadline、scope、
+disposition authority），供 EC-15 Review 按第 16.4 节审查。
 
 ---
 
@@ -1015,8 +1165,9 @@ overwrite = NEVER；no silent source loss；fail closed；source / item isolatio
 
 * XD-B11 F3 / F5：**Phase 4 非阻塞；Phase 5 入口阻塞项（ENTRY BLOCKER）**；最迟在 Phase 5 集成之前关闭；定义不在本仓库，Phase 5 规划者须先取得其原始定义
   （处置不变，Design-R1 未改动）。
-* **XD-A08（C5-R1-L1）不是 Phase 5 入口门槛，而是 Phase 4 Closure 阻塞项（第 10.1 节）**：在它 CLOSED 之前 Phase 4 不能 CLOSED，因此 Phase 5 也不能从
-  已验收的 Phase 4 Frozen Base 开始。它不得被写成 Phase 3 债务、OUT OF PHASE 4 或永久 non-blocking。
+* **XD-A08（C5-R1-L1）不是 Phase 5 入口门槛，而是 Phase 4 Exit / Closure 阻塞项（第 10.1、16 节；不阻塞 P4-C10 Technical Acceptance）**：在它 CLOSED 之前 Phase 4
+  不能 CLOSED，因此 Phase 5 也不能从已验收的 Phase 4 Frozen Base 开始；P4-C10 Technical Acceptance PASS 本身不授权 Phase 5 开始。它不得被写成 Phase 3 债务、
+  OUT OF PHASE 4 或永久 non-blocking。
 * XD-B16 P4-C4-R-01：若 adapter 向 Phase 4 链路提供自构造的 `NormalizedMetadata` / `OrganizePlan`，须先裁决容器信任语义。
 * 第 10.2 / 10.3 节其余项按各自目标阶段处理。
 
@@ -1026,7 +1177,8 @@ durable resume / 持久化、跨进程协调、实时进度流、CLI / UI、人�
 
 ### 18.5 Phase 5 Frozen Base Candidate
 
-= Phase 4 Final Closure Docs Head（EC-15 PASS 后生效；XD-A08 = OPEN 或存在 OPEN F2 时不存在该 Candidate）。Phase 5 自己的 Contract / Construction Plan 冻结时自行确认其 Frozen Base。
+= Phase 4 Final Closure Docs Head（只在 XD-A08 CLOSED、全部 Phase Exit gate 满足且 EC-15 PASS 之后建立；Technical Acceptance PASS 本身不建立它；
+XD-A08 = OPEN 或存在 OPEN F2 时不存在该 Candidate，Phase 5 = NOT STARTED）。Phase 5 自己的 Contract / Construction Plan 冻结时自行确认其 Frozen Base。
 
 ---
 
@@ -1040,8 +1192,8 @@ durable resume / 持久化、跨进程协调、实时进度流、CLI / UI、人�
 * 确定性只针对冻结的 fixture 证明，不是对全部输入的证明。
 * G-500 的文件很小（几字节到几 KiB）；大文件流式行为以 P4-C7 既有门槛与 S-12 的 1 MiB + 1 跨卷用例为准。
 * 本合同不对 Amane 宿主行为作任何声明。
-* C5-R1-L1（XD-A08）的原始定义不在仓库内，P4-C10 无法自行闭合它；它依赖外部可审计 authority 的取得（第 10.1 节）。在此之前 P4-C10 即使全部
-  验收证据 PASS，Phase 4 也不能 CLOSED（EC-10）。
+* C5-R1-L1（XD-A08）的原始定义不在仓库内，P4-C10 无法自行闭合它；它依赖外部可审计 authority 的取得（第 10.1 节）。在此之前 P4-C10 Technical
+  Acceptance 仍可 PASS（它不阻塞技术验收），但 Phase 4 Exit Authorization = BLOCKED，Phase 4 不能 CLOSED（EC-10，第 16 节）。
 
 ---
 
@@ -1052,16 +1204,18 @@ P4-C1 .. P4-C9                 : CLOSED
 P4-C10 Frozen Base             : c293ed75e6ab3160d57ab8bf1248d1ce16ec241c
 Governance Authority           : 3b9d39e9adbcc8a009707486eebbb8736a5b1c4d
 Original Design Candidate      : 17c194a71f0292e323591b8849ac65b9e14f7779 —— Independent Design Review：FAIL
-P4-C10-DESIGN-R-01             : REMEDIATED — INDEPENDENT REVIEW REQUIRED
-P4-C10-DESIGN-R-02             : REMEDIATED — INDEPENDENT REVIEW REQUIRED
-P4-C10-DESIGN-R-03             : REMEDIATED — INDEPENDENT REVIEW REQUIRED
-P4-C10 Design                  : DESIGN-R1 CANDIDATE —— INDEPENDENT DESIGN-R1 INCREMENTAL CLOSURE REVIEW REQUIRED
+Design-R1 Candidate            : 5dc80fdebb467f38a852c4501c32ba65c6dd153f（Design-R1a：18e6e54fc6ba016a5a5e1b0b262b7a5e23210792）
+P4-C10-DESIGN-R-01 / R-02 / R-03 : CLOSED（经独立 DESIGN-R1 Closure Review 确认）
+P4-C10-DESIGN-R1-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED
+P4-C10 Design                  : DESIGN-R2 CANDIDATE —— INDEPENDENT DESIGN-R2 INCREMENTAL CLOSURE REVIEW REQUIRED
 P4-C10 Frozen Contract         : NOT ACCEPTED（本文件）
 P4-C10 Construction Plan       : NOT ACCEPTED
 Design Accepted Head           : NOT ESTABLISHED
 S1 / S2 / S3                   : NOT STARTED
 P4-C10 Implementation          : NOT AUTHORIZED
-XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Closure）
+P4-C10 Technical Acceptance    : NOT STARTED（尚无验收）
+XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
+Phase 4 Exit Authorization     : BLOCKED
 Production Modified            : NO
 Final Reviewed Acceptance Head : NOT ESTABLISHED
 P4-C10                         : NOT CLOSED
