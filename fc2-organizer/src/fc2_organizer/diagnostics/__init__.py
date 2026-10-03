@@ -10,12 +10,13 @@
 Contract: ``docs/specifications/PHASE4_DIAGNOSTICS_CONTRACT.md``; construction plan:
 ``docs/P4_C9_CONSTRUCTION_PLAN.md``.
 
-S1 (this stage) exports the diagnostics enums, immutable models, constants and the error hierarchy.
-S2 adds the two builders (``build_preview_diagnostics`` / ``build_execution_diagnostics``); S3 adds
-``render_diagnostics_json`` and fixes the final public API (contract section 8.1). ``fc2_organizer/__init__.py``
+S1 exports the diagnostics enums, immutable models, constants and the error hierarchy. S2 (this stage) adds the
+two builders (``build_preview_diagnostics`` / ``build_execution_diagnostics``); S3 adds ``render_diagnostics_json``
+and fixes the final public API (contract section 8.1). ``fc2_organizer/__init__.py``
 does not import this package; import it explicitly: ``from fc2_organizer.diagnostics import PathPolicy``.
 """
 
+from fc2_organizer.diagnostics.build import build_execution_diagnostics, build_preview_diagnostics
 from fc2_organizer.diagnostics.errors import (
     DiagnosticsContractError,
     DiagnosticsError,
@@ -58,6 +59,7 @@ from fc2_organizer.diagnostics.models import (
 )
 
 __all__ = [
+    "build_preview_diagnostics", "build_execution_diagnostics",
     "DiagnosticsKind", "ResultShape", "PathPolicy", "TimingPolicy",
     "BatchDiagnostics", "MetadataBatchCounts", "ItemDiagnostics", "IssueDiagnostics", "MetadataDiagnostics",
     "SourceDiagnostics", "SourceAttemptDiagnostics", "FieldProvenance", "FieldConflictDiagnostics",

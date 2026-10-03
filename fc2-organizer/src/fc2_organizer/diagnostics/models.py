@@ -1148,3 +1148,103 @@ def batch_problem(value: object) -> str | None:
         if problem is not None:
             return problem
     return None
+
+
+# --------------------------------------------------------------------------- validation snapshot (contract 9.2 item 11)
+#
+# Internal, immutable (frozen) snapshot produced by ``validation`` and consumed by ``projection``: it holds only
+# Projection Reads in their final, policy-applied form (converted timings, basenames only under BASENAME). The
+# types are internal: they are not in any ``__all__`` and are never output.
+
+
+@dataclass(frozen=True, slots=True)
+class TraceSnapshot:
+    max_attempts: int
+    deadline_exceeded: bool
+    deadline_during: str | None
+    attempts: tuple[SourceAttemptDiagnostics, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SourceSnapshot:
+    source_id: str
+    status: SourceStatus
+    error_kind: SourceErrorKind | None
+    contributed: bool
+    trace: TraceSnapshot | None
+
+
+@dataclass(frozen=True, slots=True)
+class MetadataSnapshot:
+    status: BatchItemStatus
+    generation: int
+    error_kind: BatchItemErrorKind | None
+    aggregate_status: AggregateStatus | None
+    traces_available: bool
+    sources: tuple[SourceSnapshot, ...]
+    disabled_source_ids: tuple[str, ...]
+    provenance: tuple[tuple[str, tuple[str, ...]], ...]
+    conflicts: tuple[FieldConflictDiagnostics, ...]
+    elapsed_ms: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class PreflightSnapshot:
+    mode: PreflightMode
+    ready: bool
+    transfer_mode: TransferMode | None
+    blockers: tuple[PreflightBlocker, ...]
+    pending_unit_count: int
+    completed_unit_count: int
+    skipped_steps: tuple[ExecutionStep, ...]
+    artifact_kinds: tuple[ArtifactKind, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionSnapshot:
+    status: ExecutionStatus
+    mode: PreflightMode
+    transfer_mode: TransferMode | None
+    new_effect_count: int
+    effect_kinds: tuple[tuple[EffectKind, ArtifactKind | None], ...]
+    failure: ExecutionFailure | None
+    checkpoint_present: bool
+    skipped_steps: tuple[ExecutionStep, ...]
+    leftovers: tuple[tuple[PathRole, str | None], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ItemSnapshot:
+    index: int
+    generation: int
+    canonical_number: str | None
+    source_name: str | None
+    source_size: int
+    target_directory_name: str | None
+    target_media_name: str | None
+    preview_state: PreviewState
+    issue: IssueDiagnostics | None
+    warnings: tuple[ItemWarning, ...]
+    conflict_with: tuple[int, ...]
+    retry_origin: RetryKind | None
+    disposition: ExecutionDisposition | None
+    retry_kind: RetryKind | None
+    retry_material_retained: bool | None
+    metadata: MetadataSnapshot | None
+    image_failures: tuple[tuple[ImageRole, ImageFailureKind, int | None], ...]
+    preflight: PreflightSnapshot | None
+    execution: ExecutionSnapshot | None
+
+
+@dataclass(frozen=True, slots=True)
+class BatchSnapshot:
+    kind: DiagnosticsKind
+    shape: ResultShape
+    generation: int
+    batch_size: int
+    retry_scope: tuple[RetryKind, ...] | None
+    metadata_counts: MetadataBatchCounts
+    preview_summary: PreviewSummary | None
+    execution_summary: ExecutionSummary | None
+    outcome: BatchOutcome | None
+    items: tuple[ItemSnapshot, ...]

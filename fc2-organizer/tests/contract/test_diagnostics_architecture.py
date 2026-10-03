@@ -30,7 +30,7 @@ DIAG_ROOT = ORGANIZER_SRC_ROOT / "diagnostics"
 CORE_SRC_ROOT = SRC_ROOT / "fc2_metadata_core"
 _PKG = "fc2_organizer.diagnostics"
 
-_STAGE = "S1"
+_STAGE = "S2"
 _S1_MODULES = {"__init__.py", "errors.py", "models.py"}
 _S2_MODULES = _S1_MODULES | {"validation.py", "projection.py", "build.py"}
 _S3_MODULES = _S2_MODULES | {"render.py"}
@@ -263,8 +263,9 @@ def test_validation_calls_no_mapping_methods():
     if not path.exists():
         pytest.skip("validation.py is added in S2 (this assertion is part of the S2 module set)")
     for node in ast.walk(_tree(path)):
-        if isinstance(node, ast.Attribute):
-            assert node.attr not in _DISPATCH_METHODS, node.lineno
+        # a *call* of such a method (the upstream models have fields named ``items``: reading them is fine)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            assert node.func.attr not in _DISPATCH_METHODS, node.lineno
 
 
 def _chain(node: ast.Attribute) -> tuple[str, ...] | None:

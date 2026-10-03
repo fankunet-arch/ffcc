@@ -1,4 +1,4 @@
-"""P4-C9 contract sections 8.1 / 8.3 / 23 / 28.1: the S1 public API, constants and enum snapshots."""
+"""P4-C9 contract sections 8.1 / 8.3 / 23 / 28.1: the public API (S2 stage: the two builders, no renderer), constants and enum snapshots."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from fc2_metadata_core.aggregation import AggregateStatus
 from fc2_metadata_core.aggregation import policy as aggregation_policy
 from fc2_organizer.orchestration import MAX_BATCH_ITEMS
 
-_S1_ALL = [
+_S2_ALL = [
+    "build_preview_diagnostics", "build_execution_diagnostics",
     "DiagnosticsKind", "ResultShape", "PathPolicy", "TimingPolicy",
     "BatchDiagnostics", "MetadataBatchCounts", "ItemDiagnostics", "IssueDiagnostics", "MetadataDiagnostics",
     "SourceDiagnostics", "SourceAttemptDiagnostics", "FieldProvenance", "FieldConflictDiagnostics",
@@ -24,8 +25,8 @@ _S1_ALL = [
 ]
 
 
-def test_s1_all_is_exactly_the_contract_section_8_1_s1_set_in_order():
-    assert diagnostics.__all__ == _S1_ALL
+def test_s2_all_is_exactly_the_contract_section_8_1_s2_set_in_order():
+    assert diagnostics.__all__ == _S2_ALL
     assert len(set(diagnostics.__all__)) == len(diagnostics.__all__)
 
 
@@ -34,10 +35,10 @@ def test_every_exported_name_resolves():
         assert hasattr(diagnostics, name), name
 
 
-def test_builder_and_renderer_names_do_not_exist_in_s1():
-    for name in ("build_preview_diagnostics", "build_execution_diagnostics", "render_diagnostics_json"):
-        assert name not in diagnostics.__all__
-        assert not hasattr(diagnostics, name), name
+def test_the_builders_exist_and_the_renderer_does_not_exist_in_s2():
+    assert callable(diagnostics.build_preview_diagnostics) and callable(diagnostics.build_execution_diagnostics)
+    assert "render_diagnostics_json" not in diagnostics.__all__
+    assert not hasattr(diagnostics, "render_diagnostics_json")
 
 
 def test_public_constants_have_the_frozen_values():
