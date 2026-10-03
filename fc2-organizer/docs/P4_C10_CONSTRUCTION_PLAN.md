@@ -614,13 +614,17 @@ Frozen Contract                : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19
 Construction Plan              : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19b475（本文件）
 Design Accepted Head           : fc59e2020e4df237bf3bed83a07950d67c19b475
 S1 / S2 / S3                   : COMPLETED（S1 f9f95567b9f6ea243e7587219404b1e258023233；S2 eeac4e420202031944d3d0ca8dd405c469b93537；S3 = C10 Acceptance Head）
-P4-C10 Implementation          : S3 CANDIDATE SUBMITTED —— WAITING FOR INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW
-P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
-P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED
-C10 Acceptance Head            : 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C10_HANDOFF.md）
+P4-C10 Implementation          : S3 CANDIDATE SUBMITTED（1012968e…）；Independent Level 1 Final Acceptance Review 已完成：Final Verdict = BLOCKED
+P4-C10-F4-01                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（合同第 21.1 节；本计划第 17 节）
+P4-C10-F4-02                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（合同第 21.2 节；本计划第 17 节）
+P4-C10-AUTH-A1                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT AUTHORITY AMENDMENT REVIEW REQUIRED
+Active Authority Amendment Head : NOT ESTABLISHED —— REVIEW REQUIRED
+P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
+P4-C10 Technical Acceptance Verdict          : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING（Level 1 Review 建立；原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写）
+C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
 Final Reviewed Acceptance Head : NOT ESTABLISHED
 XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Phase 4 Exit Authorization     : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
+Phase 4 Exit Authorization     : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
 Production Modified            : NO
 Production repair              : NOT PERFORMED
 P4-C10                         : NOT CLOSED
@@ -628,7 +632,7 @@ Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```
 
-S3 提交之后 **STOP**：不创建 Review 后状态提交、不建立 Final Reviewed Acceptance Head、不关闭 XD-A08、不开始 EC-15、不开始 Phase 5；
+S3 提交之后 **STOP**（已执行）：不创建 Review 后状态提交、不建立 Final Reviewed Acceptance Head、不关闭 XD-A08、不开始 EC-15、不开始 Phase 5；
 下一步是 P4-C10 INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW。
 
 ---
@@ -666,3 +670,62 @@ S3 提交之后 **STOP**：不创建 Review 后状态提交、不建立 Final Re
 | 27 | （Design-R3）S3 / 开发者是否被禁止写 `Technical Acceptance Verdict : PASS` 与 Final Reviewed Acceptance Head？EC-13 是否可在 Verdict = NOT ESTABLISHED 时满足并先于 EC-14？ | PASS | 合同第 16.1a / 16.2（EC-13 = candidate evidence complete）/ 16.6 / 17 节；本计划 S3 第 6 / 7 / 8 项与第 10 节 |
 | 28 | （Design-R3）reviewed verdict 的 authority carrier 是否冻结且不制造纯状态 review loop？Reviewer 是否不需要修改 S3 commit？ | PASS | 合同第 16.1b 节：S3 HANDOFF = candidate evidence snapshot；Level 1 Review Report = reviewed verdict authority；Final Closure Docs = closure history（经 EC-15）；符合治理文档第 11.1 节 |
 | 29 | （Design-R3）F2 路径是否未被削弱？Failed Acceptance Head 上 Verdict 是否 NOT ESTABLISHED、Level 1 是否必须判 FAIL？ | PASS | 合同第 13.1 / 16.1a 节；Level 1 FAIL / BLOCKED 时 Final Reviewed Acceptance Head 保持 NOT ESTABLISHED；F3 / F4 仍立即 STOP |
+
+---
+
+## 17. P4-C10-AUTH-A1 —— Post-Acceptance Authority Amendment（冻结；与合同第 21 节一一对应）
+
+```text
+Trigger                : Independent Level 1 Final Acceptance Review @ C10 Acceptance Head 1012968e3068731025d2512612fa8f85e829d3d0（Final Verdict = BLOCKED）
+Findings               : P4-C10-F4-01（HIGH / BLOCKING）；P4-C10-F4-02（MEDIUM / BLOCKING）
+Amendment Scope        : 合同与本计划的 authority 文字（docs-only）；Production / Tests / HANDOFF = UNCHANGED
+Risk Class             : B（不变）；AUTH-A1 不是新的 Design-R4；历史 Design Accepted Head fc59e202… 不变
+Active Authority Amendment Head : AUTH-A1 Independent Authority Review PASS 之前 = NOT ESTABLISHED
+```
+
+### 17.1 对本计划既有条款的修订（只改文字，不改 S1 / S2 / S3 的历史边界）
+
+* **S-09**：合同第 7.2 节已拆为 S-09A（相对根：Plan = PLANNING_REJECTED，Item issue 存在，**诊断 builder 必须 fail closed `DiagnosticsIntegrityError`**，零修改）与
+  S-09B（Windows 有根无盘符，仅 Windows 原生子场景：Plan = PLANNING_REJECTED，诊断结果只由 P4-C9 §9 的 `os.path.isabs` 输入门决定并如实记录取值，零修改）。
+  本计划第 3 节 S2 对 `test_p4_acceptance_chain.py` 的覆盖表述“S-09”按此理解；**S-09A 不是 P4-C9 正向 diagnostics 集成证据**，L-14 的正向覆盖仍由 S-18 / G-500 承担，不得降低。
+* **PC-04**：计划第 8 节“PC-01..PC-06 由 G-T、G-P4、G-FULL 给出”中的 PC-04 以合同第 9 节修订后的文字为准：`tests/contract/` 在 Design Accepted Head 上的 **10 个** tracked test modules
+  全部通过且未修改；原“11 个”是事实性 authority 缺陷；证据 = G-P4 PASS + `git diff --name-only <Design Accepted Head>..<被验收的 C10 head> -- fc2-organizer/tests/contract` 为空 + `git ls-tree` 计数为 10。
+* 计划第 7.3 节 diff scope 命令中的 `<Design Accepted Head>` 保持历史 `fc59e202…`；若出现 Evidence Refresh Candidate，其允许文件见第 17.3 节，范围判据相应扩展为“tests 只含 `tests/phase4_acceptance/**`，`tests/contract` 为空”。
+
+### 17.2 AUTH-A1 Evidence Impact Matrix（与合同第 21.3 节一致）
+
+| Finding | Production | 既有 C10 测试代码 | 预期受影响的证据 |
+|---|---|---|---|
+| F4-01 | NO CHANGE | AUTH-A1 无权修改；当前 S-09 测试是否符合修订由 Authority Review 判断（already conforms / evidence-only rerun / test repair），本计划不预先宣布 | S-09 diagnostics 期望；S-09 Windows 原生执行；S-01..S-22 gate summary（按需）；G-T 正式重跑；L-14 正向覆盖（S-18 / G-500）不变 |
+| F4-02 | NO CHANGE | NO CHANGE | PC-04 事实核对；G-P4 正式重跑；`tests/contract` 零差异证明 |
+
+### 17.3 AUTH-A1 之后的冻结顺序与预期 revalidation scope
+
+```text
+AUTH-A1 docs candidate
+  -> Independent Authority Amendment Review
+  PASS
+  -> P4-C10 FORMAL EVIDENCE REVALIDATION（Windows 11 / Python 3.12.x / 普通用户；不提权、不启用 Developer Mode、不改组策略、不关 Defender）
+  -> P4-C10 Evidence Refresh Candidate
+  -> Incremental Independent Level 1 Closure Review
+```
+
+不是 `AUTH-A1 -> C10-R1`；仅当 revalidation 中真的发现 F1 / F2 才进入统一 C10-R1（第 12 节规则不变）。本轮（AUTH-A1）**不**运行任何正式环境命令（Active Frozen Authority 尚待 Authority Review），**不**创建 Evidence Refresh Candidate。
+
+预期 revalidation 至少重新取得（最终范围由 AUTH-A1 Independent Review 确认）：
+
+```text
+Design Accepted Head 基线        : G-FULL + SKIP_BASE（加入 C10 tests 之前；正式环境）
+当前 C10                         : G-T（0 skipped）、G-P4、G-FULL、正式 skip 按 nodeid 对账
+Windows 原生                     : S-09（含 S-09B，并记录 os.path.isabs 取值）、S-21（junction、NTFS case 变体）、NTFS 路径 / 同卷原子 rename 证据
+平台门                           : PC-02、PC-04（10 个 module 的事实核对 + 零差异）、PC-05、PC-06（PC-01 / PC-03 / PC-07 / PC-09 按合同第 9 节记录）
+```
+
+**Evidence Refresh Candidate**：若 Authority Review PASS 且正式证据完成，允许形成一个新的 Evidence Refresh Candidate commit。原则上只允许修改
+`docs/review/P4_C10_HANDOFF.md`（记录 AUTH-A1 reviewed authority、正式 Windows 结果、新的 skip 对账、PC 结果、Candidate Status）以及合同第 20 节与本计划第 15 节的状态段；
+若不存在新的 F1，不得修改 tests。全部技术门满足时 Candidate Status 可写 `READY FOR LEVEL 1 REVIEW`，`Technical Acceptance Verdict` 仍为 `NOT ESTABLISHED`，由独立 Reviewer 建立。
+
+### 17.4 不变项
+
+XD-A08 = OPEN（不阻塞 Technical Acceptance，阻塞 Phase 4 Exit；与 AUTH-A1 无关）；OBS-03（基线 / F0 类补充问题，无 C10 回归 finding）与 OBS-04（无 finding）不重新设计；
+Technical Acceptance Verdict = BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；Final Reviewed Acceptance Head = NOT ESTABLISHED；Phase 4 = NOT CLOSED；Phase 5 = NOT STARTED。

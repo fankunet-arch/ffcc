@@ -62,7 +62,7 @@ F3 / F4 立即 STOP、G-500、L / SI / S / PC / M 矩阵、F3 / F5 处置、原�
 
 本合同与施工计划一起，一次性冻结 P4-C10 的全部验收语义。Design Review PASS 之前，本文件只是 Design Candidate；
 PASS 之后才成为 Frozen Contract。之后对本文件唯一允许的改动是第 20 节状态行；任何语义改动都是 authority 修订，
-必须 STOP 并经独立复查（治理文档第 11.2 节）。
+必须 STOP 并经独立复查（治理文档第 11.2 节）。（P4-C10-AUTH-A1 即这样一次 post-acceptance authority 修订，见第 21 节。）
 
 Authority 优先级（冻结，治理文档第 4 节）：
 
@@ -462,7 +462,8 @@ Phase 3 聚合状态按其冻结规则：NOT_FOUND 不是运行性失败；BLOCK
 | S-06 番号不可识别 | 文件名无 FC2 番号 | 不请求（engine 调用 0） | UNPREPARED `NUMBER_NOT_RECOGNIZED` | `NOT_READY` | `NONE` | issue stage / reason | 源不变 | engine / client 调用计数 0 |
 | S-07 image partial / failure | poster：首候选 404、次候选合法；fanart：302 -> `http://10.1.2.3/…`；thumb：合法 JPEG 声明 `image/png`；extrafanart：一个非法 JPEG、一个合法 | `SUCCESS` | READY + 图片 warnings | `SUCCESS` | `NONE` | `image_failures` 分组：`HTTP_STATUS 404`、`UNSAFE_URL`、`CONTENT_TYPE_MISMATCH`、`INVALID_JPEG` | 只落盘成功角色；私有地址从未被请求（MockTransport 请求记录） | poster 字节 == 次候选字节；无 fanart / thumb 文件；extrafanart 仅 1 张 |
 | S-08 NFO generation | 标题含 `&<>"'`、CJK、emoji；另一条目 release = `2026-02-30` | `SUCCESS` | 前者 READY；后者 UNPREPARED `NFO_RENDER_FAILED` | `SUCCESS` / `NOT_READY` | `NONE` / `NONE` | issue 呈现 | 后者源不变 | NFO 可解析、逐字还原、无注入元素；非法日期 fail closed |
-| S-09 planning rejection | orchestrator `library_root` 为相对路径；另一组为 Windows 有根无盘符（`\lib`，仅 Windows） | metadata 正常获取 | UNPREPARED `PLANNING_REJECTED` | `NOT_READY` | `NONE` | issue 呈现 | 零修改 | 无任何目录被创建 |
+| S-09A 相对 library_root（AUTH-A1 修订；两个 S-09 子场景不得再合并为同一个 Diag 期望） | orchestrator `library_root` 为**相对路径**（任意平台；运行在可丢弃的当前目录下） | metadata 正常获取 | UNPREPARED `PLANNING_REJECTED`（P4-C8 §15.3 / §37“library_root 晚校验”，P4-C2 §11a） | `NOT_READY` | `NONE` | **Item issue 存在**（`ItemPreview.issue` / `ItemExecution.issue` = `PLANNING / PLANNING_REJECTED`）；**P4-C9 诊断 builder 必须 fail closed：`build_preview_diagnostics` 与 `build_execution_diagnostics` 均抛 `DiagnosticsIntegrityError`**（P4-C9 §9：`library_root` 必须是 `os.path.isabs` 的绝对路径；这是 P4-C9 冻结的输入完整性边界的正确表现，不是 diagnostics 缺陷） | 零修改 | 无任何目录被创建；源不变；**S-09A 不是 P4-C9 的正向 diagnostics 集成证据**（L-14 的正向覆盖只由 S-18 与 G-500 承担） |
+| S-09B Windows 有根无盘符 library_root（仅 Windows 原生子场景） | orchestrator `library_root` 为 Windows 有根无盘符形态 `\lib`（P4-C2 §11a 点名的“有根无盘符”形态） | metadata 正常获取 | UNPREPARED `PLANNING_REJECTED`（P4-C2 §11a：拒绝有根无盘符；Windows 冻结拒绝结果） | `NOT_READY` | `NONE` | Item issue 存在；诊断结果**只由 P4-C9 §9 输入门决定**，在正式环境的 Python 3.12.x 上对 `\lib` 求值 `os.path.isabs`：为真 → builder **必须成功构建**并呈现该 `PLANNING_REJECTED` issue；为假 → 与 S-09A 相同，必须 fail closed `DiagnosticsIntegrityError`；证据必须记录 `os.path.isabs(<library_root>)` 的实际取值，且不得以“两种都可以”代替该求值 | 零修改 | 无任何目录被创建；源不变 |
 | S-10 批内冲突 | 两目录同番号；同一 `DiscoveredMediaItem` 出现两次；hardlink 对（番号不同） | Phase A 冲突条目不请求 metadata | BLOCKED `DUPLICATE_*`（Phase A / Phase B） | `NOT_READY` | `NONE` | 冲突组呈现 | 全部源不变 | 不选胜者；engine 未被询问 Phase A 条目（SI-10） |
 | S-11 preflight blocker | 目标目录已存在（含 `user-note.txt`）；g2 前测试作为“用户”删除它 | `SUCCESS` | BLOCKED `PREFLIGHT_BLOCKED` -> READY | `NOT_READY` -> `SUCCESS` | `PREFLIGHT_RECHECK` | blocker 呈现（preview 诊断） | 用户文件在删除前字节 / inode / mtime 不变 | 阻断期间零修改（SI-02、SI-21） |
 | S-12 execution success 变体 | 同卷原生；`_FS.device_of` 接缝强制跨卷（含 1 MiB + 1 字节流式）；0 字节媒体；NFC / NFD 名称；`.MP4` -> `.mp4` | `SUCCESS` | READY | `SUCCESS`；跨卷 `transfer_mode = CROSS_VOLUME` | `NONE` | execution effect 计数 | 同卷 inode 保持；跨卷 sha256 == 源 | 字节、扩展名小写、容器不变 |
@@ -593,7 +594,7 @@ G-FULL python -m pytest -q -p no:cacheprovider -rs --basetemp=<JOB_TMP>/c10-full
 | PC-01 | Python 运行时权威 | 项目 `requires-python = ">=3.11"` 不变；C10 测试代码不得使用 3.12+ 专属 API | C10 架构测试 AST 禁止 `os.path.isjunction`、`pathlib.Path.walk`、`itertools.batched`、`typing.override`、PEP 695 `type` 语句等 3.12+ 名称；`pyproject.toml` 零差异 | YES |
 | PC-02 | 正式证据环境 | Windows 11 / Python 3.12.x（验收证据环境，**不是**运行时支持边界） | 第 12.1 节环境记录；G-T / G-P4 / G-FULL 均在该环境执行 | YES |
 | PC-03 | 依赖 | 唯一第三方运行时依赖 `httpx>=0.27,<0.28`；测试依赖 pytest；不新增依赖 | 记录 `httpx.__version__`、`pytest --version`；`pyproject.toml` 零差异 | YES |
-| PC-04 | 既有架构守卫 | `tests/contract/` 下 11 个文件全部通过且**未修改**（C10 不新增 `src` 顶层 package，因此无需任何守卫更新） | G-P4；`git diff --name-only <Design Accepted Head>..<C10 head> -- tests/contract` 为空 | YES |
+| PC-04 | 既有架构守卫 | `tests/contract/` 在 Design Accepted Head 上的 **10 个 tracked test modules**（`tests/contract/test_*.py`，即 `test_core_independent_of_amane.py` 与九个 `test_<package>_architecture.py`）全部通过且**未修改**（C10 不新增 `src` 顶层 package，因此无需任何守卫更新）。原冻结字面量“11 个文件”是事实性 authority 缺陷（见第 21 节 P4-C10-F4-02），正确的冻结事实是 10 个；本项不接受“10 或 11 个都可以”的表述 | G-P4；`git diff --name-only <Design Accepted Head>..<被验收的 C10 head（含任何 Evidence Refresh Candidate）> -- fc2-organizer/tests/contract` 为空；`git ls-tree --name-only <Design Accepted Head> fc2-organizer/tests/contract/` 中 `test_*.py` 恰为 10 个 | YES |
 | PC-05 | Windows 路径语义（真实链路） | 盘符绝对 library root、casefold 冲突、junction 拒绝、NFC / NFD、大写扩展名 | S-09、S-12、S-21 | YES |
 | PC-06 | 文件系统语义 | NTFS 同卷 rename 无替换；接缝强制跨卷；0 字节；跨卷流式 | S-12、S-13 | YES |
 | PC-07 | 平台证据缺口 | Windows native symlink、POSIX native、kernel `O_NOFOLLOW`、native cross-volume、真实 ACL / 权限、长路径、UNC | 不在 P4-C10 关闭；按 Ledger XD-B01..XD-B07 处置；HANDOFF 记录既有相关测试在正式环境中的实际状态（执行 / skip 及原因） | 处置完整 = YES；关闭 = NO |
@@ -1310,19 +1311,96 @@ P4-C10 Frozen Contract         : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19
 P4-C10 Construction Plan       : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19b475
 Design Accepted Head           : fc59e2020e4df237bf3bed83a07950d67c19b475
 S1 / S2 / S3                   : COMPLETED（S1 f9f95567b9f6ea243e7587219404b1e258023233；S2 eeac4e420202031944d3d0ca8dd405c469b93537；S3 = C10 Acceptance Head）
-P4-C10 Implementation          : S3 CANDIDATE SUBMITTED —— WAITING FOR INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW
-P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
-P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED
-C10 Acceptance Head            : 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C10_HANDOFF.md）
+P4-C10 Implementation          : S3 CANDIDATE SUBMITTED（1012968e…）；Independent Level 1 Final Acceptance Review 已完成：Final Verdict = BLOCKED
+P4-C10-F4-01                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（第 21.1 节）
+P4-C10-F4-02                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（第 21.2 节）
+P4-C10-AUTH-A1                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT AUTHORITY AMENDMENT REVIEW REQUIRED
+Active Authority Amendment Head : NOT ESTABLISHED —— REVIEW REQUIRED
+P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
+P4-C10 Technical Acceptance Verdict          : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING（Level 1 Review 建立；原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写）
+C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
 Final Reviewed Acceptance Head : NOT ESTABLISHED
 XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Phase 4 Exit Authorization     : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
+Phase 4 Exit Authorization     : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
 Production Modified            : NO
 Production repair              : NOT PERFORMED
 P4-C10                         : NOT CLOSED
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```
+
+---
+
+## 21. P4-C10-AUTH-A1 —— Post-Acceptance Authority Amendment（冻结；只修订本合同与施工计划）
+
+```text
+Trigger                : Independent Level 1 Final Acceptance Review @ C10 Acceptance Head 1012968e3068731025d2512612fa8f85e829d3d0
+                         （结论 Final Verdict = BLOCKED；Technical Acceptance Verdict = BLOCKED — AUTHORITY AMENDMENT REQUIRED）
+Findings               : P4-C10-F4-01（HIGH / BLOCKING，Frozen Contract Conflict）；P4-C10-F4-02（MEDIUM / BLOCKING，Frozen Contract Factual Conflict）
+Amendment Scope        : 本合同与 docs/P4_C10_CONSTRUCTION_PLAN.md 的 authority 文字（docs-only）
+Production             : UNCHANGED
+Tests                  : UNCHANGED（AUTH-A1 无权修改任何测试；当前 S-09 测试是否已符合本修订，由独立 Authority Review 判断，此处不预先宣布）
+HANDOFF                : UNCHANGED 的历史 candidate evidence snapshot（docs/review/P4_C10_HANDOFF.md 不被追溯修改）
+Risk Class             : B（不变）
+Technical Acceptance   : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；Final Reviewed Acceptance Head = NOT ESTABLISHED
+```
+
+AUTH-A1 **不是**新的 Design-R4：历史 Design Accepted Head `fc59e2020e4df237bf3bed83a07950d67c19b475`、S1 `f9f95567b9f6ea243e7587219404b1e258023233`、
+S2 `eeac4e420202031944d3d0ca8dd405c469b93537`、原 C10 Acceptance Head `1012968e3068731025d2512612fa8f85e829d3d0` 一律保持不变，不得被改写为 AUTH-A1 的 SHA。
+新增概念 **P4-C10 Active Authority Amendment Head**：在独立 AUTH-A1 Authority Review PASS 之前 = NOT ESTABLISHED；PASS 之后才建立，并成为 Active Frozen Contract / Plan Authority。
+本修订提交之后两个 finding 只能写 `REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED`，不得写 CLOSED / PASS / ACCEPTED。
+
+### 21.1 P4-C10-F4-01 —— S-09 的 Diag 期望与 P4-C8 / P4-C9 冻结边界冲突（采用方案：C10 CONTRACT CORRECTION）
+
+冲突：原 S-09 要求 orchestrator 的相对 `library_root` 产生 `UNPREPARED / PLANNING_REJECTED` **并且**“诊断呈现 issue”。但 P4-C8 冻结了 library_root 只在构造时校验
+`type(library_root) is str`、语义由 P4-C2 §11a 逐条完成（§15.3 / §37），相对根因此合法进入 orchestrator 并逐条 `PLANNING_REJECTED`；而 P4-C9 §9 冻结
+`BatchPreview` / `BatchExecutionResult` 的 `library_root` 必须是非空 exact `str` 且 `os.path.isabs`，否则 fail closed（`DiagnosticsIntegrityError`）。三者对相对根不可能同时成立。
+
+裁决：**以更高 authority（P4-C8 / P4-C9 原文）为准，修订 C10 的 S-09**；不修改 P4-C8、P4-C9 或任何 production。S-09 拆为两个独立子场景（第 7.2 节表中的 S-09A / S-09B），机械可读如下：
+
+```text
+S-09A 相对 library_root  : Plan = PLANNING_REJECTED（metadata 正常；Exec = NOT_READY；Retry = NONE）
+                           Item issue = PRESENT（PLANNING / PLANNING_REJECTED，由 P4-C8 模型自身呈现）
+                           Diag = EXPECTED FAIL-CLOSED：两个 builder 均抛 DiagnosticsIntegrityError（P4-C9 §9 的输入完整性边界）
+                           FS = ZERO MODIFICATION；源不变；无任何目录被创建
+S-09B Windows 有根无盘符 : Plan = PLANNING_REJECTED（P4-C2 §11a 冻结的 Windows 拒绝结果）；Exec = NOT_READY；Retry = NONE
+                           Item issue = PRESENT
+                           Diag = 仅由 P4-C9 §9 输入门决定：os.path.isabs(library_root) 为真 → 必须成功构建并呈现 issue；为假 → 必须 fail closed
+                           FS = ZERO MODIFICATION；源不变；无任何目录被创建
+```
+
+约束：(1) 不得再用单一的“Diag = issue 呈现”同时覆盖两种输入形态；(2) **S-09A 不是 P4-C9 的正向 diagnostics 集成证据**；
+(3) L-14 的正向跨包 diagnostics 覆盖**不变**，仍由 S-18 与 G-500（14 个模型）承担——不得因本修订降低 L-14、减少 diagnostics integration、删除 S-18 或 G-500 的 diagnostics 证据；
+(4) `DiagnosticsIntegrityError` 在 S-09A 中是被期望的类型化 fail-closed 行为，不是 diagnostics 缺陷，也不得在后续被记为 finding；
+(5) S-09B 的 `os.path.isabs` 实际取值必须在正式环境记录，若 higher authority 对该 Windows 路径给出其它明确结果，严格按 higher authority；
+(6) S-09B 仍是合同第 8.1 节授权的 Windows 原生平台门控（G-T 在正式环境 0 skipped，非 Windows 补充运行中允许 skip）。
+
+### 21.2 P4-C10-F4-02 —— PC-04 的文件数量字面量事实错误
+
+原 PC-04 写“`tests/contract/` 下 11 个文件”。Design Accepted Head `fc59e2020e4df237bf3bed83a07950d67c19b475` 的真实 frozen tree 中，`tests/contract/` 有 **10 个**
+tracked test modules（`test_core_independent_of_amane.py`、`test_diagnostics_architecture.py`、`test_discovery_architecture.py`、`test_execution_architecture.py`、
+`test_images_architecture.py`、`test_materialization_architecture.py`、`test_nfo_architecture.py`、`test_orchestration_architecture.py`、
+`test_planning_architecture.py`、`test_publication_architecture.py`）。
+
+裁决：原冻结字面量 **11 是事实性 authority 缺陷；正确的冻结事实是 10**。PC-04 已按此修正（第 9 节）；Blocking = YES 不变；证据要求不变且不降低：
+G-P4 PASS，`git diff --name-only <Design Accepted Head>..<被验收的 C10 head> -- fc2-organizer/tests/contract` 为空。不得改动 `tests/contract/**`，不得改变 architecture gate，不得写成“11 或 10 都可以”，不得删除数量以掩盖该 finding。
+
+### 21.3 AUTH-A1 Evidence Impact Matrix
+
+| Finding | Production | 既有 C10 测试代码 | 预期受影响的证据 | 不受影响 |
+|---|---|---|---|---|
+| F4-01 | NO CHANGE | NOT AUTHORIZED TO MODIFY IN AUTH-A1 | S-09 的 diagnostics 期望；S-09 Windows 原生执行（S-09B）；S-01..S-22 gate summary（按需）；G-T 正式环境重跑 | L-14 正向覆盖（S-18 / G-500）不变 |
+| F4-02 | NO CHANGE | NO CHANGE | PC-04 事实核对；G-P4 正式环境重跑；`tests/contract` 零差异证明 | 架构 gate 本身不变 |
+
+### 21.4 AUTH-A1 之后的冻结顺序（见施工计划第 17 节）
+
+```text
+AUTH-A1 docs candidate -> Independent Authority Amendment Review
+  PASS -> Formal Evidence Revalidation（Windows 11 / Python 3.12.x，普通用户）-> Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review
+```
+
+不是 `AUTH-A1 -> C10-R1`，除非后续真的发现 F1 / F2。AUTH-A1 本身不运行任何正式环境命令，也不创建 Evidence Refresh Candidate。
+XD-A08 不受 AUTH-A1 影响：仍为 OPEN，只阻塞 Phase 4 Exit，不阻塞 Technical Acceptance。OBS-03（基线 / F0 类补充问题，无 C10 回归 finding）与 OBS-04（无 finding）不重新设计。
 
 ---
 
