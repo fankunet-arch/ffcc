@@ -175,6 +175,7 @@ def test_temp_open_is_exclusive_create():
 # consumer of this package, and only of the *bare* public package -- never of any submodule.
 EXECUTION_SRC_ROOT = ORGANIZER_SRC_ROOT / "execution"
 ORCHESTRATION_SRC_ROOT = ORGANIZER_SRC_ROOT / "orchestration"
+DIAGNOSTICS_SRC_ROOT = ORGANIZER_SRC_ROOT / "diagnostics"  # P4-C9 (contract section 27.3)
 
 
 def test_no_reverse_dependency_on_materialization():
@@ -182,7 +183,7 @@ def test_no_reverse_dependency_on_materialization():
     # test_orchestration_consumes_only_bare_materialization_and_mapping below.
     for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir()
                                   if p.is_dir() and p not in (MAT_SRC_ROOT, EXECUTION_SRC_ROOT,
-                                                              ORCHESTRATION_SRC_ROOT))):
+                                                              ORCHESTRATION_SRC_ROOT, DIAGNOSTICS_SRC_ROOT))):
         for path in _source_files(root):
             for module in _imported_modules(_tree(path)):
                 assert "materialization" not in module, f"{path}: imports {module!r}"
@@ -222,6 +223,28 @@ def test_orchestration_consumes_only_bare_materialization_and_mapping():
             elif isinstance(node, ast.ImportFrom) and node.module in allowed:
                 names = {alias.name for alias in node.names}
                 assert names <= allowed[node.module], (path, names - allowed[node.module])
+            elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer":
+                assert "materialization" not in {alias.name for alias in node.names}, path  # no module object
+            name = node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else None
+            assert name not in {"materialize_artifact", "materialize_atomic_bytes", "_FS"}, (path, name)
+
+
+_DIAGNOSTICS_MATERIALIZATION_NAMES = {"ArtifactKind", "ArtifactWriteRequest", "MappingRejectionReason"}
+
+
+def test_diagnostics_consumes_only_the_bare_materialization_package():
+    # P4-C9 contract sections 7, 8.5 and 27.3: only `from fc2_organizer.materialization import <3 names>`;
+    # never a submodule, a writer, a private name or the module object.
+    assert DIAGNOSTICS_SRC_ROOT.is_dir() and _source_files(DIAGNOSTICS_SRC_ROOT)
+    for path in _source_files(DIAGNOSTICS_SRC_ROOT):
+        modules = {m for m in _imported_modules(_tree(path)) if "materialization" in m}
+        assert modules <= {"fc2_organizer.materialization"}, (path, modules)
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Import):
+                assert not any("materialization" in alias.name for alias in node.names), path
+            elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer.materialization":
+                names = {alias.name for alias in node.names}
+                assert names <= _DIAGNOSTICS_MATERIALIZATION_NAMES, (path, names - _DIAGNOSTICS_MATERIALIZATION_NAMES)
             elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer":
                 assert "materialization" not in {alias.name for alias in node.names}, path  # no module object
             name = node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else None

@@ -261,7 +261,8 @@ def test_seam_functions_used_by_preflight_reach_only_read_only_ops():
 def test_no_reverse_dependency_on_execution():
     # P4-C8 (contract section 34.3): the orchestration package is the one authorised consumer; it is held to
     # the stricter test_orchestration_consumes_only_the_bare_execution_package below.
-    exempt = (EXEC_SRC_ROOT, ORGANIZER_SRC_ROOT / "orchestration")
+    # P4-C9 (contract section 27.3): the diagnostics package is the second authorised consumer.
+    exempt = (EXEC_SRC_ROOT, ORGANIZER_SRC_ROOT / "orchestration", ORGANIZER_SRC_ROOT / "diagnostics")
     for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p not in exempt)):
         for path in _files(root):
             for module in _imports(_tree(path)):
@@ -287,6 +288,32 @@ def test_orchestration_consumes_only_the_bare_execution_package():
                 assert "execution" not in {alias.name for alias in node.names}, path.name  # no module object
             elif isinstance(node, ast.Name):
                 assert node.id not in {"_fs", "_FS", "seal", "seal_of", "register_consumption"}, path.name
+
+
+_DIAGNOSTICS_EXECUTION_NAMES = {
+    "ExecutionPreflight", "ExecutionResult", "ExecutionStatus", "ExecutionStep", "ExecutionFailure",
+    "ExecutionFailureKind", "TransferStage", "TransferMode", "PreflightMode", "PreflightBlocker",
+    "PreflightBlockReason", "PathRole", "EffectKind", "CompletedEffect", "LeftoverTemporary", "ExecutionUnit",
+    "ExecutionCheckpoint", "PlanGraphRejectionReason", "ManifestRejectionReason", "CheckpointRejectionReason",
+    "PreflightIntegrityReason",
+}
+
+
+def test_diagnostics_consumes_only_the_bare_execution_package():
+    # P4-C9 contract sections 7, 8.5 and 27.3: only `from fc2_organizer.execution import <section 8.5 name>`;
+    # never a submodule, a private name or the module object.
+    diagnostics_root = ORGANIZER_SRC_ROOT / "diagnostics"
+    assert diagnostics_root.is_dir() and _files(diagnostics_root)
+    for path in _files(diagnostics_root):
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Import):
+                assert not any(alias.name.startswith(_PKG) for alias in node.names), path.name
+            elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith(_PKG):
+                assert node.module == _PKG, (path.name, node.module)
+                names = {alias.name for alias in node.names}
+                assert names <= _DIAGNOSTICS_EXECUTION_NAMES, (path.name, names - _DIAGNOSTICS_EXECUTION_NAMES)
+            elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer":
+                assert "execution" not in {alias.name for alias in node.names}, path.name  # no module object
 
 
 # --------------------------------------------------------------------------- runtime

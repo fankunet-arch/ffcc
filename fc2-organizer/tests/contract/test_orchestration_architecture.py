@@ -425,14 +425,46 @@ def test_no_persistence_or_diagnostics_output():
 # --------------------------------------------------------------------------- reverse dependency
 
 
+DIAGNOSTICS_SRC_ROOT = ORGANIZER_SRC_ROOT / "diagnostics"  # P4-C9 (contract section 27.3)
+
+
 def test_no_reverse_dependency_on_orchestration():
-    for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir() if p.is_dir() and p != ORCH_SRC_ROOT)):
+    # P4-C9 (contract section 27.3): the diagnostics package is the one authorised consumer; it is held to the
+    # stricter test_diagnostics_consumes_only_the_bare_orchestration_package below.
+    for root in (CORE_SRC_ROOT, *(p for p in ORGANIZER_SRC_ROOT.iterdir()
+                                  if p.is_dir() and p not in (ORCH_SRC_ROOT, DIAGNOSTICS_SRC_ROOT))):
         for path in sorted(root.rglob("*.py")):
             for module in _imports(_tree(path)):
                 assert not module.startswith(_PKG), f"{path}: imports {module!r}"
             assert _PKG not in path.read_text(encoding="utf-8"), path
     for module in _imports(_tree(ORGANIZER_SRC_ROOT / "__init__.py")):
         assert "orchestration" not in module
+
+
+_DIAGNOSTICS_ORCHESTRATION_NAMES = {
+    "BatchPreview", "BatchExecutionResult", "ItemPreview", "ItemExecution", "ItemIssue", "PreviewSummary",
+    "ExecutionSummary", "PreviewState", "ExecutionDisposition", "OrchestrationStage", "IssueReason",
+    "ItemWarning", "RetryKind", "BatchOutcome", "RetryMaterial", "MAX_BATCH_ITEMS",
+    "MAX_RETAINED_ARTIFACT_BYTES_LIMIT",
+}
+
+
+def test_diagnostics_consumes_only_the_bare_orchestration_package():
+    # P4-C9 contract sections 7, 8.5 and 27.3: only `from fc2_organizer.orchestration import <section 8.5 name>`;
+    # never a submodule, `BatchOrchestrator`, `merge_retry`, `revalidate` or a private name.
+    assert DIAGNOSTICS_SRC_ROOT.is_dir() and sorted(DIAGNOSTICS_SRC_ROOT.glob("*.py"))
+    for path in sorted(DIAGNOSTICS_SRC_ROOT.glob("*.py")):
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Import):
+                assert not any(alias.name.startswith(_PKG) for alias in node.names), path.name
+            elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith(_PKG):
+                assert node.module == _PKG, (path.name, node.module)
+                names = {alias.name for alias in node.names}
+                assert names <= _DIAGNOSTICS_ORCHESTRATION_NAMES, (path.name, names - _DIAGNOSTICS_ORCHESTRATION_NAMES)
+            elif isinstance(node, ast.ImportFrom) and node.module == "fc2_organizer":
+                assert "orchestration" not in {alias.name for alias in node.names}, path.name  # no module object
+            elif isinstance(node, ast.Name):
+                assert node.id not in {"BatchOrchestrator", "merge_retry", "revalidate"}, path.name
 
 
 _FC2_ROOTS = frozenset({"fc2_organizer", "fc2_metadata_core"})
