@@ -30,18 +30,19 @@ Design-R4 Candidate         = dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf   PASS
 Design Accepted Head        = dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf   (= Frozen Contract = Frozen Construction Plan = Implementation Input)
 S1                          = 0be5201                                    feat(diagnostics): S1 models, errors, constants and architecture guards
 S2                          = 6f01348                                    feat(diagnostics): S2 local validation and read-only projection
-S3 / C9 Implementation Head = 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C9_HANDOFF.md）
+S3 内容提交                 = 8911617（render.py、S3 测试、HANDOFF 初版、状态行同步）
+C9 Implementation Head      = 本提交（git log -1 --format=%H -- fc2-organizer/docs/review/P4_C9_HANDOFF.md；仅修正本文件中的 diff stat 表述，不含代码 / 测试改动）
 Code Review Candidate       = C9 Implementation Head
 Review Range                = dbb0c13809fbba698c56f00bfa47a1c1fe5bd9cf..<C9 Implementation Head>
 ```
 
-三个实现提交线性（`0be5201^ == dbb0c13`、`6f01348^ == 0be5201`、S3 的父提交 `== 6f01348`）；没有 rebase、amend、squash、force push。
-S1 / S2 没有修改合同、施工计划、HANDOFF 或任何状态行；只有 S3（本提交）新增本文件，并在同一提交中同步合同第 32 节与施工计划
+实现提交线性（`0be5201^ == dbb0c13`、`6f01348^ == 0be5201`、`8911617^ == 6f01348`、C9 Implementation Head 的父提交 `== 8911617`）；没有 rebase、amend、squash、force push。
+S1 / S2 没有修改合同、施工计划、HANDOFF 或任何状态行；只有 S3（`8911617`；本提交仅修正本文件的 diff stat 表述）新增本文件，并在同一提交中同步合同第 32 节与施工计划
 第 10 节的状态行（仅状态文字，无语义改动）。
 
 ## 2. 变更范围与 diff scope 核对（施工计划第 5 节）
 
-`git diff --stat dbb0c138 HEAD`：**45 个文件，+11661 / -30**。
+`git diff --stat dbb0c138 HEAD`：46 个文件、约 +1.2 万行 / -30 行（精确数字以 reviewer 在 C9 Implementation Head 上执行该命令的结果为准；本文件自身计入其中）。
 
 ```text
 src（只含 diagnostics，7 个新增模块）
