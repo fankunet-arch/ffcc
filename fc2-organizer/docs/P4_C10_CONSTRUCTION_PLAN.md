@@ -615,9 +615,12 @@ Construction Plan              : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19
 Design Accepted Head           : fc59e2020e4df237bf3bed83a07950d67c19b475
 S1 / S2 / S3                   : COMPLETED（S1 f9f95567b9f6ea243e7587219404b1e258023233；S2 eeac4e420202031944d3d0ca8dd405c469b93537；S3 = C10 Acceptance Head）
 P4-C10 Implementation          : S3 CANDIDATE SUBMITTED（1012968e…）；Independent Level 1 Final Acceptance Review 已完成：Final Verdict = BLOCKED
-P4-C10-F4-01                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（合同第 21.1 节；本计划第 17 节）
-P4-C10-F4-02                   : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（合同第 21.2 节；本计划第 17 节）
-P4-C10-AUTH-A1                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT AUTHORITY AMENDMENT REVIEW REQUIRED
+P4-C10 原 Level 1 Final Acceptance Review : COMPLETED — BLOCKED（针对 S3 candidate 1012968e…；已完成，不再是当前下一步）
+P4-C10-F4-01                   : CLOSED by AUTH-A1 review（合同第 21.1 节；本计划第 17 节）
+P4-C10-F4-02                   : CLOSED by AUTH-A1 review（合同第 21.2 节；本计划第 17 节）
+P4-C10-AUTH-A1                 : AUTHORITY AMENDMENT CANDIDATE（5c3479a14d34fa90789921646f203d3bf0bf03b7）；AUTH-A1 Independent Authority Amendment Review : COMPLETED — FAIL（仅因 P4-C10-AUTH-A1-R-01 OPEN — BLOCKING）
+P4-C10-AUTH-A1-R-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED（Current Authority / Lifecycle / Executor Sequencing Ambiguity；由 AUTH-A2 修正本节“下一步”措辞）
+P4-C10-AUTH-A2                 : AUTHORITY AMENDMENT CLOSURE CANDIDATE（仅修正本计划第 15 节的当前顺序措辞；合同、HANDOFF、tests、src 不变）
 Active Authority Amendment Head : NOT ESTABLISHED —— REVIEW REQUIRED
 P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
 P4-C10 Technical Acceptance Verdict          : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING（Level 1 Review 建立；原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写）
@@ -632,8 +635,15 @@ Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```
 
-S3 提交之后 **STOP**（已执行）：不创建 Review 后状态提交、不建立 Final Reviewed Acceptance Head、不关闭 XD-A08、不开始 EC-15、不开始 Phase 5；
-下一步是 P4-C10 INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW。
+**Historical S3 snapshot（HISTORICAL / COMPLETED / NOT CURRENT）**：S3 提交之后 **STOP**（已执行）：不创建 Review 后状态提交、不建立 Final Reviewed Acceptance Head、
+不关闭 XD-A08、不开始 EC-15、不开始 Phase 5；S3 完成时的下一步曾是 P4-C10 Independent Level 1 Final Acceptance Review。
+该 Level 1 Review 已经完成并返回 BLOCKED（随后 AUTH-A1 Review 为 FAIL，见上方状态块）；因此该句**不再是当前有效的下一步**，仅保留为 S3 时点的历史记录。
+
+**当前唯一有效的下一步（Current Operative Next Step）**：`P4-C10-AUTH-A2 INCREMENTAL INDEPENDENT AUTHORITY AMENDMENT CLOSURE REVIEW`。
+
+* 若该 Review PASS：`P4-C10 Active Authority Amendment Head = AUTH-A2 reviewed head`；之后的下一步才是 `P4-C10 FORMAL EVIDENCE REVALIDATION`
+  （Windows 11 / Python 3.12.x / 普通用户），再进入 Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review（顺序以第 17.3 节为准，不变）。
+* 在该 Review PASS 之前：Active Authority Amendment Head = NOT ESTABLISHED；不运行正式 Windows 证据、不创建 Evidence Refresh Candidate、不启动 C10-R1 / EC-15 / Phase 5。
 
 ---
 
