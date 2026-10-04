@@ -1,18 +1,18 @@
 """FC2 Metadata（ffcc）Amane 来源插件 —— 宿主侧入口（合同第 8-9 节）。
 
 这是**唯一**允许 import ``amane.plugin`` 与 ``pydantic`` 的 adapter 模块。其它模块是纯模块（不 import 二者）。
-本文件只做：descriptor、配置模型、顶层导入守门、provider 骨架与向 Amane 类型的转换；
-所有规则都在纯模块中，由主进程测试直接覆盖。
-
-S1 骨架：``fetch`` 的 Core 引擎段在 S2 接入；该 checkpoint 不可发布。
+本文件只做：descriptor、配置模型、顶层导入守门、provider 与向 Amane 类型的转换；
+所有规则都在纯模块中，由主进程测试直接覆盖；本文件由真实 Amane v0.15.0 宿主见证（H-01..H-15）覆盖。
 """
 
 from amane.plugin import (
     ContentType,
     FailureReason,
     FetchOptions,
+    FilmActor,
     FilmSourcePlugin,
     FilmSourceProvider,
+    MediaMetadata,
     PluginContext,
     RequestError,
     SearchQuery,
@@ -25,9 +25,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ._core_gate import translate_core_import_error
 
 try:
-    from ._bridge import AmaneHttpBridge
     from ._number import read_query_fields
-    from ._outcome import AdapterFailure
+    from ._outcome import AdapterFailure, AdapterFound, AdapterNoMatch, AdapterRecord
+    from ._runtime import AdapterRuntime
     from ._settings import (
         DEFAULT_DEADLINE_SECONDS,
         METADATA_FIELDS,
@@ -83,16 +83,42 @@ class Fc2MetadataConfig(BaseModel):
         return {"sources": sources, "source_deadline_seconds": self.source_deadline_seconds}
 
 
-class _Fc2MetadataProvider(FilmSourceProvider):
-    def __init__(self, settings: object, bridge: object) -> None:
-        self._settings = settings
-        self._bridge = bridge
+def _media_metadata(record: AdapterRecord) -> MediaMetadata:
+    """表 H：中立记录 -> ``MediaMetadata``。演员性别取 ``FilmActor`` 缺省 ``unknown``（不使用 FEMALE 缺省 helper）。"""
+    return MediaMetadata(
+        number=record.number,
+        title=record.title,
+        actors=[FilmActor(name=name) for name in record.actors],
+        studio=record.studio,
+        publisher=record.publisher,
+        release=record.release,
+        runtime=record.runtime,
+        tags=list(record.tags),
+        plot=record.plot,
+        poster_urls=list(record.poster_urls),
+        thumb_urls=list(record.thumb_urls),
+        external_id=record.external_id,
+        source_url=record.source_url,
+        extrafanart=list(record.extrafanart),
+    )
 
-    async def fetch(self, query: SearchQuery, options: FetchOptions | None = None):
+
+class _Fc2MetadataProvider(FilmSourceProvider):
+    def __init__(self, runtime: AdapterRuntime) -> None:
+        self._runtime = runtime
+
+    async def fetch(self, query: SearchQuery, options: FetchOptions | None = None) -> MediaMetadata | None:
         fields = read_query_fields(query)
         if isinstance(fields, AdapterFailure):
-            raise SourceError(FailureReason(fields.reason), detail=fields.detail)
-        raise NotImplementedError("Core engine invocation is wired in S2")
+            outcome = fields
+        else:
+            outcome = await self._runtime.lookup(*fields)
+        if isinstance(outcome, AdapterFound):
+            return _media_metadata(outcome.record)
+        if isinstance(outcome, AdapterNoMatch):
+            return None
+        # url / http_status 恒为 None：SourceResult 不携带状态码，不猜测；也不把任何 URL 放进 SourceError。
+        raise SourceError(FailureReason(outcome.reason), detail=outcome.detail)
 
 
 class Plugin(FilmSourcePlugin):
@@ -113,9 +139,10 @@ class Plugin(FilmSourcePlugin):
 
     def build(self, context: PluginContext, config: BaseModel) -> FilmSourceProvider:
         settings = parse_settings(config.model_dump())
-        bridge = AmaneHttpBridge(
+        runtime = AdapterRuntime(
+            settings,
             context.web_client,
             request_error_types=(RequestError,),
             source_error_types=(SourceError,),
         )
-        return _Fc2MetadataProvider(settings, bridge)
+        return _Fc2MetadataProvider(runtime)

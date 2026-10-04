@@ -16,9 +16,8 @@ TESTS = ROOT / "tests"
 NEW_TESTS = TESTS / "amane_adapter"
 HOST_SCRIPTS = NEW_TESTS / "host_scripts"
 
-REQUIRED_MODULES = {"plugin.py", "_core_gate.py", "_settings.py", "_number.py", "_bridge.py", "_outcome.py"}
-OPTIONAL_MODULES = {"_runtime.py"}  # S2 起必须存在（S2 提交把它移入 REQUIRED）
-PURE_MODULES_NO_BROAD_EXCEPT = {"plugin.py", "_core_gate.py", "_settings.py", "_number.py", "_bridge.py", "_outcome.py"}
+REQUIRED_MODULES = {"plugin.py", "_core_gate.py", "_settings.py", "_number.py", "_bridge.py", "_runtime.py", "_outcome.py"}
+OPTIONAL_MODULES: set[str] = set()
 
 #: 合同 §8.4：adapter 允许使用的 Core 名字白名单。
 CORE_WHITELIST = {
@@ -153,14 +152,18 @@ def test_plugin_py_is_the_only_module_allowed_amane_and_pydantic():
 
 
 def test_no_independent_http_client_anywhere_in_the_tree():
-    banned = {"httpx", "requests", "aiohttp", "curl_cffi", "urllib3", "socket", "http", "urllib"}
+    banned_roots = {"httpx", "requests", "aiohttp", "curl_cffi", "urllib3", "socket", "http"}
+    banned_modules = {"urllib.request", "urllib.error", "http.client"}
     for name, tree in _modules().items():
         for node in _imports(tree):
             if isinstance(node, ast.Import):
-                roots = {alias.name.split(".")[0] for alias in node.names}
+                modules = {alias.name for alias in node.names}
+            elif node.level:
+                modules = set()
             else:
-                roots = {(node.module or "").split(".")[0]} if not node.level else set()
-            assert not roots & banned, (name, roots)
+                modules = {node.module or ""} | {f"{node.module}.{alias.name}" for alias in node.names}
+            assert not {m.split(".")[0] for m in modules} & banned_roots, (name, modules)
+            assert not modules & banned_modules, (name, modules)
         names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
         assert "httpx_client" not in names and "HttpxTransport" not in names, name
 
@@ -192,11 +195,23 @@ def test_cancellation_is_never_swallowed_no_broad_except_outside_runtime():
                 assert "Exception" not in caught, f"{name}: except Exception outside _runtime.py"
 
 
+def test_runtime_has_a_single_broad_except_wrapping_only_engine_aggregate():
+    tree = _modules()["_runtime.py"]
+    handlers = [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]
+    assert len(handlers) == 1
+    (handler,) = handlers
+    assert isinstance(handler.type, ast.Name) and handler.type.id == "Exception"
+    try_node = next(n for n in ast.walk(tree) if isinstance(n, ast.Try) and handler in n.handlers)
+    awaited = [n for stmt in try_node.body for n in ast.walk(stmt) if isinstance(n, ast.Await)]
+    assert len(awaited) == 1
+    call = awaited[0].value
+    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "aggregate"
+    assert len(try_node.body) == 1
+
+
 def test_no_set_iteration_in_mapping_modules():
     for name in ("_outcome.py", "_runtime.py"):
-        tree = _modules().get(name)
-        if tree is None:
-            continue
+        tree = _modules()[name]
         set_names: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -289,7 +304,10 @@ def test_new_tests_have_no_skip_or_xfail():
 
 def test_new_test_modules_are_named_uniquely_and_host_scripts_are_not_collectable():
     new = sorted(NEW_TESTS.glob("*.py"))
-    assert all(path.name.startswith("test_amane_") for path in new), [p.name for p in new if not p.name.startswith("test_amane_")]
+    helpers = [path for path in new if path.name.startswith("_")]  # 下划线前缀的共享 helper / 子进程探针：不被 pytest 收集
+    assert {path.name for path in helpers} == {"_amane_scenarios.py", "_determinism_probe.py"}
+    tests = [path for path in new if path not in helpers]
+    assert all(path.name.startswith("test_amane_") for path in tests), [p.name for p in tests if not p.name.startswith("test_amane_")]
     basenames = [path.name for path in TESTS.rglob("test_*.py")]
     assert len(basenames) == len(set(basenames)), "test basenames must be globally unique (no __init__.py in those dirs)"
     assert not (NEW_TESTS / "__init__.py").exists()

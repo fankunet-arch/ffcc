@@ -103,6 +103,9 @@ class FakeWebClient:
     def add(self, url: str, *items: object) -> None:
         self._routes.setdefault(url, []).extend(items)
 
+    def replace(self, url: str, *items: object) -> None:
+        self._routes[url] = list(items)
+
     async def request(self, method, url, **kwargs):
         self.calls.append((method, url, dict(kwargs)))
         queue = self._routes.get(url)
