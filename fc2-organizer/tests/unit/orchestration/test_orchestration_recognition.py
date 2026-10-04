@@ -449,9 +449,9 @@ def test_windows_case_variants_of_one_path_are_a_source_conflict(no_io):
 
 
 def test_source_key_is_exact_on_posix(no_io, monkeypatch):
-    import fc2_organizer.orchestration.recognition as recognition_module
-
-    monkeypatch.setattr(recognition_module.os, "name", "posix")
+    # Patch the ``os`` the already-loaded ``recognize`` (used by ``_run``) resolves ``_source_key``
+    # through, via its own globals: no re-import while ``no_io`` is active, no sys.modules dependency.
+    monkeypatch.setattr(recognize.__globals__["os"], "name", "posix")
     a = media_item(0, "FC2-PPV-1234567.mp4")
     b = DiscoveredMediaItem(index=1, source_path=a.source_path.upper(), relative_path="x.mp4", extension=".mp4",
                             size=1)
