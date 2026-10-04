@@ -6,12 +6,15 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import os
+import time
 from pathlib import Path
 
 import pytest
 
 from fc2_amane_adapter import _settings as _module_under_test
+from fc2_amane_adapter._bridge import AmaneHttpBridge
 
 ROOT = Path(__file__).resolve().parents[2]
 REPO_TREE = ROOT / "adapters" / "amane" / "fc2_amane_adapter"
@@ -262,6 +265,93 @@ def test_plugin_py_has_the_frozen_entry_shape():
     assert {"descriptor", "build"} <= set(methods)
     assert any(ast.unparse(d) == "classmethod" for d in methods["descriptor"].decorator_list)
     assert not any(isinstance(n, ast.AsyncFunctionDef) for n in classes["Plugin"].body), "build() must be synchronous"
+
+
+# ---------------------------------------------------------------- P5-C1-PRE-L1-01：桥构造器与生产接线守护（合同 §12 / §13.2 / §14 / §18）
+
+REMOVED_BRIDGE_PARAMETERS = {"request_error_types", "source_error_types"}
+
+
+def test_amane_http_bridge_constructor_is_exactly_the_frozen_signature():
+    """合同 §13.2：``AmaneHttpBridge.__init__(self, web_client, *, clock=time.monotonic)``——不得增加任何参数。"""
+    parameters = list(inspect.signature(AmaneHttpBridge.__init__).parameters.values())
+    assert [(p.name, p.kind) for p in parameters] == [
+        ("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+        ("web_client", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+        ("clock", inspect.Parameter.KEYWORD_ONLY),
+    ]
+    assert parameters[1].default is inspect.Parameter.empty
+    assert parameters[2].default is time.monotonic
+
+
+def test_bridge_constructor_signature_ast_equivalent():
+    tree = _modules()["_bridge.py"]
+    klass = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "AmaneHttpBridge")
+    init = next(n for n in klass.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+    args = init.args
+    assert [a.arg for a in args.posonlyargs] == []
+    assert [a.arg for a in args.args] == ["self", "web_client"]
+    assert args.vararg is None and args.kwarg is None
+    assert [a.arg for a in args.kwonlyargs] == ["clock"]
+    assert [ast.unparse(d) for d in args.kw_defaults] == ["time.monotonic"]
+    assert args.defaults == []
+
+
+def test_removed_constructor_parameters_never_reappear_in_production_code():
+    for name, tree in _modules().items():
+        for node in ast.walk(tree):
+            used = set()
+            if isinstance(node, ast.arg):
+                used.add(node.arg)
+            elif isinstance(node, ast.keyword) and node.arg:
+                used.add(node.arg)
+            elif isinstance(node, ast.Name):
+                used.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                used.add(node.attr)
+            assert not (used & REMOVED_BRIDGE_PARAMETERS), f"{name}: {used & REMOVED_BRIDGE_PARAMETERS} is a removed bridge/runtime parameter"
+
+
+def test_bridge_exception_handlers_are_exact_never_broad():
+    """``_bridge.py`` 只允许捕获：宿主类属性声明的类型、以及解码 / 头解析里的具体标准库异常；不得有宽捕获 / 裸 except。"""
+    allowed = {"host_request_error_types", "host_source_error_types", "LookupError", "ValueError", "UnicodeError", "AttributeError", "TypeError"}
+    tree = _modules()["_bridge.py"]
+    handlers = [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]
+    assert handlers, "the bridge must classify host exceptions"
+    for handler in handlers:
+        assert handler.type is not None, "bare except"
+        members = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+        caught = {m.attr if isinstance(m, ast.Attribute) else m.id for m in members}  # 只取终端名（self.host_… -> host_…）
+        assert caught <= allowed, f"unexpected exception types caught in _bridge.py: {caught - allowed}"
+        assert not ({"Exception", "BaseException", "CancelledError"} & caught)
+
+
+def test_production_plugin_wires_the_exact_host_exceptions_through_a_private_subclass():
+    """生产接线（plugin.py 是唯一合法拥有 ``RequestError`` / ``SourceError`` 的模块）：
+
+    * ``_HostAmaneHttpBridge(AmaneHttpBridge)`` 只有两个类属性，不覆盖构造器 / ``get``；
+    * ``Plugin.build`` 恰以 ``AdapterRuntime(settings, context.web_client, bridge_type=_HostAmaneHttpBridge)`` 构造（一次、直接持有宿主 web client）。
+    """
+    tree = _modules()["plugin.py"]
+    classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    bridge = classes["_HostAmaneHttpBridge"]
+    assert [ast.unparse(b) for b in bridge.bases] == ["AmaneHttpBridge"]
+    assigns = {}
+    for statement in bridge.body:
+        if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
+            continue  # docstring
+        assert isinstance(statement, ast.Assign), f"only class attributes are allowed, got {type(statement).__name__}"
+        (target,) = statement.targets
+        assigns[target.id] = ast.unparse(statement.value)
+    assert assigns == {"host_request_error_types": "(RequestError,)", "host_source_error_types": "(SourceError,)"}
+
+    build = next(n for n in classes["Plugin"].body if isinstance(n, ast.FunctionDef) and n.name == "build")
+    calls = [n for n in ast.walk(build) if isinstance(n, ast.Call) and ast.unparse(n.func) == "AdapterRuntime"]
+    assert len(calls) == 1
+    (call,) = calls
+    assert [ast.unparse(a) for a in call.args] == ["settings", "context.web_client"]
+    assert {k.arg: ast.unparse(k.value) for k in call.keywords} == {"bridge_type": "_HostAmaneHttpBridge"}
+    assert "context.http_client" not in ast.unparse(build) and "web_client" in ast.unparse(build)
 
 
 # ---------------------------------------------------------------- 测试树守护（E22 静态 / E27）

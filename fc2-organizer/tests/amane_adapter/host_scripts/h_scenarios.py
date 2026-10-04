@@ -750,9 +750,32 @@ def h09(ctx: Context) -> dict:
 
 
 def h10(ctx: Context) -> dict:
+    import inspect
+    import time
+
+    from amane.plugin import RequestError, SourceError
     from curl_cffi import CurlError
 
-    table = {}
+    async def wiring():
+        host = make_host(ctx, "h10_wiring")
+        try:
+            bridge = runtime_of(await host.provider())._bridge
+        finally:
+            host.restore()
+        base = [klass for klass in type(bridge).__mro__ if klass.__name__ == "AmaneHttpBridge"]
+        check(len(base) == 1, "the production bridge must derive from AmaneHttpBridge")
+        parameters = list(inspect.signature(base[0].__init__).parameters.values())
+        check([(p.name, p.kind.name) for p in parameters] == [("self", "POSITIONAL_OR_KEYWORD"), ("web_client", "POSITIONAL_OR_KEYWORD"),
+                                                           ("clock", "KEYWORD_ONLY")], "the frozen constructor signature (web_client, *, clock)")
+        check(parameters[2].default is time.monotonic, "clock defaults to time.monotonic")
+        check(type(bridge).__init__ is base[0].__init__, "the production subclass must not override the constructor")
+        check(type(bridge).host_request_error_types == (RequestError,) and type(bridge).host_source_error_types == (SourceError,),
+              "the production bridge maps exactly the host RequestError / SourceError")
+        check(base[0].host_request_error_types == () and base[0].host_source_error_types == (), "the base bridge catches nothing by default")
+        return {"constructor": "(self, web_client, *, clock=time.monotonic)", "subclass_overrides_constructor": False,
+                "host_request_error_types": ["RequestError"], "host_source_error_types": ["SourceError"]}
+
+    table = {"bridge_wiring": run(wiring())}
     for name, factory, reason, kind in (
         ("timeout", lambda url: TimeoutError(), "timeout", "timeout"),
         ("network", lambda url: CurlError("boom"), "network", "connection_error"),

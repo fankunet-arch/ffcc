@@ -4,9 +4,10 @@
 * ``ok_statuses = 300..599``：显式集合内的 HTTP 状态码作为**普通响应**返回，只产生 1 个 host attempt；
   集合之外（如 ``600``）宿主仍可能抛 ``RequestError(http_error)``，由 ``HttpTransportError`` 兜底承接（W-09）。
 * 异常分类**只**读取结构化属性 ``reason``（``FailureReason`` 的值），绝不解析异常消息（I8）。
-* 本模块不 import ``amane``：宿主的异常类型由 ``plugin.py`` 以 ``request_error_types`` /
-  ``source_error_types`` 注入；默认空元组 ``()`` 表示“不映射任何宿主异常”（``except ()`` 什么也不捕获）。
-  这样 §18 的“不得出现 ``except Exception`` / ``except BaseException``”在本模块中也成立，
+* 本模块不 import ``amane``：宿主的异常类型由 ``plugin.py`` 中的私有子类以**类属性**
+  ``host_request_error_types`` / ``host_source_error_types`` 提供；基类的默认空元组 ``()`` 表示“不映射任何宿主异常”
+  （``except ()`` 什么也不捕获）。构造器保持合同 §13.2 冻结的签名 ``(web_client, *, clock)``，
+  **不**接受任何异常类型参数。这样 §18 的“不得出现 ``except Exception`` / ``except BaseException``”在本模块中也成立，
   编程错误与 ``CancelledError`` 原样传播（表 E 末两行）。
 * 桥抛出的异常消息都是固定短文本，不含 URL / 响应体 / 头 / 宿主异常消息（I12）。
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 import codecs
 import time
 from collections.abc import Callable, Mapping
+from typing import ClassVar
 
 from fc2_metadata_core.http import (
     HttpConnectionError,
@@ -76,20 +78,25 @@ def _joined_headers(raw_headers: object) -> dict[str, str]:
 
 
 class AmaneHttpBridge:
-    """满足 ``SourceHttpClient`` Protocol：``async get(url, *, headers=None, timeout=None)``。"""
+    """满足 ``SourceHttpClient`` Protocol：``async get(url, *, headers=None, timeout=None)``。
+
+    宿主异常的精确分类由子类通过类属性声明（``plugin.py`` 的 ``_HostAmaneHttpBridge``）：
+    ``host_request_error_types`` 对应 Amane ``RequestError``（按结构化 ``reason`` 映射），
+    ``host_source_error_types`` 对应其它 ``SourceError``（-> ``HttpTransportError``）。
+    基类的默认空元组不捕获任何宿主异常。
+    """
+
+    host_request_error_types: ClassVar[tuple[type[BaseException], ...]] = ()
+    host_source_error_types: ClassVar[tuple[type[BaseException], ...]] = ()
 
     def __init__(
         self,
         web_client: object,
         *,
         clock: Callable[[], float] = time.monotonic,
-        request_error_types: tuple[type[BaseException], ...] = (),
-        source_error_types: tuple[type[BaseException], ...] = (),
     ) -> None:
         self._web_client = web_client
         self._clock = clock
-        self._request_error_types = request_error_types
-        self._source_error_types = source_error_types
 
     async def get(
         self,
@@ -107,9 +114,9 @@ class AmaneHttpBridge:
                 timeout=timeout,
                 ok_statuses=OK_STATUSES,
             )
-        except self._request_error_types as exc:
+        except self.host_request_error_types as exc:
             raise self._map_request_error(exc) from None
-        except self._source_error_types:
+        except self.host_source_error_types:
             raise HttpTransportError("host source error") from None
         elapsed_ms = max(0.0, (self._clock() - started) * 1000.0)
         return self._to_http_response(url, response, elapsed_ms)

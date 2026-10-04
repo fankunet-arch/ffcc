@@ -1,5 +1,5 @@
 {
-  "adapter_tree_sha256": "df2e7a12be6d7b538409eca7962e643c569c021f38529fb8b10d95d8016f42c0",
+  "adapter_tree_sha256": "38eeb12e61231f9980a6d5b844c0793873b56318f29463873da14808ca342377",
   "amane": {
     "commit": "45dff2159369883e028a296d775a4598836c1ddd",
     "version": "0.15.0"
@@ -141,7 +141,7 @@
           "plugin.py"
         ],
         "installed_id": "ffcc.fc2-metadata",
-        "zip_sha256": "6a8f465a121202a9da0bd5717218600793f335aaa2e2c477a91ade4d7bdb7018"
+        "zip_sha256": "20c781941ff2f732a78a72fdf31bce793756c8bcd9e44bf0fcac93f711b5a7cf"
       },
       "passed": true
     },
@@ -168,7 +168,7 @@
           ]
         },
         "core_too_old": {
-          "discover_error": "FC2 Metadata Core \u672a\u5b89\u88c5\u6216\u7248\u672c\u4e0d\u517c\u5bb9\uff1a\u8bf7\u5728 Amane \u6240\u5728\u7684 Python \u73af\u5883\u4e2d\u5b89\u88c5 fc2-metadata-core\uff08\u7f3a\u5931\u6a21\u5757\uff1afc2_metadata_core.normalize\uff09"
+          "discover_error": "FC2 Metadata Core \u672a\u5b89\u88c5\u6216\u7248\u672c\u4e0d\u517c\u5bb9\uff1a\u8bf7\u5728 Amane \u6240\u5728\u7684 Python \u73af\u5883\u4e2d\u5b89\u88c5 fc2-metadata-core\uff08\u7f3a\u5931\u6a21\u5757\uff1afc2_metadata_core.http\uff09"
         },
         "non_core_import_error": {
           "discover_error": "No module named 'definitely_missing_support_module_xyz'"
@@ -413,6 +413,16 @@
     {
       "id": "H-10",
       "observations": {
+        "bridge_wiring": {
+          "constructor": "(self, web_client, *, clock=time.monotonic)",
+          "host_request_error_types": [
+            "RequestError"
+          ],
+          "host_source_error_types": [
+            "SourceError"
+          ],
+          "subclass_overrides_constructor": false
+        },
         "http_error_600": {
           "host_attempts": 3,
           "kind": "network_error",

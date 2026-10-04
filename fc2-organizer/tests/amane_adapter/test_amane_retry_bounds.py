@@ -22,15 +22,15 @@ from fc2_metadata_core.aggregation import DEFAULT_SOURCE_ORDER, RetryPolicy
 from fc2_metadata_core.sources.adapters import build_default_registry
 from support.amane_host_fakes import (
     FakeCurlError,
+    FakeHostBridge,
     FakeRequestError,
     FakeResponse,
-    FakeSourceError,
     HostModelWebClient,
 )
 
 N = "FC2-4825061"
 ALL = ("fc2db_net", "javdb", "av123")
-HOST_ERRORS = {"request_error_types": (FakeRequestError,), "source_error_types": (FakeSourceError,)}
+HOST_ERRORS = {"bridge_type": FakeHostBridge}
 REDIRECT_HOPS_PER_ATTEMPT = 21  # R + 1，R = 20（宿主 max_redirects；W-08 实测）
 
 

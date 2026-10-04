@@ -11,7 +11,7 @@ from _amane_scenarios import url_for
 from fc2_amane_adapter._outcome import AdapterFailure
 from fc2_amane_adapter._runtime import AdapterRuntime
 from fc2_amane_adapter._settings import parse_settings
-from support.amane_host_fakes import HANG, FakeRequestError, FakeSourceError, FakeWebClient
+from support.amane_host_fakes import HANG, FakeHostBridge, FakeRequestError, FakeWebClient
 
 N = "FC2-4825061"
 ALL = ("fc2db_net", "javdb", "av123")
@@ -109,9 +109,7 @@ def test_a_spontaneous_host_cancelled_error_is_isolated_by_core_to_one_source():
         client.add(url_for("fc2db_net", "4825061"), asyncio.CancelledError())
         client.add(url_for("javdb", "4825061"), FakeRequestError("network"))
         client.add(url_for("av123", "4825061"), FakeRequestError("network"))
-        runtime = AdapterRuntime(
-            parse_settings({}), client, request_error_types=(FakeRequestError,), source_error_types=(FakeSourceError,)
-        )
+        runtime = AdapterRuntime(parse_settings({}), client, bridge_type=FakeHostBridge)
         outcome = await runtime.lookup(N, "fc2")
         assert isinstance(outcome, AdapterFailure)
         assert "fc2db_net=adapter_exception" in outcome.detail and outcome.reason == "network"

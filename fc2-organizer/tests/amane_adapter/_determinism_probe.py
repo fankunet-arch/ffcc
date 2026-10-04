@@ -23,9 +23,9 @@ from _amane_scenarios import (  # noqa: E402
     runtime_for,
     url_for,
 )
-from support.amane_host_fakes import FakeRequestError, FakeSourceError  # noqa: E402
+from support.amane_host_fakes import FakeHostBridge, FakeRequestError  # noqa: E402
 
-HOST_ERRORS = {"request_error_types": (FakeRequestError,), "source_error_types": (FakeSourceError,)}
+HOST_ERRORS = {"bridge_type": FakeHostBridge}
 ORDERS = (
     ("fc2db_net", "javdb", "av123"),
     ("av123", "javdb", "fc2db_net"),

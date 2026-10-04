@@ -12,9 +12,9 @@ from _amane_scenarios import client_4825061, client_4824605_not_found_everywhere
 from fc2_amane_adapter import _bridge, _core_gate, _number, _outcome, _runtime, _settings
 from fc2_amane_adapter._outcome import AdapterFailure
 from fc2_amane_adapter._settings import AdapterConfigError, parse_settings
-from support.amane_host_fakes import FakeRequestError, FakeResponse, FakeSourceError
+from support.amane_host_fakes import FakeHostBridge, FakeRequestError, FakeResponse, FakeSourceError
 
-HOST_ERRORS = {"request_error_types": (FakeRequestError,), "source_error_types": (FakeSourceError,)}
+HOST_ERRORS = {"bridge_type": FakeHostBridge}
 HOSTILE = "SENTINEL-SECRET-7731 https://leak.example/p?token=abc cookie=session C:\\Users\\me\\x"
 TREE = [Path(m.__file__) for m in (_bridge, _core_gate, _number, _outcome, _runtime, _settings)]
 

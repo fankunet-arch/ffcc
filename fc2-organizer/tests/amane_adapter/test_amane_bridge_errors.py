@@ -17,7 +17,7 @@ from fc2_metadata_core.http import (
 )
 from fc2_metadata_core.models import SourceErrorKind
 from fc2_metadata_core.sources.base import classify_transport_failure
-from support.amane_host_fakes import HANG, FakeRequestError, FakeSourceError, FakeWebClient
+from support.amane_host_fakes import HANG, FakeHostBridge, FakeRequestError, FakeSourceError, FakeWebClient
 
 URL = "https://site.example/secret-path/1234567?token=SECRET"
 BRIDGE_SOURCE = Path(_bridge.__file__)
@@ -25,9 +25,7 @@ BRIDGE_SOURCE = Path(_bridge.__file__)
 
 def _bridge_for(item):
     client = FakeWebClient({URL: item})
-    return AmaneHttpBridge(
-        client, request_error_types=(FakeRequestError,), source_error_types=(FakeSourceError,)
-    )
+    return FakeHostBridge(client)
 
 
 def _raises(item):
@@ -137,3 +135,20 @@ def test_bridge_ast_has_no_broad_except_and_never_reads_exception_text():
     assert not attributes & {"message", "detail", "args", "failure"}
     strings = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
     assert not any(" in " in s and "detail" in s for s in strings)
+
+
+def test_base_bridge_maps_no_host_exception_at_all():
+    """基类的类属性是空元组：宿主异常原样传播（不被误分类）。精确映射只存在于 host-aware 子类。"""
+    assert AmaneHttpBridge.host_request_error_types == () and AmaneHttpBridge.host_source_error_types == ()
+    client = FakeWebClient({URL: FakeRequestError("timeout")})
+    with pytest.raises(FakeRequestError):
+        asyncio.run(AmaneHttpBridge(client).get(URL))
+
+
+def test_host_aware_subclass_only_declares_class_attributes():
+    """与生产 ``_HostAmaneHttpBridge`` 同构：不覆盖构造器 / get，构造器仍是冻结签名。"""
+    assert FakeHostBridge.__init__ is AmaneHttpBridge.__init__ and FakeHostBridge.get is AmaneHttpBridge.get
+    own = {name for name in vars(FakeHostBridge) if not name.startswith("__")}
+    assert own == {"host_request_error_types", "host_source_error_types"}
+    client = FakeWebClient()
+    assert FakeHostBridge(client)._web_client is client

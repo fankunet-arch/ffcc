@@ -4,6 +4,7 @@
   （``status_code`` / ``content`` / ``url`` / ``headers``）。
 * ``FakeRequestError`` / ``FakeSourceError``：与 Amane ``RequestError`` / ``SourceError`` 同形状的异常
   （``reason.value`` / ``http_status`` / ``detail`` / ``url``）；``FakeRequestError`` 是 ``FakeSourceError`` 的子类。
+* ``FakeHostBridge``：测试用 host-aware 桥（类属性声明 ``FakeRequestError`` / ``FakeSourceError``）。
 * ``FakeWebClient``：按 URL 编排响应 / 异常 / 挂起，记录每次调用的参数。
 * ``HostModelWebClient``：把 v0.15.0 ``WebClient.request`` 的“重试 H 次 + ``ok_statuses``”语义建模
   （不睡眠、不联网），用于有界性的纯逻辑测试；真实语义由 ``H-09`` 在真实宿主上见证。
@@ -15,10 +16,13 @@ import asyncio
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
+from fc2_amane_adapter._bridge import AmaneHttpBridge
+
 __all__ = [
     "HANG",
     "FakeCurlError",
     "FakeHeaders",
+    "FakeHostBridge",
     "FakeReason",
     "FakeRequestError",
     "FakeResponse",
@@ -46,6 +50,14 @@ class FakeSourceError(Exception):
 
 class FakeRequestError(FakeSourceError):
     """与 Amane ``RequestError`` 同形状；消息里故意放入会诱导“解析文本”的内容。"""
+
+
+class FakeHostBridge(AmaneHttpBridge):
+    """测试用的 host-aware 桥：与生产的 ``_HostAmaneHttpBridge`` 同构（只在类属性上声明宿主异常类型），
+    构造器仍是合同 §13.2 冻结的 ``(web_client, *, clock)``。"""
+
+    host_request_error_types = (FakeRequestError,)
+    host_source_error_types = (FakeSourceError,)
 
 
 class FakeCurlError(Exception):

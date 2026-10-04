@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ._core_gate import translate_core_import_error
 
 try:
+    from ._bridge import AmaneHttpBridge
     from ._number import read_query_fields
     from ._outcome import AdapterFailure, AdapterFound, AdapterNoMatch, AdapterRecord
     from ._runtime import AdapterRuntime
@@ -42,6 +43,18 @@ except ImportError as _exc:
     if _translated is None:
         raise
     raise _translated from _exc
+
+
+class _HostAmaneHttpBridge(AmaneHttpBridge):
+    """生产用的宿主感知桥：只在类属性上声明 Amane 的异常类型（合同 §13.2 的构造器签名不变）。
+
+    ``RequestError`` 按其结构化 ``reason`` 分类（timeout -> ``HttpTimeoutError``、network -> ``HttpConnectionError``、
+    其它 -> ``HttpTransportError``）；其它 ``SourceError`` -> ``HttpTransportError``。
+    直接持有 ``context.web_client``，不创建任何第二个 HTTP 客户端，也不增加全局可变注册。
+    """
+
+    host_request_error_types = (RequestError,)
+    host_source_error_types = (SourceError,)
 
 
 class SourceEntry(BaseModel):
@@ -139,10 +152,5 @@ class Plugin(FilmSourcePlugin):
 
     def build(self, context: PluginContext, config: BaseModel) -> FilmSourceProvider:
         settings = parse_settings(config.model_dump())
-        runtime = AdapterRuntime(
-            settings,
-            context.web_client,
-            request_error_types=(RequestError,),
-            source_error_types=(SourceError,),
-        )
+        runtime = AdapterRuntime(settings, context.web_client, bridge_type=_HostAmaneHttpBridge)
         return _Fc2MetadataProvider(runtime)

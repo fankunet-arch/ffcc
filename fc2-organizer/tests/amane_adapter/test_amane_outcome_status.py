@@ -16,9 +16,9 @@ from _amane_scenarios import (
 )
 from fc2_amane_adapter._outcome import AdapterFailure, AdapterFound, AdapterNoMatch
 from fc2_amane_adapter._runtime import LOGGER_NAME
-from support.amane_host_fakes import FakeRequestError, FakeSourceError
+from support.amane_host_fakes import FakeHostBridge, FakeRequestError
 
-REQUEST_ERRORS = {"request_error_types": (FakeRequestError,), "source_error_types": (FakeSourceError,)}
+REQUEST_ERRORS = {"bridge_type": FakeHostBridge}
 
 
 def test_success_returns_a_usable_record_with_nothing_degraded(caplog):

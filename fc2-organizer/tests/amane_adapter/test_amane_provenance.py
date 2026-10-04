@@ -10,9 +10,9 @@ from _amane_scenarios import client_4825061, client_4979299, client_4824605_not_
 from fc2_amane_adapter._outcome import AdapterFailure, AdapterFound, AdapterRecord
 from fc2_amane_adapter._runtime import PARTIAL_LOG_FORMAT
 from fc2_metadata_core.aggregation import DEFAULT_SOURCE_ORDER
-from support.amane_host_fakes import FakeRequestError, FakeSourceError
+from support.amane_host_fakes import FakeHostBridge, FakeRequestError
 
-REQUEST_ERRORS = {"request_error_types": (FakeRequestError,), "source_error_types": (FakeSourceError,)}
+REQUEST_ERRORS = {"bridge_type": FakeHostBridge}
 DETAIL_RE = re.compile(r"^FC2 lookup failed: [a-z0-9_]+=[a-z_]+(; [a-z0-9_]+=[a-z_]+)*$")
 INTERNAL_NAMES = {"field_sources", "external_ids", "source_urls", "conflicts", "contributing_source_ids", "source_results",
                   "source_execution_traces", "fanart_urls", "provenance"}

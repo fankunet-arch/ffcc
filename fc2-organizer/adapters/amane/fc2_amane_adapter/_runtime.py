@@ -42,17 +42,17 @@ class AdapterRuntime:
         settings: AdapterSettings,
         web_client: object,
         *,
-        request_error_types: tuple[type[BaseException], ...] = (),
-        source_error_types: tuple[type[BaseException], ...] = (),
+        bridge_type: type[AmaneHttpBridge] | None = None,
     ) -> None:
+        # None = 基类（不映射任何宿主异常）；生产路径由 plugin.py 传入其私有子类（合同 §13.2：构造器签名不变）。
+        if bridge_type is None:
+            bridge_type = AmaneHttpBridge
+        elif not (isinstance(bridge_type, type) and issubclass(bridge_type, AmaneHttpBridge)):
+            raise TypeError("bridge_type must be AmaneHttpBridge or a subclass of it")
         self._registry = build_default_registry()
         self._config = build_aggregation_config(settings)
         self._governor = SourceResourceGovernor()
-        self._bridge = AmaneHttpBridge(
-            web_client,
-            request_error_types=request_error_types,
-            source_error_types=source_error_types,
-        )
+        self._bridge = bridge_type(web_client)
         self._engine = MultiSourceEngine(self._config, self._registry, self._bridge, governor=self._governor)
 
     @property
