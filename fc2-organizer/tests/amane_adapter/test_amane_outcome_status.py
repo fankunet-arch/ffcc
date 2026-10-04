@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 import logging
 
 import pytest
@@ -114,3 +116,78 @@ def test_fatal_exceptions_from_the_engine_are_not_converted(fatal):
     runtime._engine = Fatal()
     with pytest.raises(fatal):
         lookup(runtime)
+
+
+# ------------------------------------------------------------ P5-C1-L1-02：原始异常对象随返回值带出（冻结的 AdapterFailure 形状不变）
+
+
+class _RaisingEngine:
+    def __init__(self, error):
+        self.error = error
+
+    async def aggregate(self, number):
+        raise self.error
+
+
+def test_lookup_with_cause_returns_the_original_exception_object_and_a_redacted_failure():
+    original = RuntimeError("SECRET MUST NOT LEAK")
+    runtime = runtime_for(client_4825061())
+    runtime._engine = _RaisingEngine(original)
+    outcome, cause = asyncio.run(runtime.lookup_with_cause("FC2-PPV-4825061", "fc2"))
+    assert cause is original, "the very same exception object, not a new one"
+    assert outcome == AdapterFailure("unexpected", "internal adapter error: RuntimeError")
+    assert "SECRET" not in outcome.detail and "SECRET" not in repr(outcome)
+    assert [f.name for f in dataclasses.fields(AdapterFailure)] == ["reason", "detail"], "AdapterFailure keeps its frozen shape"
+
+
+def test_lookup_without_cause_is_unchanged_and_lookup_still_returns_only_the_outcome():
+    runtime = runtime_for(client_4825061())
+    runtime._engine = _RaisingEngine(RuntimeError("x"))
+    assert lookup(runtime) == AdapterFailure("unexpected", "internal adapter error: RuntimeError")
+    ok_runtime = runtime_for(client_4825061())
+    outcome, cause = asyncio.run(ok_runtime.lookup_with_cause("FC2-PPV-4825061", "fc2"))
+    assert isinstance(outcome, AdapterFound) and cause is None
+
+
+@pytest.mark.parametrize("number, content_type", [("ABC-1", "fc2"), ("FC2-PPV-4825061", "censored"), (12345, "fc2")])
+def test_boundary_failures_and_no_match_carry_no_cause(number, content_type):
+    runtime = runtime_for(client_4825061())
+    outcome, cause = asyncio.run(runtime.lookup_with_cause(number, content_type))
+    assert cause is None and isinstance(outcome, (AdapterNoMatch, AdapterFailure))
+
+
+def test_concurrent_lookups_each_keep_their_own_original_exception():
+    """原异常经返回值带出（无全局可变状态）：并发 lookup 之间不会串线。"""
+    first, second = RuntimeError("first"), ValueError("second")
+
+    class PerNumberEngine:
+        async def aggregate(self, number):
+            await asyncio.sleep(0)
+            raise first if number.endswith("4825061") else second
+
+    runtime = runtime_for(client_4825061())
+    runtime._engine = PerNumberEngine()
+
+    async def both():
+        return await asyncio.gather(
+            runtime.lookup_with_cause("FC2-4825061", "fc2"), runtime.lookup_with_cause("FC2-4979299", "fc2")
+        )
+
+    (one, cause_one), (two, cause_two) = asyncio.run(both())
+    assert cause_one is first and cause_two is second
+    assert one.detail == "internal adapter error: RuntimeError" and two.detail == "internal adapter error: ValueError"
+
+
+@pytest.mark.parametrize("fatal", [KeyboardInterrupt, SystemExit])
+def test_lookup_with_cause_does_not_convert_fatal_exceptions(fatal):
+    runtime = runtime_for(client_4825061())
+    runtime._engine = _RaisingEngine(fatal())
+    with pytest.raises(fatal):
+        asyncio.run(runtime.lookup_with_cause("FC2-PPV-4825061", "fc2"))
+
+
+def test_lookup_with_cause_propagates_cancelled_error_unchanged():
+    runtime = runtime_for(client_4825061())
+    runtime._engine = _RaisingEngine(asyncio.CancelledError())
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(runtime.lookup_with_cause("FC2-PPV-4825061", "fc2"))

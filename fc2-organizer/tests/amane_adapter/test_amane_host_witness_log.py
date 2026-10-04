@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from fc2_amane_adapter import _settings as _module_under_test
+from support.amane_config_matrix import CONFIG_MATRIX, RAW_STRING_DEADLINES
 
 ROOT = Path(__file__).resolve().parents[2]
 LOG_PATH = ROOT / "docs" / "acceptance" / "evidence" / "P5_C1_HOST_WITNESS.json"
@@ -78,3 +79,21 @@ def test_key_witness_observations_match_the_frozen_contract():
     assert SCENARIOS["H-12"]["observations"]["external_ids_keys"] == ["ffcc.fc2-metadata"]
     assert SCENARIOS["H-07"]["observations"]["metadata"]["external_id"] == "4979299"
     assert SCENARIOS["H-11"]["observations"]["recorded_outcomes"] == 0
+
+
+def test_h04_witnesses_the_raw_type_matrix_and_host_parser_parity_on_the_real_host():
+    """P5-C1-L1-01：真实宿主对共享矩阵的每一行给出与 ``parse_settings`` 相同的裁决；可强制转换的原始字符串被拒绝。"""
+    observations = SCENARIOS["H-04"]["observations"]["raw_type_matrix"]
+    assert observations["rows"] == len(CONFIG_MATRIX) and observations["rows"] > 40
+    assert observations["raw_strings_rejected"] == list(RAW_STRING_DEADLINES) and "20" in observations["raw_strings_rejected"]
+    assert observations["hot_settings_route_rejects_raw_strings"] is True
+    assert "== parse_settings ==" in observations["parity"]
+
+
+def test_h08_witnesses_the_original_exception_cause_at_the_provider_boundary():
+    """P5-C1-L1-02：provider 边界 ``SourceError(UNEXPECTED)`` 的 ``__cause__`` 是原始异常对象；detail / 日志无秘密；取消与致命异常原样传播。"""
+    observations = SCENARIOS["H-08"]["observations"]["engine_exception_boundary"]
+    assert observations["cause_is_original_exception_object"] is True
+    assert observations["source_error"] == "SourceError(UNEXPECTED, 'internal adapter error: RuntimeError')"
+    assert observations["url"] is None and observations["http_status"] is None and observations["secret_in_detail_or_logs"] is False
+    assert observations["cancelled_keyboard_interrupt_system_exit"].startswith("propagated unchanged")

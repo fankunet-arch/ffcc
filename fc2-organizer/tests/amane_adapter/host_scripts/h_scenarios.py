@@ -283,7 +283,42 @@ def h04(ctx: Context) -> dict:
             pass
         else:
             raise AssertionError("host validation accepted an invalid route / config")
-    return {"valid_configurations": len(valid), "rejected_configurations": rejected, "route_matrix": "fc2 accepted; censored, directors, bad config rejected"}
+    # P5-C1-L1-01：宿主入口必须与 parse_settings 语义一致——原始的可强制转换字符串（"20" 等）不得先被 Pydantic 转成 20.0。
+    from support.amane_config_matrix import CONFIG_MATRIX, RAW_STRING_DEADLINES
+
+    settings_module = sys.modules[type(manager.get(PLUGIN_ID)).__module__ + "._settings"]
+    parse_settings, adapter_config_error = settings_module.parse_settings, settings_module.AdapterConfigError
+
+    def accepted_by(call, error_types) -> bool:
+        try:
+            call()
+        except error_types:
+            return False
+        return True
+
+    for raw in RAW_STRING_DEADLINES:
+        check(not accepted_by(lambda: model.model_validate({"source_deadline_seconds": raw}), ValidationError),
+              f"the host model must reject the coercible raw string {raw!r}")
+        check(not accepted_by(lambda: manager.validate_plugin_config(PLUGIN_ID, PluginConfig(config={"source_deadline_seconds": raw})),
+                              (ValidationError, ValueError)), f"validate_plugin_config must reject {raw!r}")
+        try:
+            manager.validate_hot_settings(hot(plugins={PLUGIN_ID: {"enabled": True, "config": {"source_deadline_seconds": raw}}}))
+        except (ValueError, ValidationError):
+            pass
+        else:
+            raise AssertionError(f"HotSettings route accepted the raw string {raw!r}")
+    parity_rows = 0
+    for label, config, expected in CONFIG_MATRIX:
+        host_ok = accepted_by(lambda: model.model_validate(config), ValidationError)
+        manager_ok = accepted_by(lambda: manager.validate_plugin_config(PLUGIN_ID, PluginConfig(config=config)), (ValidationError, ValueError))
+        parser_ok = accepted_by(lambda: parse_settings(config), adapter_config_error)
+        check(host_ok == manager_ok == parser_ok == expected,
+              f"host model / validate_plugin_config / parse_settings / expected disagree for {label}: {host_ok} {manager_ok} {parser_ok} {expected}")
+        parity_rows += 1
+    return {"valid_configurations": len(valid), "rejected_configurations": rejected,
+            "route_matrix": "fc2 accepted; censored, directors, bad config rejected",
+            "raw_type_matrix": {"rows": parity_rows, "parity": "host model == validate_plugin_config == parse_settings == expected for every row",
+                                "raw_strings_rejected": list(RAW_STRING_DEADLINES), "hot_settings_route_rejects_raw_strings": True}}
 
 
 # ===================================================================================================== H-05
@@ -587,6 +622,75 @@ def h08(ctx: Context) -> dict:
             host.restore()
 
     run(success_and_partial())
+
+    async def engine_exception_boundary():
+        """P5-C1-L1-02：provider 边界（不经会消费异常的 invoke_source）必须 ``raise SourceError(UNEXPECTED) from <原始异常对象>``。"""
+        from amane.plugin import FailureReason, SourceError
+
+        secret = "SECRET MUST NOT LEAK"
+        original = RuntimeError(secret)
+
+        class Boom:
+            def __init__(self, error):
+                self.error = error
+
+            async def aggregate(self, number):
+                raise self.error
+
+        records: list[logging.LogRecord] = []
+
+        class Capture(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        root = logging.getLogger()
+        handler = Capture(level=logging.DEBUG)
+        old_level = root.level
+        root.addHandler(handler)
+        root.setLevel(logging.DEBUG)
+        host = make_host(ctx, "h08_cause", session=session_4825061())
+        try:
+            adapter = await host.provider()
+            runtime = runtime_of(adapter)
+            runtime._engine = Boom(original)
+            try:
+                await adapter.fetch(query("FC2-PPV-4825061"))
+            except SourceError as caught:
+                check(type(caught) is SourceError, type(caught))
+                check(caught.reason is FailureReason.UNEXPECTED, caught.reason)
+                check(caught.detail == "internal adapter error: RuntimeError", caught.detail)
+                check(caught.url is None and caught.http_status is None, (caught.url, caught.http_status))
+                check(caught.__cause__ is original, "the SourceError must be raised from the ORIGINAL exception object")
+                check(secret not in str(caught) and secret not in repr(caught) and secret not in (caught.detail or ""), "no secret in the SourceError")
+            else:
+                raise AssertionError("the provider boundary must raise SourceError for an engine exception")
+            result, recorder = await invoke(adapter, "FC2-PPV-4825061")
+            check(result is None, "SourceError is recorded, not returned")
+            check(recorder.outcomes == [(PLUGIN_ID, "failed", "unexpected", None, "internal adapter error: RuntimeError")], recorder.outcomes)
+            check(all(secret not in message for _site, message in recorder.logs), recorder.logs)
+            # 取消 / 致命异常：原样传播，不被转换成 SourceError
+            for fatal in (asyncio.CancelledError(), KeyboardInterrupt(), SystemExit(3)):
+                runtime._engine = Boom(fatal)
+                try:
+                    await adapter.fetch(query("FC2-PPV-4825061"))
+                except BaseException as propagated:  # noqa: BLE001 - 见证传播的就是同一个对象
+                    check(propagated is fatal and not isinstance(propagated, SourceError), (type(fatal).__name__, propagated))
+                else:
+                    raise AssertionError(f"{type(fatal).__name__} must propagate")
+        finally:
+            root.removeHandler(handler)
+            root.setLevel(old_level)
+            host.restore()
+        check(all(secret not in record.getMessage() for record in records), "no log record may contain the secret")
+        # fetch 成功路径不受影响：恢复引擎后仍能得到结果
+        observations["engine_exception_boundary"] = {
+            "source_error": "SourceError(UNEXPECTED, 'internal adapter error: RuntimeError')",
+            "cause_is_original_exception_object": True, "url": None, "http_status": None, "secret_in_detail_or_logs": False,
+            "invoke_source_records": "unexpected / internal adapter error: RuntimeError",
+            "cancelled_keyboard_interrupt_system_exit": "propagated unchanged (same object, not converted)",
+        }
+
+    run(engine_exception_boundary())
 
     kinds: dict[str, object] = {}
     cases = (

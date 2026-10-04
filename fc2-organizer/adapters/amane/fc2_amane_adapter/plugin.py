@@ -5,6 +5,8 @@
 所有规则都在纯模块中，由主进程测试直接覆盖；本文件由真实 Amane v0.15.0 宿主见证（H-01..H-15）覆盖。
 """
 
+from collections.abc import Mapping
+
 from amane.plugin import (
     ContentType,
     FailureReason,
@@ -20,7 +22,7 @@ from amane.plugin import (
     SourceDescriptor,
     SourceError,
 )
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ._core_gate import translate_core_import_error
 
@@ -75,12 +77,17 @@ class Fc2MetadataConfig(BaseModel):
     sources: list[SourceEntry] | None = None
     source_deadline_seconds: float = DEFAULT_DEADLINE_SECONDS
 
-    @field_validator("source_deadline_seconds", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _reject_bool(cls, value: object) -> object:
-        if isinstance(value, bool):
-            raise ValueError("source_deadline_seconds must be a number")
-        return value
+    def _validate_raw_input_with_adapter_rules(cls, data: object) -> object:
+        """合同 §11：``parse_settings`` 是配置语义的唯一权威，且必须先于 Pydantic 的类型强制转换看到宿主**原始**输入。
+
+        否则 ``float`` 字段会把 ``"20"`` 先转成 ``20.0``，``parse_settings`` 就再也看不到原始的非法类型。
+        这里不复制任何规则：只把原始输入交给 ``parse_settings``（违规 -> ``ValueError`` -> Pydantic ``ValidationError``）。
+        """
+        if isinstance(data, Mapping):
+            parse_settings(_raw_for_parse_settings(data))
+        return data
 
     @model_validator(mode="after")
     def _validate_with_adapter_rules(self) -> "Fc2MetadataConfig":
@@ -94,6 +101,15 @@ class Fc2MetadataConfig(BaseModel):
                 {"id": entry.id, "enabled": entry.enabled, "base_url": entry.base_url} for entry in self.sources
             ]
         return {"sources": sources, "source_deadline_seconds": self.source_deadline_seconds}
+
+
+def _raw_for_parse_settings(data: Mapping) -> dict[str, object]:
+    """程序化构造时 ``sources`` 里可能是已校验的 ``SourceEntry`` 实例：还原为朴素字典；宿主传入的原始字典原样保留。"""
+    raw = dict(data)
+    sources = raw.get("sources")
+    if isinstance(sources, (list, tuple)):
+        raw["sources"] = [entry.model_dump() if isinstance(entry, SourceEntry) else entry for entry in sources]
+    return raw
 
 
 def _media_metadata(record: AdapterRecord) -> MediaMetadata:
@@ -122,16 +138,18 @@ class _Fc2MetadataProvider(FilmSourceProvider):
 
     async def fetch(self, query: SearchQuery, options: FetchOptions | None = None) -> MediaMetadata | None:
         fields = read_query_fields(query)
+        cause: Exception | None = None
         if isinstance(fields, AdapterFailure):
             outcome = fields
         else:
-            outcome = await self._runtime.lookup(*fields)
+            outcome, cause = await self._runtime.lookup_with_cause(*fields)
         if isinstance(outcome, AdapterFound):
             return _media_metadata(outcome.record)
         if isinstance(outcome, AdapterNoMatch):
             return None
         # url / http_status 恒为 None：SourceResult 不携带状态码，不猜测；也不把任何 URL 放进 SourceError。
-        raise SourceError(FailureReason(outcome.reason), detail=outcome.detail)
+        # 合同表 F：引擎异常 -> ``raise SourceError(UNEXPECTED) from <原始异常对象>``（detail 仍只含类型名）；无原因时 ``from None``。
+        raise SourceError(FailureReason(outcome.reason), detail=outcome.detail) from cause
 
 
 class Plugin(FilmSourcePlugin):

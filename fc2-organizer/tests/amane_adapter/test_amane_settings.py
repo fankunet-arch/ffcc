@@ -20,6 +20,8 @@ from fc2_metadata_core.aggregation import (
     RetryPolicy,
 )
 
+from support.amane_config_matrix import CONFIG_MATRIX, DEADLINE_MATRIX, RAW_STRING_DEADLINES
+
 SECRET = "TOPSECRET-VALUE-9f3a"
 
 
@@ -146,3 +148,30 @@ def test_no_secret_like_configuration_field_names():
     names = {"sources", "id", "enabled", "base_url", "source_deadline_seconds"}
     for name in names:
         assert not any(word in name for word in ("token", "secret", "password", "api_key", "cookie", "credential", "dsn"))
+
+
+# ------------------------------------------------------------ P5-C1-L1-01：原始类型校验（parse_settings 是权威）
+
+
+@pytest.mark.parametrize(("label", "config", "accepted"), CONFIG_MATRIX, ids=[row[0] for row in CONFIG_MATRIX])
+def test_parse_settings_matches_the_shared_validation_matrix(label, config, accepted):
+    """同一张矩阵也由真实宿主 H-04 对 ``Fc2MetadataConfig`` 逐行裁决；二者必须一致。"""
+    if accepted:
+        parse_settings(config)
+    else:
+        with pytest.raises(AdapterConfigError):
+            parse_settings(config)
+
+
+@pytest.mark.parametrize("raw", RAW_STRING_DEADLINES)
+def test_parse_settings_rejects_coercible_numeric_strings_before_any_conversion(raw):
+    """``"20"`` 这类会被 Pydantic 宽松模式先转成 ``20.0`` 的原始字符串，``parse_settings`` 必须看到并拒绝。"""
+    with pytest.raises(AdapterConfigError):
+        parse_settings({"source_deadline_seconds": raw})
+
+
+def test_deadline_matrix_covers_the_frozen_contract_cases():
+    labels = {label for label, _value, _accepted in DEADLINE_MATRIX}
+    assert {"str '20'", "str '20.0'", "bool True", "bool False", "nan", "inf", "-inf", "int 0", "int -1", "int 601", "int 600", "int 20", "float 20.0"} <= labels
+    accepted = {label for label, _value, ok in DEADLINE_MATRIX if ok}
+    assert {"int 20", "float 20.0", "int 600"} <= accepted and "bool True" not in accepted

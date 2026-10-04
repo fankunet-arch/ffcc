@@ -1,5 +1,5 @@
 {
-  "adapter_tree_sha256": "38eeb12e61231f9980a6d5b844c0793873b56318f29463873da14808ca342377",
+  "adapter_tree_sha256": "9fe3dc3b9e815ec3768eec636db6747a68192d97112ea42e9a8545440cb40f82",
   "amane": {
     "commit": "45dff2159369883e028a296d775a4598836c1ddd",
     "version": "0.15.0"
@@ -141,13 +141,24 @@
           "plugin.py"
         ],
         "installed_id": "ffcc.fc2-metadata",
-        "zip_sha256": "20c781941ff2f732a78a72fdf31bce793756c8bcd9e44bf0fcac93f711b5a7cf"
+        "zip_sha256": "63d9c6d2f482d3ba4bb79ea0dda004537a808334294d72366d527524edced520"
       },
       "passed": true
     },
     {
       "id": "H-04",
       "observations": {
+        "raw_type_matrix": {
+          "hot_settings_route_rejects_raw_strings": true,
+          "parity": "host model == validate_plugin_config == parse_settings == expected for every row",
+          "raw_strings_rejected": [
+            "20",
+            "20.0",
+            " 20 ",
+            "1e1"
+          ],
+          "rows": 46
+        },
         "rejected_configurations": 18,
         "route_matrix": "fc2 accepted; censored, directors, bad config rejected",
         "valid_configurations": 6
@@ -241,6 +252,15 @@
             null
           ]
         ],
+        "engine_exception_boundary": {
+          "cancelled_keyboard_interrupt_system_exit": "propagated unchanged (same object, not converted)",
+          "cause_is_original_exception_object": true,
+          "http_status": null,
+          "invoke_source_records": "unexpected / internal adapter error: RuntimeError",
+          "secret_in_detail_or_logs": false,
+          "source_error": "SourceError(UNEXPECTED, 'internal adapter error: RuntimeError')",
+          "url": null
+        },
         "failure_kinds": {
           "blocked_403": {
             "host_attempts": 3,

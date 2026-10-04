@@ -60,13 +60,25 @@ class AdapterRuntime:
         return self._governor
 
     async def lookup(self, number: object, content_type: object) -> AdapterFound | AdapterNoMatch | AdapterFailure:
+        outcome, _cause = await self.lookup_with_cause(number, content_type)
+        return outcome
+
+    async def lookup_with_cause(
+        self, number: object, content_type: object
+    ) -> tuple[AdapterFound | AdapterNoMatch | AdapterFailure, Exception | None]:
+        """与 ``lookup`` 相同，另返回**原始**异常对象（仅当 ``engine.aggregate`` 抛出非取消 ``Exception`` 时非 ``None``）。
+
+        合同表 F：``AdapterFailure("unexpected", "internal adapter error: <ExceptionTypeName>")`` 的 ``detail`` 只含类型名，
+        而 Amane 边界必须 ``raise SourceError(...) from <原始异常>``。``AdapterFailure`` 的冻结形状 ``(reason, detail)`` 不变；
+        原始异常经由**返回值**带出（不使用任何全局可变状态，并发安全）。
+        """
         resolved = resolve_query(number, content_type)
         if not isinstance(resolved, str):
-            return resolved
+            return resolved, None
         try:
             result = await self._engine.aggregate(resolved)
         except Exception as exc:
-            return AdapterFailure("unexpected", internal_error_detail(type(exc).__name__))
+            return AdapterFailure("unexpected", internal_error_detail(type(exc).__name__)), exc
         outcome = map_aggregation(result, resolved)
         if isinstance(outcome, AdapterFound) and outcome.degraded:
             _LOGGER.warning(
@@ -74,4 +86,4 @@ class AdapterRuntime:
                 resolved,
                 "; ".join(f"{source_id}={kind_value}" for source_id, kind_value in outcome.degraded),
             )
-        return outcome
+        return outcome, None

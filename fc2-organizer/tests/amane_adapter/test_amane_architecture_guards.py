@@ -164,7 +164,8 @@ def test_plugin_py_is_the_only_module_allowed_amane_and_pydantic():
             roots |= {alias.name.split(".")[0] for alias in node.names}
         elif not node.level:
             roots.add((node.module or "").split(".")[0])
-    assert {"amane", "pydantic"} <= roots <= {"amane", "pydantic", "fc2_metadata_core"}
+    # R1：``collections.abc.Mapping`` 只用于原始输入的类型判断（P5-C1-L1-01）；不涉及 I/O / 网络，FORBIDDEN_ROOTS 检查完全保留。
+    assert {"amane", "pydantic"} <= roots <= {"amane", "pydantic", "fc2_metadata_core", "collections"}
     assert not roots & (FORBIDDEN_ROOTS - {"amane", "pydantic"})
 
 
@@ -352,6 +353,64 @@ def test_production_plugin_wires_the_exact_host_exceptions_through_a_private_sub
     assert [ast.unparse(a) for a in call.args] == ["settings", "context.web_client"]
     assert {k.arg: ast.unparse(k.value) for k in call.keywords} == {"bridge_type": "_HostAmaneHttpBridge"}
     assert "context.http_client" not in ast.unparse(build) and "web_client" in ast.unparse(build)
+
+
+# ---------------------------------------------------------------- P5-C1 R1：宿主入口原始类型校验与异常链（L1-01 / L1-02）
+
+
+def _plugin_classes() -> dict[str, ast.ClassDef]:
+    return {n.name: n for n in _modules()["plugin.py"].body if isinstance(n, ast.ClassDef)}
+
+
+def test_host_config_model_hands_the_raw_input_to_parse_settings_before_pydantic_coercion():
+    """L1-01：``Fc2MetadataConfig`` 必须有 ``@model_validator(mode="before")``，并在其中调用 ``parse_settings``；
+    ``source_deadline_seconds`` 不得再靠会被 Pydantic 宽松转换的字段校验器（或 strict float 之类的替代品）闭合。"""
+    config = _plugin_classes()["Fc2MetadataConfig"]
+    before = []
+    for node in config.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Call) and ast.unparse(decorator.func) == "model_validator":
+                modes = {k.arg: ast.unparse(k.value) for k in decorator.keywords}
+                if modes.get("mode") in ("'before'", '"before"'):
+                    before.append(node)
+    assert len(before) == 1, "exactly one mode='before' model validator"
+    calls = [n for n in ast.walk(before[0]) if isinstance(n, ast.Call) and ast.unparse(n.func) == "parse_settings"]
+    assert len(calls) == 1, "the before-validator delegates to parse_settings (no duplicated rules)"
+    for node in config.body:
+        if isinstance(node, ast.FunctionDef):
+            for decorator in node.decorator_list:
+                text = ast.unparse(decorator)
+                assert not (text.startswith("field_validator") and "source_deadline_seconds" in text), "no field-level re-implementation"
+    field = next(n for n in config.body if isinstance(n, ast.AnnAssign) and getattr(n.target, "id", "") == "source_deadline_seconds")
+    assert ast.unparse(field.annotation) == "float" and "strict" not in ast.unparse(field.value), "no strict-float workaround"
+
+
+def test_provider_boundary_raises_source_error_from_the_original_exception():
+    """L1-02：``plugin.py`` 经 ``lookup_with_cause`` 取得原始异常，并 ``raise SourceError(...) from cause``。"""
+    provider = _plugin_classes()["_Fc2MetadataProvider"]
+    fetch = next(n for n in provider.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "fetch")
+    called = {ast.unparse(n.func) for n in ast.walk(fetch) if isinstance(n, ast.Call)}
+    assert "self._runtime.lookup_with_cause" in called and "self._runtime.lookup" not in called
+    raises = [n for n in ast.walk(fetch) if isinstance(n, ast.Raise)]
+    assert len(raises) == 1
+    (raised,) = raises
+    assert isinstance(raised.exc, ast.Call) and ast.unparse(raised.exc.func) == "SourceError"
+    assert raised.cause is not None and ast.unparse(raised.cause) == "cause"
+    assert {k.arg for k in raised.exc.keywords} == {"detail"}, "url / http_status are never set"
+
+
+def test_runtime_returns_the_original_exception_object_not_a_copy():
+    tree = _modules()["_runtime.py"]
+    method = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == "lookup_with_cause"
+    )
+    handler = next(n for n in ast.walk(method) if isinstance(n, ast.ExceptHandler))
+    assert handler.name == "exc"
+    returns = [n for n in ast.walk(handler) if isinstance(n, ast.Return)]
+    assert len(returns) == 1 and isinstance(returns[0].value, ast.Tuple)
+    assert ast.unparse(returns[0].value.elts[1]) == "exc", "the same exception object travels with the outcome"
 
 
 # ---------------------------------------------------------------- 测试树守护（E22 静态 / E27）

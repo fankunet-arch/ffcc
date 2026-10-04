@@ -1,9 +1,11 @@
 # P5-C1 HANDOFF —— Amane Adapter End-to-End（实现候选）
 
 ```text
-候选状态              : READY FOR LEVEL 1 REVIEW
+候选状态              : R1 CANDIDATE — INCREMENTAL LEVEL 1 CLOSURE REVIEW REQUIRED（不是 PASS / CLOSED / TECHNICALLY ACCEPTED）
+P5-C1 Unified R1      : P5-C1-L1-01 REMEDIATED — REVIEW REQUIRED；P5-C1-L1-02 REMEDIATED — REVIEW REQUIRED（见 §0A）
 Pre-Level-1 Correction : P5-C1-PRE-L1-01 REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED（见 §0）
-Previous Candidate    : f5afaa6faf8f9d9e415b3a56644a81605848d0b6（Owner 在送 Level 1 之前发现 constructor mismatch；未进入 Level 1；已被本修复取代）
+Previous Candidate    : f5afaa6faf8f9d9e415b3a56644a81605848d0b6（Owner 在送 Level 1 之前发现 constructor mismatch；未进入 Level 1；已被 7385ec0 取代）
+Level 1 Candidate     : 7385ec06e1f4a35765cf6259bda409d7970886b5 —— 独立 Level 1 Review：FAIL（P5-C1-L1-01 / P5-C1-L1-02）；本 R1 在其上统一修复
 Implementation        : COMPLETE CANDIDATE（不是 PASS / CLOSED / FROZEN；这些只能由独立 Review 建立）
 Risk Class            : B（B -> C 未触发）
 New Architecture Blocker : NONE
@@ -14,6 +16,49 @@ Design Accepted Head  : 10eba0b8e1d95a49f34becc5ed87301bc2e47320
 Package Frozen Base   : 98ad8eb67bfd3e09701a730487e049f3fc348789
 Branch                : claude/phase5-c1-amane-adapter
 ```
+
+## 0A. P5-C1 Unified R1（独立 Level 1 Review FAIL 之后的统一修复）
+
+```text
+Level 1 Candidate : 7385ec06e1f4a35765cf6259bda409d7970886b5
+Level 1 Verdict   : FAIL
+Findings          : P5-C1-L1-01、P5-C1-L1-02（仅这两个 blocking implementation findings；Risk Class B 不升级）
+R1 Candidate      : 本 R1 提交（`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C1_HANDOFF.md`；Parent = 7385ec0…）
+P5-C1-L1-01       : REMEDIATED — REVIEW REQUIRED
+P5-C1-L1-02       : REMEDIATED — REVIEW REQUIRED
+P5-C1             : R1 CANDIDATE — INCREMENTAL LEVEL 1 CLOSURE REVIEW REQUIRED
+```
+
+一次统一 R1 同时关闭两项；不重新设计、不修改 Frozen Contract / Plan、`src/**` 零改动、不开始 P5-C2。**P5-C1-PRE-L1-01（§0）的历史保持不变。**
+
+### P5-C1-L1-01 —— 宿主入口的原始类型校验（Frozen §11）
+
+* **问题**：`Fc2MetadataConfig.source_deadline_seconds: float` 让 Pydantic 在 `parse_settings` 之前把 `"20"` 宽松转换成 `20.0`，`parse_settings` 因而再也看不到原始的非法类型。
+* **修复**：在 `Fc2MetadataConfig` 上增加 `@model_validator(mode="before")`——**先于 Pydantic 的类型强制转换**把宿主原始输入交给 `parse_settings`（`AdapterConfigError` 是 `ValueError`，被 Pydantic 包装为 `ValidationError`）。`parse_settings` 仍是配置语义的唯一权威，**没有复制任何规则**；字段本身保持 `float`（没有用会误拒合法 int 的 strict float）。程序化构造时 `sources` 里已校验的 `SourceEntry` 实例经 `model_dump()` 还原为朴素字典；原 `_reject_bool` 字段校验器已删除（由权威路径覆盖）。`after` 校验器保留（对模型实例的再校验）。
+* **共享验证矩阵** `tests/support/amane_config_matrix.py`（不 import amane / pydantic）：覆盖 `"20"`、`"20.0"`、`" 20 "`、`"1e1"`、`True`、`False`、`20`、`20.0`、`nan`、`inf`、`-inf`、`0`、负数、`>600`、`600`、`None`、`bytes`、`list`、`dict`、`Decimal` 以及完整的 `sources` 配置形态（共 **46 行**，由 `CONFIG_MATRIX` 的 deadline 行与 sources 行组成）。
+* **测试**：
+  * 主进程：`test_amane_settings.py` 对 `parse_settings` 逐行断言矩阵（accept / reject）+ 可强制转换原始字符串必须被 `parse_settings` 拒绝；
+  * `test_amane_architecture_guards.py`（+3）：`Fc2MetadataConfig` 恰有一个 `mode="before"` 模型校验器且委托 `parse_settings`；`source_deadline_seconds` 没有字段级重写、没有 strict-float 替代；
+  * **真实 Amane v0.15.0 宿主 H-04（新增 `raw_type_matrix`）**：对每一行，宿主模型 `Fc2MetadataConfig.model_validate`、宿主 `validate_plugin_config`、`parse_settings` 三者的裁决**相同**且等于期望（46/46）；`"20"` / `"20.0"` / `" 20 "` / `"1e1"` 同时经真实 `HotSettings` -> `validate_hot_settings` 路由被拒绝；`test_amane_host_witness_log.py` 机械验证该观察存在且完整。
+* **非空洞性（R1-NV-01，不是 M-18）**：在临时副本中**精确复现原缺陷**（保留原 `_reject_bool` 字段校验器、去掉 before 校验器，使只有字符串溜过去）：真实宿主 H-04 **FAIL**（`AssertionError: the host model must reject the coercible raw string '20'`），14/15；AST 守护 `test_host_config_model_hands_the_raw_input_to_parse_settings_before_pydantic_coercion` **FAIL**。另一变体（只去掉 before 校验器、连 bool 也被转换）：H-04 FAIL、同一 AST 守护 FAIL。**KILLED。**
+
+### P5-C1-L1-02 —— 引擎异常的原因链（Frozen 表 F）
+
+* **问题**：`AdapterRuntime.lookup` 的 `except Exception` 直接 `return AdapterFailure(...)`，`plugin.py` 之后才抛 `SourceError`，原始 `exc` 已丢失；合同要求 `raise SourceError(UNEXPECTED) from exc`。
+* **修复**：新增 `AdapterRuntime.lookup_with_cause(...) -> (outcome, cause)`：`engine.aggregate` 抛出非取消 `Exception` 时，返回 `AdapterFailure("unexpected", "internal adapter error: <类型名>")` **与原始异常对象**；`lookup()` 保持原签名（只返回 outcome）。`AdapterFailure` 的冻结形状 `(reason, detail)` **不变**；原因经**返回值**带出，无全局可变状态，并发安全；纯模块仍不 import amane。`plugin.py` 的 provider 经 `lookup_with_cause` 取得原因，并 `raise SourceError(FailureReason(...), detail=...) from cause`（无原因时 `from None`）；`SourceError.url` / `http_status` 恒为 `None`；`detail` 仍只含异常类型名。
+* **测试**：
+  * 主进程（`test_amane_outcome_status.py` +9）：`lookup_with_cause` 返回的**就是原始异常对象**（`cause is original`）、detail 不含 `SECRET`、`AdapterFailure` 字段形状不变、`lookup()` 行为不变、边界失败与 NoMatch 无 cause、并发 lookup 各自保留自己的异常、`KeyboardInterrupt` / `SystemExit` / `CancelledError` 原样传播；
+  * `test_amane_architecture_guards.py`：`plugin.py` 的 provider 只经 `lookup_with_cause`、唯一 `raise SourceError(...) from cause`、不设置 `url / http_status`；运行时 `except Exception as exc` 返回的元组第二项就是 `exc`；
+  * **真实宿主 H-08（新增 `engine_exception_boundary`）**：对真实 provider 边界（**不经**会消费异常的 `invoke_source`——`invoke_source` 只记录 reason / detail，无法观察 `__cause__`，故用 `adapter.fetch` 直接见证）：`engine.aggregate` 抛 `RuntimeError("SECRET MUST NOT LEAK")` -> 捕获的是 `SourceError`、`reason == UNEXPECTED`、`detail == "internal adapter error: RuntimeError"`、`url is None`、`http_status is None`、**`caught.__cause__ is original`**、`SECRET` 不在 `str / repr / detail / 记录的日志` 中；经真实 `invoke_source` 的记录为 `unexpected / internal adapter error: RuntimeError`；`CancelledError` / `KeyboardInterrupt` / `SystemExit` 原样传播（同一对象，不被转换）。
+* **非空洞性（R1-NV-02，不是 M-19）**：在临时副本中去掉 `raise ... from cause`：真实宿主 H-08 **FAIL**（`the SourceError must be raised from the ORIGINAL exception object`），14/15；AST 守护 `test_provider_boundary_raises_source_error_from_the_original_exception` **FAIL**。**KILLED。**
+
+### 已刷新 / 复用的 evidence
+
+* 重新生成：H-01..H-15（新 `P5_C1_HOST_WITNESS.json`，旧 tree hash 失效）；M-01..M-17（**17/17 killed**，未复用旧结果）；3.14 集合 B（最终树）与集合 C；3.12 `tests/amane_adapter` + `tests/contract`；三种收集顺序的全量与 40 项 skip 账本；E22 pre-import 见证。
+* 复用：3.14 集合 A（**REUSED BECAUSE `src/**` ZERO DIFF**，1833 passed；本轮另外重跑一次确认，`1833 passed in 30.92s`）。
+* **E2 / E10 对账**：Level 1 指出表 F 的“引擎异常 -> `SourceError(UNEXPECTED) from exc`”与 §11 的原始类型语义缺少最终边界测试。本 R1 补齐后，**E2（合同 -> 实现 -> 测试映射）与 E10（SUCCESS / PARTIAL / FAILED 映射）均为 SATISFIED — REVIEW REQUIRED**；E1..E28 全部仍完整（见 §2，每一项的状态均为 SATISFIED — REVIEW REQUIRED，**不声称整个 P5-C1 已 PASS**）。
+
+---
 
 ## 0. Pre-Level-1 Correction（P5-C1-PRE-L1-01 Frozen Bridge Constructor Mismatch）
 
@@ -60,7 +105,8 @@ P5-C1-PRE-L1-01 : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED
 | `897a75ef4cb5b90eb4129d30532322a186c4c5b0` | **S2** Core 调用与结果映射 |
 | `723af11dbfc74cd752b31a53fd089f38a8241978` | **S3** 端到端合同与证据（见证日志、打包、mutation、隔离） |
 | `f5afaa6faf8f9d9e415b3a56644a81605848d0b6` | 上一个 Review Candidate（仅新增 HANDOFF；**Owner 在 Level 1 之前发现 constructor mismatch，未进入 Level 1**） |
-| 本修复提交（`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C1_HANDOFF.md`；Parent = `f5afaa6…`） | **Correction Candidate = 新 Review Candidate Head**（adapter 实现修正 + 受影响测试 + 刷新的见证日志 + 本 HANDOFF；§2 起的证据均取自该提交的树） |
+| `7385ec06e1f4a35765cf6259bda409d7970886b5` | Pre-Level-1 Correction Candidate（Parent = `f5afaa6…`）= **Level 1 Candidate** —— 独立 Level 1 Review：**FAIL**（P5-C1-L1-01 / P5-C1-L1-02） |
+| 本 R1 提交（`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C1_HANDOFF.md`；Parent = `7385ec0…`） | **R1 Candidate = 新 Review Candidate Head**（统一 R1：adapter 实现 + 受影响测试 + 刷新的见证日志 + 本 HANDOFF；§2 起的证据均取自该提交的树） |
 
 * Amane：tag `v0.15.0`（annotated，tag 对象 `3292c957a092f85ddde1ba7462ffe9813827f4f1`），commit `45dff2159369883e028a296d775a4598836c1ddd`；检出位于仓库之外，状态干净；`pip install -e` 到 Python 3.14.7 的见证环境。
 * 环境：3.12 = 项目既有 `.venv`（Python 3.12.10，httpx 0.27.2，pytest 9.1.1）；3.14 = Python 3.14.7 + Amane v0.15.0 + pytest + `httpx>=0.27,<0.28`；Core 经 `PYTHONPATH=src`。Windows 11。
@@ -69,44 +115,44 @@ P5-C1-PRE-L1-01 : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED
 
 | ID | 结果 | 证据 |
 |---|---|---|
-| E1 | **PASS** | `git diff --name-only 10eba0b..HEAD`（S1-S3 + 本修正）共 43 个文件，全部 ⊆ 计划 §4.1；`src/**` diff 为空；`git diff --check` 干净；`pyproject.toml` 只改 `[tool.pytest.ini_options] pythonpath` 增加 `"adapters/amane"`；Contract / Plan / 治理 / Phase 4 / Phase 5 Entry 文档 / CLAUDE.md diff 为空 |
-| E2 | **PASS** | §4 的 nodeid 清单（附录 A）：每个合同条款至少一个测试 |
-| E3 | **PASS** | `adapters/amane/api_manifest/amane_v0.15.0_api_manifest.json`（生成自 `45dff21…`，3.14 上由 `tools/amane_api_manifest.py` 生成，sha256 `ce05be84…22f7c`）；`test_amane_api_manifest.py`（12）核对 adapter 使用的每个 `amane.plugin` 名字 / 构造器关键字 / `request` 关键字；H-01 真实 import 并重新生成清单与已提交清单逐字节相等 |
-| E4 | **PASS** | H-02（树与解压后的 zip 树的 descriptor 与合同 §9 逐项相等）、H-03（真实 `install_plugin_zip` 返回 `ffcc.fc2-metadata`，目录名 = id，重装与 `install_plugin_path` 成功）；`test_amane_zip_build.py`（14） |
-| E5 | **PASS** | `test_amane_number_boundary.py`（40）：B1-B5 每行；`file_path / raw_results` 不被读取（属性会抛 `AssertionError` 的 query 对象 + AST）；H-08 |
-| E6 | **PASS** | 同上：`[广告]FC2PPV-…`、`xxx@FC2PPV-…`、9 位数字、全角数字、空白、非 str、超长（256 / 257 边界）；全部委托 Core（AST：只 import `fc2_metadata_core.normalize` 与 `._outcome`，无字符串解析方法调用） |
-| E7 | **PASS** | `test_amane_bridge_response.py`（43）：头小写化与多值连接、charset 矩阵（utf-8 / shift_jis / euc-jp / 未知 / rot13 / base64 / zlib / hex / bz2 / idna / undefined / NUL；**不含 punycode**）、5 MiB 边界、外来响应 11 种；H-09 / H-07 使用真实 `curl_cffi.Response` |
-| E8 | **PASS** | `test_amane_bridge_errors.py`（24；含修正新增 2 条）：表 E 每行；用“消息被篡改”的异常证明不解析文本；`CancelledError`、`KeyboardInterrupt`、编程错误原样传播；AST：无 `except Exception/BaseException`、不读取 `.message/.detail/.args`；H-10 |
-| E9 | **PASS** | 三层口径：L1 桥 `get` 数 = S；L2 host attempts ≤ S×H；L3 network hops ≤ S×H×21。`test_amane_retry_bounds.py`（91）+ `test_amane_runtime_lifetime.py`（9）；H-09 在真实 v0.15.0 `WebClient` 上：状态码 200/403/404/429/503/500/599 × H∈{1,3,10} 每来源恰 1 个 attempt；`CurlError` / 超时 H=3 → 9、H=10 → 30（= S×H）；混合 2/来源；熔断打开后 0 次；`600` → `RequestError(http_error)`、1 attempt、通用 `HttpTransportError` 兜底（detail `=network_error`）；回环无限 302 + 真实 curl_cffi：S3·H3 = **189** 命中、S3·H1 = 63、S1·H10 = 210（均 = S×H×21，每 attempt 21）；`TooManyRedirects` 被按 H 重试 |
-| E10 | **PASS** | `test_amane_outcome_status.py`（11）+ H-08：PARTIAL 返回 metadata + 恰 1 条 WARNING；全 NOT_FOUND → `None`；混合 → `SourceError`；引擎异常 → `unexpected` 且 detail 仅含类型名 |
-| E11 | **PASS** | `test_amane_metadata_mapping.py`（36）：Core 16 字段与 `MediaMetadata` 18 字段（manifest）均有显式处置，守护测试穷举；`fanart_urls` 不出现在任何输出；URL 卫生过滤矩阵；H-07 黄金值（演员性别 `unknown`） |
-| E12 | **PASS** | `test_amane_narrowing.py`（14）：N-1 随配置顺序（3 种顺序得 3 种 URL）、N-2 恒为 canonical 数字且永不取 Core `external_ids`；`PYTHONHASHSEED` 0/1/2 无影响（`test_amane_determinism.py` 与 H-13） |
-| E13 | **PASS** | `test_amane_provenance.py`（4）：记录无内部 provenance 字段、detail / 日志词汇封闭；H-12 真实 `amane.aggregate`：`source_urls` / `external_ids` / `field_sources` 只以 `ffcc.fc2-metadata` 为键 |
-| E14 | **PASS** | `test_amane_error_mapping.py`（37）：`SourceErrorKind` **全部 16 个成员**逐一断言（15 个有映射 + `NOT_FOUND`）；未知 kind → `unexpected`；优先级在全部子集 / 排列下确定；detail 模板与长度上界；`AdapterFailure` 无 `url / http_status` 字段；H-08 真实 `invoke_source` 记录的 reason / detail |
-| E15 | **PASS** | `test_amane_cancellation.py`（7）+ H-11：真实 `invoke_source` 下 `CancelledError` 原样传播、不记录 outcome、governor 空闲、无遗留任务、host 请求被取消；调用方 `asyncio.timeout` 得 `TimeoutError` |
-| E16 | **PASS** | `test_amane_missing_core.py`（22）+ H-05：真实 `discover` → `failures` 且不注册、消息 = 冻结模板；`install_plugin_path` → `ValueError("插件导入失败: …")`；Core 版本过旧（缺公共名字）同模板；非 Core 的 `ImportError` 不被误报 |
-| E17 | **PASS** | 既有 `tests/contract`（237）全绿；新增 AST 守护：`src/**` 无人 import `amane` / `fc2_amane_adapter` |
-| E18 | **PASS** | `test_amane_architecture_guards.py`：无 `httpx / requests / aiohttp / curl_cffi / urllib3 / socket / http.client / urllib.request`，不 import `httpx_client`；M-11 被杀死 |
-| E19 | **PASS** | 静态 AST（无写文件 / 子进程 / `print` / `os`）+ `test_amane_no_side_effects.py`（3，运行前后文件系统 / 环境 / socket 活动）+ H-14（`data_dir` 仅出现宿主工厂自建的 `plugins/ffcc.fc2-metadata`；fetch 期间 socket 连接被封堵且零活动） |
-| E20 | **PASS** | `test_amane_determinism.py`（4：`PYTHONHASHSEED` 0/1/2 的子进程输出逐字节相同）+ H-13（进程内重复 3 次 + 3 个种子的子进程，payload sha256 `04647e95…e550`）；AST：映射模块不迭代 set，不 import 时钟 / 随机 |
-| E21 | **PASS** | M-01..M-17 全部被杀死（§6；修正后重新运行，未复用旧结果）；哨兵证明被测代码来自被篡改副本；恢复证明：工作树 `git status` 干净，原树测试全绿 |
-| E22 | **PASS（含如实记录）** | 三种收集顺序（§5.1，修正后重新运行）均 `8383 passed, 40 skipped`，计数一致；主进程从不 import `amane`（哨兵 + 子进程屏蔽 `amane` 后纯逻辑测试仍通过 + adapter / contract 树的收集不 import `amane`）；`tests/**` 静态无 `import amane`（host_scripts 除外）；新测试不写 `sys.modules`。**pre-import 见证（3.14 + 真实 Amane，先 `import amane.plugin` 再运行既有 `tests/contract`；修正后重新运行，结果与修正前相同）：3 failed / 234 passed（41.98s）**（`test_materialization_architecture.py::test_mapping_works_with_transport_nfo_publication_and_amane_blocked`、`test_nfo_architecture.py::test_explicit_import_of_fc2_organizer_nfo_works_and_renders_with_amane_blocked`、`test_publication_architecture.py::test_prepare_publication_runs_end_to_end_with_amane_blocked_at_runtime`）；对照组（同环境不预导入）237 passed。这是既有的 P5-ENTRY-CLOSURE-OBS-01（`sys.modules` 缓存使 `meta_path` blocker 失效）——属 Entry Closure 范围，**未修复**；P5-C1 新测试未加重 |
-| E23 | **PASS** | 3.12：`tests/amane_adapter` 474 passed；3.14 集合 A / B / C 见 §5.2 |
-| E24 | **PASS** | `architecture_guards + api_manifest + zip_build`：50 passed（3.12；architecture_guards 24 + api_manifest 12 + zip_build 14） |
-| E25 | **PASS** | `tests/contract`：237 passed（与基线一致） |
-| E26 | **PASS** | `pytest tests`：8383 passed, 40 skipped = baseline 7909 passed + 40 skipped + 474 新测试 |
-| E27 | **PASS** | 无新增 skip / xfail；3 种顺序的 `SKIPPED` 清单（`-rs`，22 行 / 共 40 项）与基线账本（同树排除 `tests/amane_adapter` 的 `-rs` 运行，7909 passed / 40 skipped）逐行一致（`cmp` 无差异；40 个 skip 全部是既有的 Windows / POSIX 平台 skip）；新测试 AST 无 skip / xfail |
-| E28 | **PASS** | §9 |
+| E1 | **SATISFIED — REVIEW REQUIRED** | `git diff --name-only 10eba0b..HEAD`（S1-S3 + Pre-L1 修正 + 本 R1）共 44 个文件，全部 ⊆ 计划 §4.1；`src/**` diff 为空；`git diff --check` 干净；`pyproject.toml` 只改 `[tool.pytest.ini_options] pythonpath` 增加 `"adapters/amane"`；Contract / Plan / 治理 / Phase 4 / Phase 5 Entry 文档 / CLAUDE.md diff 为空 |
+| E2 | **SATISFIED — REVIEW REQUIRED** | §4 的 nodeid 清单（附录 A，539 个）：每个合同条款至少一个测试；R1 新增：§11 原始类型矩阵（`test_amane_settings.py` + H-04）、表 F 的 `from exc`（`test_amane_outcome_status.py` + `test_amane_architecture_guards.py` + H-08） |
+| E3 | **SATISFIED — REVIEW REQUIRED** | `adapters/amane/api_manifest/amane_v0.15.0_api_manifest.json`（生成自 `45dff21…`，3.14 上由 `tools/amane_api_manifest.py` 生成，sha256 `ce05be84…22f7c`）；`test_amane_api_manifest.py`（12）核对 adapter 使用的每个 `amane.plugin` 名字 / 构造器关键字 / `request` 关键字；H-01 真实 import 并重新生成清单与已提交清单逐字节相等 |
+| E4 | **SATISFIED — REVIEW REQUIRED** | H-02（树与解压后的 zip 树的 descriptor 与合同 §9 逐项相等）、H-03（真实 `install_plugin_zip` 返回 `ffcc.fc2-metadata`，目录名 = id，重装与 `install_plugin_path` 成功）；`test_amane_zip_build.py`（14） |
+| E5 | **SATISFIED — REVIEW REQUIRED** | `test_amane_number_boundary.py`（40）+ 配置矩阵（`test_amane_settings.py` 94 条，含 R1 的 46 行共享矩阵）：B1-B5 每行；`file_path / raw_results` 不被读取（属性会抛 `AssertionError` 的 query 对象 + AST）；H-08 |
+| E6 | **SATISFIED — REVIEW REQUIRED** | 同上：`[广告]FC2PPV-…`、`xxx@FC2PPV-…`、9 位数字、全角数字、空白、非 str、超长（256 / 257 边界）；全部委托 Core（AST：只 import `fc2_metadata_core.normalize` 与 `._outcome`，无字符串解析方法调用） |
+| E7 | **SATISFIED — REVIEW REQUIRED** | `test_amane_bridge_response.py`（43）：头小写化与多值连接、charset 矩阵（utf-8 / shift_jis / euc-jp / 未知 / rot13 / base64 / zlib / hex / bz2 / idna / undefined / NUL；**不含 punycode**）、5 MiB 边界、外来响应 11 种；H-09 / H-07 使用真实 `curl_cffi.Response` |
+| E8 | **SATISFIED — REVIEW REQUIRED** | `test_amane_bridge_errors.py`（24；含修正新增 2 条）：表 E 每行；用“消息被篡改”的异常证明不解析文本；`CancelledError`、`KeyboardInterrupt`、编程错误原样传播；AST：无 `except Exception/BaseException`、不读取 `.message/.detail/.args`；H-10 |
+| E9 | **SATISFIED — REVIEW REQUIRED** | 三层口径：L1 桥 `get` 数 = S；L2 host attempts ≤ S×H；L3 network hops ≤ S×H×21。`test_amane_retry_bounds.py`（91）+ `test_amane_runtime_lifetime.py`（9）；H-09 在真实 v0.15.0 `WebClient` 上：状态码 200/403/404/429/503/500/599 × H∈{1,3,10} 每来源恰 1 个 attempt；`CurlError` / 超时 H=3 → 9、H=10 → 30（= S×H）；混合 2/来源；熔断打开后 0 次；`600` → `RequestError(http_error)`、1 attempt、通用 `HttpTransportError` 兜底（detail `=network_error`）；回环无限 302 + 真实 curl_cffi：S3·H3 = **189** 命中、S3·H1 = 63、S1·H10 = 210（均 = S×H×21，每 attempt 21）；`TooManyRedirects` 被按 H 重试 |
+| E10 | **SATISFIED — REVIEW REQUIRED** | `test_amane_outcome_status.py`（20；R1 新增 9 条：原始异常对象随返回值带出、并发不串线、取消 / 致命异常原样传播）+ H-08（R1 新增 `engine_exception_boundary`：provider 边界 `SourceError.__cause__ is original`）：PARTIAL 返回 metadata + 恰 1 条 WARNING；全 NOT_FOUND → `None`；混合 → `SourceError`；引擎异常 → `unexpected` 且 detail 仅含类型名 |
+| E11 | **SATISFIED — REVIEW REQUIRED** | `test_amane_metadata_mapping.py`（36）：Core 16 字段与 `MediaMetadata` 18 字段（manifest）均有显式处置，守护测试穷举；`fanart_urls` 不出现在任何输出；URL 卫生过滤矩阵；H-07 黄金值（演员性别 `unknown`） |
+| E12 | **SATISFIED — REVIEW REQUIRED** | `test_amane_narrowing.py`（14）：N-1 随配置顺序（3 种顺序得 3 种 URL）、N-2 恒为 canonical 数字且永不取 Core `external_ids`；`PYTHONHASHSEED` 0/1/2 无影响（`test_amane_determinism.py` 与 H-13） |
+| E13 | **SATISFIED — REVIEW REQUIRED** | `test_amane_provenance.py`（4）：记录无内部 provenance 字段、detail / 日志词汇封闭；H-12 真实 `amane.aggregate`：`source_urls` / `external_ids` / `field_sources` 只以 `ffcc.fc2-metadata` 为键 |
+| E14 | **SATISFIED — REVIEW REQUIRED** | `test_amane_error_mapping.py`（37）：`SourceErrorKind` **全部 16 个成员**逐一断言（15 个有映射 + `NOT_FOUND`）；未知 kind → `unexpected`；优先级在全部子集 / 排列下确定；detail 模板与长度上界；`AdapterFailure` 无 `url / http_status` 字段；H-08 真实 `invoke_source` 记录的 reason / detail |
+| E15 | **SATISFIED — REVIEW REQUIRED** | `test_amane_cancellation.py`（7）+ H-11：真实 `invoke_source` 下 `CancelledError` 原样传播、不记录 outcome、governor 空闲、无遗留任务、host 请求被取消；调用方 `asyncio.timeout` 得 `TimeoutError` |
+| E16 | **SATISFIED — REVIEW REQUIRED** | `test_amane_missing_core.py`（22）+ H-05：真实 `discover` → `failures` 且不注册、消息 = 冻结模板；`install_plugin_path` → `ValueError("插件导入失败: …")`；Core 版本过旧（缺公共名字）同模板；非 Core 的 `ImportError` 不被误报 |
+| E17 | **SATISFIED — REVIEW REQUIRED** | 既有 `tests/contract`（237）全绿；新增 AST 守护：`src/**` 无人 import `amane` / `fc2_amane_adapter` |
+| E18 | **SATISFIED — REVIEW REQUIRED** | `test_amane_architecture_guards.py`：无 `httpx / requests / aiohttp / curl_cffi / urllib3 / socket / http.client / urllib.request`，不 import `httpx_client`；M-11 被杀死 |
+| E19 | **SATISFIED — REVIEW REQUIRED** | 静态 AST（无写文件 / 子进程 / `print` / `os`）+ `test_amane_no_side_effects.py`（3，运行前后文件系统 / 环境 / socket 活动）+ H-14（`data_dir` 仅出现宿主工厂自建的 `plugins/ffcc.fc2-metadata`；fetch 期间 socket 连接被封堵且零活动） |
+| E20 | **SATISFIED — REVIEW REQUIRED** | `test_amane_determinism.py`（4：`PYTHONHASHSEED` 0/1/2 的子进程输出逐字节相同）+ H-13（进程内重复 3 次 + 3 个种子的子进程，payload sha256 `04647e95…e550`）；AST：映射模块不迭代 set，不 import 时钟 / 随机 |
+| E21 | **SATISFIED — REVIEW REQUIRED** | M-01..M-17 全部被杀死（§6；R1 后再次重新运行，未复用旧结果）；另有 R1 非空洞性见证 R1-NV-01 / R1-NV-02（§6，均 KILLED，不是 M-18 / M-19）；哨兵证明被测代码来自被篡改副本；恢复证明：工作树 `git status` 干净，原树测试全绿 |
+| E22 | **SATISFIED — REVIEW REQUIRED（含如实记录）** | 三种收集顺序（§5.1，R1 后重新运行）均 `8448 passed, 40 skipped`，计数一致；主进程从不 import `amane`（哨兵 + 子进程屏蔽 `amane` 后纯逻辑测试仍通过 + adapter / contract 树的收集不 import `amane`）；`tests/**` 静态无 `import amane`（host_scripts 除外）；新测试不写 `sys.modules`。**pre-import 见证（3.14 + 真实 Amane，先 `import amane.plugin` 再运行既有 `tests/contract`；R1 后重新运行，失败集合没有扩大）：3 failed / 234 passed**（`test_materialization_architecture.py::test_mapping_works_with_transport_nfo_publication_and_amane_blocked`、`test_nfo_architecture.py::test_explicit_import_of_fc2_organizer_nfo_works_and_renders_with_amane_blocked`、`test_publication_architecture.py::test_prepare_publication_runs_end_to_end_with_amane_blocked_at_runtime`）；对照组（同环境不预导入）237 passed。这是既有的 P5-ENTRY-CLOSURE-OBS-01（`sys.modules` 缓存使 `meta_path` blocker 失效）——属 Entry Closure 范围，**未修复**；P5-C1 新测试未加重 |
+| E23 | **SATISFIED — REVIEW REQUIRED** | 3.12：`tests/amane_adapter` 539 passed；3.14 集合 A / B / C 见 §5.2 |
+| E24 | **SATISFIED — REVIEW REQUIRED** | `architecture_guards + api_manifest + zip_build`：53 passed（3.12；architecture_guards 27 + api_manifest 12 + zip_build 14） |
+| E25 | **SATISFIED — REVIEW REQUIRED** | `tests/contract`：237 passed（与基线一致） |
+| E26 | **SATISFIED — REVIEW REQUIRED** | `pytest tests`：8448 passed, 40 skipped = baseline 7909 passed + 40 skipped + 539 新测试 |
+| E27 | **SATISFIED — REVIEW REQUIRED** | 无新增 skip / xfail；3 种顺序的 `SKIPPED` 清单（`-rs`，22 行 / 共 40 项）与基线账本（同树排除 `tests/amane_adapter` 的 `-rs` 运行，7909 passed / 40 skipped）逐行一致（`cmp` 无差异；40 个 skip 全部是既有的 Windows / POSIX 平台 skip）；新测试 AST 无 skip / xfail |
+| E28 | **SATISFIED — REVIEW REQUIRED** | §9 |
 
 ## 3. 测试数字
 
 | 环境 / 范围 | collected | passed | skipped | failed | error | xfail |
 |---|---|---|---|---|---|---|
 | S1 baseline（3.12，`pytest tests`，HEAD = `10eba0b`） | 7949 | 7909 | 40 | 0 | 0 | 0 |
-| 最终顺序 1（默认；3.12） | 8423 | 8383 | 40 | 0 | 0 | 0 |
-| 最终顺序 2（adapter 最先；3.12） | 8423 | 8383 | 40 | 0 | 0 | 0 |
-| 最终顺序 3（adapter 最后；3.12） | 8423 | 8383 | 40 | 0 | 0 | 0 |
-| `tests/amane_adapter`（3.12） | 474 | 474 | 0 | 0 | 0 | 0 |
+| 最终顺序 1（默认；3.12） | 8488 | 8448 | 40 | 0 | 0 | 0 |
+| 最终顺序 2（adapter 最先；3.12） | 8488 | 8448 | 40 | 0 | 0 | 0 |
+| 最终顺序 3（adapter 最后；3.12） | 8488 | 8448 | 40 | 0 | 0 | 0 |
+| `tests/amane_adapter`（3.12） | 539 | 539 | 0 | 0 | 0 | 0 |
 | `tests/contract`（3.12） | 237 | 237 | 0 | 0 | 0 | 0 |
 
 没有 transient failure；所有运行第一次即全绿（因此没有“第二次才通过”被隐藏的情况）。开发过程中遇到的失败均为测试侧问题，已在 §10 如实列出。
@@ -116,13 +162,13 @@ P5-C1-PRE-L1-01 : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED
 | 合同条款 | 实现 | 测试文件（`tests/amane_adapter/`；括号为用例数） | Evidence |
 |---|---|---|---|
 | 表 A / I2 / I26 | `plugin.py`；manifest | `test_amane_api_manifest.py`（12） | E3 |
-| §8 布局、I1 / I4 / I14 / I21 / I24 / I25 | 整个插件树 | `test_amane_architecture_guards.py`（24） | E17 E18 E19 |
-| 表 C / §11 | `_settings.py` + `plugin.py` 模型 | `test_amane_settings.py`（43） | E5 E23 |
+| §8 布局、I1 / I4 / I14 / I21 / I24 / I25 | 整个插件树 | `test_amane_architecture_guards.py`（27） | E17 E18 E19 |
+| 表 C / §11 | `_settings.py` + `plugin.py` 模型 | `test_amane_settings.py`（94） | E5 E23 |
 | 表 B / §10 | `_number.py` | `test_amane_number_boundary.py`（40） | E5 E6 |
 | 表 D / §13 | `_bridge.py` | `test_amane_bridge_response.py`（43） | E7 |
 | 表 E / §14 | `_bridge.py` | `test_amane_bridge_errors.py`（24） | E8 |
 | §15 | `_runtime.py` `_bridge.py` | `test_amane_retry_bounds.py`（91） | E9 |
-| 表 F / §16 | `_outcome.py` `_runtime.py` | `test_amane_outcome_status.py`（11） | E10 |
+| 表 F / §16 | `_outcome.py` `_runtime.py` | `test_amane_outcome_status.py`（20） | E10 |
 | 表 G / §17 | `_outcome.py` | `test_amane_error_mapping.py`（37） | E14 |
 | 表 H / §19.1-19.2 | `_outcome.py` `plugin.py` | `test_amane_metadata_mapping.py`（36） | E11 |
 | §19.3 | `_outcome.py` | `test_amane_narrowing.py`（14） | E12 |
@@ -136,38 +182,38 @@ P5-C1-PRE-L1-01 : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED
 | §25.3 | `_runtime.py` `_bridge.py` | `test_amane_py314_core_path.py`（1） | E23 E24 |
 | §25.1 | — | `test_amane_isolation.py`（5） | E22 |
 | 打包骨架 | `tools/build_amane_plugin_zip.py` | `test_amane_zip_build.py`（14） | E4 |
-| 见证日志新鲜度 | `tools/run_amane_host_witness.py` | `test_amane_host_witness_log.py`（6） | E4 E7-E9 E13 E15 E16 |
+| 见证日志新鲜度 | `tools/run_amane_host_witness.py` | `test_amane_host_witness_log.py`（8） | E4 E7-E9 E13 E15 E16 |
 | mutation | 整个插件树 | `test_amane_mutation_nonvacuity.py`（19） | E21 |
 
 非测试模块（下划线前缀，不被 pytest 收集）：`_amane_scenarios.py`、`_determinism_probe.py`；`host_scripts/{h_common,h_scenarios}.py` 只在真实宿主子进程内执行。
 
 ## 5. 命令与原始输出摘录
 
-### 5.1 3.12 全量（三种收集顺序 + 基线账本；`-rs`；修正后重新运行）
+### 5.1 3.12 全量（三种收集顺序 + 基线账本；`-rs`；R1 后重新运行）
 
 ```text
-基线账本（同树，--ignore=tests/amane_adapter）                                  -> 7909 passed, 40 skipped in 523.86s
-pytest tests -q                                                              -> 8383 passed, 40 skipped in 617.02s
-pytest tests/amane_adapter tests/contract tests/phase4_acceptance tests/unit -q -> 8383 passed, 40 skipped in 618.04s
-pytest tests/contract tests/phase4_acceptance tests/unit tests/amane_adapter -q -> 8383 passed, 40 skipped in 665.28s
+基线账本（同树，--ignore=tests/amane_adapter）                                  -> 7909 passed, 40 skipped in 3436.15s
+pytest tests -q                                                              -> 8448 passed, 40 skipped in 557.84s
+pytest tests/amane_adapter tests/contract tests/phase4_acceptance tests/unit -q -> 8448 passed, 40 skipped in 603.96s
+pytest tests/contract tests/phase4_acceptance tests/unit tests/amane_adapter -q -> 8448 passed, 40 skipped in 595.72s
 ```
 
-三种顺序的 `SKIPPED` 清单（22 行，合计 40 项）与基线账本 `cmp` 逐行一致；0 failed / 0 error / 0 xfail。
-单独运行：`tests/amane_adapter` + `tests/contract` -> 711 passed（474 + 237）。
+三种顺序的 `SKIPPED` 清单（22 行，合计 40 项）与基线账本逐行一致；0 failed / 0 error / 0 xfail。
+单独运行：`tests/amane_adapter` -> 539 passed（81.70s）；`tests/contract` -> 237 passed（11.66s）。
 
 ### 5.2 Python 3.14（冻结命令；显式路径；无 `--deselect / --ignore / -k / -m / --lf`）
 
 | 集合 | 结果 |
 |---|---|
-| **A** Core runtime path（30 个显式路径） | **REUSED BECAUSE `src/**` ZERO DIFF**（`git diff 98ad8eb..HEAD -- fc2-organizer/src` 为空）：1833 passed；本轮另外重跑一次确认 `1833 passed in 31.98s`（0 failed / error / skipped / xfailed） |
-| **B** adapter 22 个显式文件（修正后重新运行最终树） | 3.12 collected **455**；3.14 collected **455**（相等）；3.14 `455 passed in 6.89s`（0 skip / xfail）；冻结节点 `test_amane_py314_core_path.py::test_core_runtime_objects_and_one_fake_bridge_aggregate` 出现并 PASSED |
-| **C** 真实宿主见证（修正后重新生成） | `tools/run_amane_host_witness.py` 3.14.7：**H-01..H-15 全部 passed（15/15）**；`amane.commit == 45dff2159369883e028a296d775a4598836c1ddd`；两个树哈希与仓库一致（由 B 中的 `test_amane_host_witness_log.py` 在 3.12 与 3.14 各验证一次）；重跑日志字节完全相同 |
+| **A** Core runtime path（30 个显式路径） | **REUSED BECAUSE `src/**` ZERO DIFF**（`git diff 98ad8eb..HEAD -- fc2-organizer/src` 为空）：1833 passed；本轮另外重跑确认（**非冻结要求**）：1 次独立重跑 + 3 次并发重跑均为 `1833 passed in ~30.92s`（0 failed / error / skipped / xfailed）。**如实记录**：此前还有一次确认性重跑出现 `1 failed, 1832 passed in 104.71s`——该次只截取了汇总行（未带 `-rf`），失败用例名**未能保留**，随后 4 次重跑（含 3 次并发负载下）均无法复现；`src/**` 零 diff、Set A 不含任何本 R1 改动的代码，属一次未定位的瞬时波动（耗时是常规的 3 倍，机器当时明显繁忙）；按冻结规则 Set A 为 REUSED，不依赖该次重跑。 |
+| **B** adapter 22 个显式文件（R1 后重新运行最终树） | 3.12 collected **520**；3.14 collected **520**（相等）；3.14 `520 passed in 7.08s`（0 failed / error / skip / xfail）；冻结节点 `test_amane_py314_core_path.py::test_core_runtime_objects_and_one_fake_bridge_aggregate` 出现并 PASSED |
+| **C** 真实宿主见证（R1 后重新生成） | `tools/run_amane_host_witness.py` 3.14.7：**H-01..H-15 全部 passed（15/15）**；`amane.commit == 45dff2159369883e028a296d775a4598836c1ddd`；两个树哈希与仓库一致（由 B 中的 `test_amane_host_witness_log.py` 在 3.12 与 3.14 各验证一次）；重跑日志字节完全相同 |
 | **D** 明确排除（不属于 P5-C1 门） | 未参与任何筛选；`HttpxTransport` 的 punycode 用例与 Phase 4 的 `'/x'` 收集期失败按 L-07 仅作信息记录（`PYTHONPATH=src` 下 `pytest --collect-only tests` 在 3.14 的唯一收集错误即 `tests/unit/execution/test_execution_manifest.py`；本轮没有为它调整任何命令或判据）。为此 `test_amane_isolation.py` 的收集型测试把范围限定为 adapter 与 contract 两棵树（均可在 3.12 / 3.14 收集），整个 `tests` 的收集由 3.12 全量覆盖 |
 
 ## 6. Mutation / non-vacuity（M-01..M-17；工具：`python tests/amane_adapter/test_amane_mutation_nonvacuity.py`）
 
 方法：副本 + 恰好一处补丁 + `-o pythonpath=<副本> src tests` + 哨兵（`test_the_adapter_under_test_is_the_expected_tree`）；每个补丁恰好应用 1 次；失败数 = 子进程内被该补丁导致的失败用例数。
-**Pre-Level-1 Correction 后已完整重新运行 M-01..M-17（17/17 killed；每个 `applied_once = True`、`sentinel_ok = True`；不复用旧结果）**；下表为本次重跑的失败数与分布（与修正前一致）。M-01（bridge `ok_statuses`）、M-11（独立 HTTP 客户端 / import guard）、M-16（Amane import 边界）均被杀死；修正没有触及任何 mutant 的补丁文本。
+**R1 后再次完整重新运行 M-01..M-17（17/17 killed；每个 `applied_once = True`、`sentinel_ok = True`；不复用旧结果）**；下表为本次重跑的失败数与分布（与修正前一致）。M-01（bridge `ok_statuses`）、M-11（独立 HTTP 客户端 / import guard）、M-16（Amane import 边界）均被杀死；修正没有触及任何 mutant 的补丁文本。
 
 | ID | 变异 | 失败数 | 杀死它的指定测试 |
 |---|---|---|---|
@@ -189,6 +235,14 @@ pytest tests/contract tests/phase4_acceptance tests/unit tests/amane_adapter -q 
 | M-16 | `plugin.py` 非公共 Amane import | 1 | `api_manifest`（1） |
 | M-17 | 纯模块写文件 | 1 | `architecture_guards`（1） |
 
+**R1 非空洞性见证（临时副本；不是 M-18 / M-19，不修改冻结的 mutation 编号）**
+
+| ID | 临时变异 | 必须失败的新回归 | 结果 |
+|---|---|---|---|
+| R1-NV-01 | 精确复现原缺陷：保留旧 `_reject_bool` 字段校验器、去掉 `mode="before"` 校验器（只有字符串被 Pydantic 先转换） | 真实宿主 H-04（`the host model must reject the coercible raw string '20'`，14/15）+ AST 守护 `test_host_config_model_hands_the_raw_input_to_parse_settings_before_pydantic_coercion` | **KILLED** |
+| R1-NV-01′ | 变体：去掉 before 校验器（连 bool 也被转换） | H-04 FAIL（`accepted an invalid configuration: {'source_deadline_seconds': True}`）+ 同一 AST 守护 | **KILLED** |
+| R1-NV-02 | 去掉 `raise SourceError(...) from cause` 的 `from cause` | 真实宿主 H-08（`the SourceError must be raised from the ORIGINAL exception object`，14/15）+ AST 守护 `test_provider_boundary_raises_source_error_from_the_original_exception` | **KILLED** |
+
 **重要发现（如实记录）**：首次运行时 M-11 / M-16 / M-17 **存活**——AST 守护 / manifest / side-effect 测试检查的是仓库原树，而不是被测模块所在的树。已修复测试（这些测试现在检查“被导入模块所在的树”，哨兵测试证明其正确性），重跑后 17/17 全部被杀死。未改动任何实现。恢复证明：运行后 `git status --porcelain` 为空，原树测试全绿（§3）。
 
 ## 7. 真实宿主见证 H-01..H-15（`docs/acceptance/evidence/P5_C1_HOST_WITNESS.json`）
@@ -197,12 +251,12 @@ pytest tests/contract tests/phase4_acceptance tests/unit tests/amane_adapter -q 
 |---|---|
 | H-01 | Python 3.14.7；amane 0.15.0 / `45dff21…`；检出干净且 `amane` 从该检出导入；重新生成的 API 清单与已提交清单逐字节相同；35 个 `amane.plugin.__all__` 名字可导入 |
 | H-02 | 原树与解压后的 zip 树：descriptor 与合同 §9 逐项相等；配置 JSON Schema 字段 `{base_url, enabled, id, source_deadline_seconds, sources}` 无密钥类名；兄弟模块以 `amane_ext_ffcc_d_fc2_h_metadata._xxx` 作为包成员加载；无 `__init__.py` |
-| H-03 | 真实 `install_plugin_zip` → `ffcc.fc2-metadata`；zip 确定性（sha256 `20c78194…b5a7cf`）；重装替换；`install_plugin_path` 成功；无 staging 残留 |
-| H-04 | 6 个合法配置通过；18 个非法配置被 Pydantic 拒绝；`HotSettings` 路由：`content_routes[fc2]` 与 `field_priority[title]` 接受，路由到 `censored`、`field_priority[directors]`、非法插件配置被拒绝 |
+| H-03 | 真实 `install_plugin_zip` → `ffcc.fc2-metadata`；zip 确定性（sha256 `63d9c6d2…ced520`）；重装替换；`install_plugin_path` 成功；无 staging 残留 |
+| H-04 | **R1 新增 `raw_type_matrix`（46 行）：宿主模型 == `validate_plugin_config` == `parse_settings` == 期望（每行）；`"20"` / `"20.0"` / `" 20 "` / `"1e1"` 被宿主模型、`validate_plugin_config` 与真实 `HotSettings` 路由拒绝**；6 个合法配置通过；18 个非法配置被 Pydantic 拒绝；`HotSettings` 路由：`content_routes[fc2]` 与 `field_priority[title]` 接受，路由到 `censored`、`field_priority[directors]`、非法插件配置被拒绝 |
 | H-05 | Core 缺失：`discover` → `failures == [固定模板]`、不注册；`install_plugin_path` → `ValueError("插件导入失败: …")`；Core 过旧、非 Core `ImportError`、Core 可 import 四种情形各自符合合同 |
 | H-06 | 真实 `CrawlerFactory` 缓存并复用 provider；engine / governor / bridge 对象身份在 3 次 fetch 前后不变；4 种合法配置 `build()` 不抛；非法配置使来源不可用而不使工厂崩溃 |
 | H-07 | 真实 `MediaMetadata` 与黄金值逐字段相等（标题、发布日期 `2026-09-19`、runtime 78、publisher、演员性别 `unknown`、`source_url`、`external_id=4979299`、`extrafanart=[]`、无 `fanart_urls`） |
-| H-08 | 真实 `invoke_source`：SUCCESS→OK；PARTIAL→OK + 恰 1 条 WARNING；全 NOT_FOUND→`None`（`no_usable_metadata`）；混合→`timeout`；非 FC2 / 缺号 / 非 fc2 类型 / 9 位数字→`None` 且 0 请求；外来 query→`unexpected` / `invalid search query`；403 / 429 / 500 / 503 / 418 / 超时 / `CurlError` / 600 / rot13 charset / >5 MiB / 来源 deadline / 熔断打开的 reason 与 detail 全部等于合同 |
+| H-08 | **R1 新增 `engine_exception_boundary`：provider 边界 `SourceError(UNEXPECTED, 'internal adapter error: RuntimeError')`，`__cause__ is original`，`url` / `http_status` 为 `None`，秘密不在 detail / 日志；`CancelledError` / `KeyboardInterrupt` / `SystemExit` 原样传播**；真实 `invoke_source`：SUCCESS→OK；PARTIAL→OK + 恰 1 条 WARNING；全 NOT_FOUND→`None`（`no_usable_metadata`）；混合→`timeout`；非 FC2 / 缺号 / 非 fc2 类型 / 9 位数字→`None` 且 0 请求；外来 query→`unexpected` / `invalid search query`；403 / 429 / 500 / 503 / 418 / 超时 / `CurlError` / 600 / rot13 charset / >5 MiB / 来源 deadline / 熔断打开的 reason 与 detail 全部等于合同 |
 | H-09 | 见 E9：L2 与 L3 的逐项数字与 `S×H`、`S×H×21` 上界；`599` 为普通响应、`600` 走通用兜底 |
 | H-10 | **`bridge_wiring`（修正后新增）**：生产桥类构造器 `(self, web_client, *, clock=time.monotonic)`、子类未覆盖构造器、`host_request_error_types == (RequestError,)`、`host_source_error_types == (SourceError,)`、基类默认 `()`；`timeout`→timeout/`timeout`；`CurlError`→network/`connection_error`；`unexpected`→network/`network_error`（宿主不重试，1 attempt / 来源）；`600`→同上；重定向超限→network/`connection_error`（**不是** `redirect_error`） |
 | H-11 | 取消 / 超时见 E15 |
@@ -211,7 +265,7 @@ pytest tests/contract tests/phase4_acceptance tests/unit tests/amane_adapter -q 
 | H-14 | 见 E19 |
 | H-15 | `max_retries = 0`：0 个 host attempt；所有来源 `connection_error`；`FAILED / network`；确定性 |
 
-证据哈希（修正后重新生成；重跑字节完全相同）：**Host Witness SHA-256 = `ee1637d9f8ab7d7910943cdd4a335535228029c19a9bdfd9d779e6fd18329e51`**；`adapter_tree_sha256 = 38eeb12e61231f9980a6d5b844c0793873b56318f29463873da14808ca342377`（旧值 `df2e7a12…` 已失效）；`core_tree_sha256 = 6077cd6739424848137f2b8a1d6c37d20cc9cb3185cc94df07774169b3fda026`（未变，`src/**` 零 diff）；H-13 payload sha256 `04647e95…e550`（未变）；H-03 zip sha256 `20c781941ff2f732a78a72fdf31bce793756c8bcd9e44bf0fcac93f711b5a7cf`。（哈希对 `.py` 做 LF 规范化。）
+证据哈希（R1 后重新生成；重跑字节完全相同）：**Host Witness SHA-256 = `920cec8bd9b137e2e83e8cc1807c626568b2182a77c5c8177aa62e603ff5da58`**；`adapter_tree_sha256 = 9fe3dc3b9e815ec3768eec636db6747a68192d97112ea42e9a8545440cb40f82`（上一个候选的 `38eeb12e…` 已失效）；`core_tree_sha256 = 6077cd6739424848137f2b8a1d6c37d20cc9cb3185cc94df07774169b3fda026`（未变，`src/**` 零 diff）；H-13 payload sha256 `04647e95…e550`（未变）；H-03 zip sha256 `63d9c6d2f482d3ba4bb79ea0dda004537a808334294d72366d527524edced520`。（哈希对 `.py` 做 LF 规范化。）
 
 独立 Reviewer 必须以计划 §5.3 的命令重跑见证并比对：
 
@@ -263,26 +317,29 @@ L-01..L-15 全部按合同记录且未被改变；本轮实测补充：
 4. `tests/amane_adapter/` 下新增两个下划线前缀的非测试 helper（`_amane_scenarios.py`、`_determinism_probe.py`，位于计划 §4.1 允许的 `tests/amane_adapter/**`）；守护测试断言其集合恰好如此。
 5. 测试侧问题（均已修复，无实现改动）：`FakeWebClient.add` 是追加语义，新增 `replace`；mutation 子进程的 `-o pythonpath` 必须使用正斜杠（pytest 用 shlex 切分）；AST / manifest / side-effect 测试曾检查仓库原树而非被测树（导致 M-11/M-16/M-17 初始存活，见 §6）；`sys.modules` 守护最初把只读的哨兵断言也当作篡改，现只禁止清理 / 替换 / 注入；见证场景中 `FakeRecorder` 需实现 `record_http`（真实 `WebClient` 经 ContextVar 调用 Recorder）；H-13 的子进程 stdout 含宿主 structlog 日志，只比较标记行。
 6. 3.14 的 `test_amane_isolation.py` 收集型测试范围限定为 adapter + contract 两棵树（原因见 §5.2 D）。
-7. 行尾：仓库 `core.autocrlf=true`，新文件以 LF 提交；树哈希与 zip 内容都对 `.py` 做 LF 规范化，因此不依赖检出的行尾设置。
+7. （R1）`test_plugin_py_is_the_only_module_allowed_amane_and_pydantic` 的上界集合增加标准库 `collections`（`plugin.py` 只用 `collections.abc.Mapping` 做原始输入的类型判断；`FORBIDDEN_ROOTS` 检查完全保留）；共享配置矩阵放在 `tests/support/amane_config_matrix.py`（不 import amane / pydantic；主进程测试与真实宿主 H-04 共用）；因 pydantic 与 amane 不得出现在主进程，`Fc2MetadataConfig` 与 provider 边界的**行为**由真实宿主 H-04 / H-08 见证，主进程以 AST 守护 + 见证日志校验测试覆盖。
+8. 行尾：仓库 `core.autocrlf=true`，新文件以 LF 提交；树哈希与 zip 内容都对 `.py` 做 LF 规范化，因此不依赖检出的行尾设置。
 
 ## 11. 状态
 
 ```text
-P5-C1 Implementation    : COMPLETE CANDIDATE（Correction Candidate；取代 f5afaa6）
-P5-C1                   : READY FOR LEVEL 1 REVIEW
-P5-C1-PRE-L1-01         : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED
+P5-C1 Implementation    : COMPLETE CANDIDATE（Unified R1 Candidate；取代 7385ec0）
+P5-C1-L1-01             : REMEDIATED — REVIEW REQUIRED
+P5-C1-L1-02             : REMEDIATED — REVIEW REQUIRED
+P5-C1-PRE-L1-01         : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED（历史保留；见 §0）
+P5-C1                   : R1 CANDIDATE — INCREMENTAL LEVEL 1 CLOSURE REVIEW REQUIRED
 Risk Class              : B
 New Architecture Blocker: NONE
 Risk Escalation         : NONE
 src Diff                : NONE
 Contract / Plan Diff    : NONE
-Next                    : P5-C1 INDEPENDENT LEVEL 1 REVIEW（Reviewer 必须自行重跑 §7 的见证命令与计划 §5.3 的 3.14 集合 A / B）
+Next                    : P5-C1 R1 INCREMENTAL LEVEL 1 CLOSURE REVIEW（只复查 P5-C1-L1-01 / P5-C1-L1-02 与 direct regression；Reviewer 必须自行重跑 §7 的见证命令与计划 §5.3 的 3.14 集合 A / B）
 DO NOT START P5-C2
 ```
 
 ---
 
-## 附录 A —— `tests/amane_adapter` 全部 nodeid（474；合同映射见 §4）
+## 附录 A —— `tests/amane_adapter` 全部 nodeid（539；合同映射见 §4）
 
 ```text
 tests/amane_adapter/test_amane_api_manifest.py::test_manifest_is_generated_from_exact_v0_15_0
@@ -316,6 +373,9 @@ tests/amane_adapter/test_amane_architecture_guards.py::test_bridge_constructor_s
 tests/amane_adapter/test_amane_architecture_guards.py::test_removed_constructor_parameters_never_reappear_in_production_code
 tests/amane_adapter/test_amane_architecture_guards.py::test_bridge_exception_handlers_are_exact_never_broad
 tests/amane_adapter/test_amane_architecture_guards.py::test_production_plugin_wires_the_exact_host_exceptions_through_a_private_subclass
+tests/amane_adapter/test_amane_architecture_guards.py::test_host_config_model_hands_the_raw_input_to_parse_settings_before_pydantic_coercion
+tests/amane_adapter/test_amane_architecture_guards.py::test_provider_boundary_raises_source_error_from_the_original_exception
+tests/amane_adapter/test_amane_architecture_guards.py::test_runtime_returns_the_original_exception_object_not_a_copy
 tests/amane_adapter/test_amane_architecture_guards.py::test_no_test_imports_amane_except_host_scripts
 tests/amane_adapter/test_amane_architecture_guards.py::test_new_tests_never_clear_replace_or_inject_sys_modules_or_stub_amane
 tests/amane_adapter/test_amane_architecture_guards.py::test_new_tests_have_no_skip_or_xfail
@@ -442,6 +502,8 @@ tests/amane_adapter/test_amane_host_witness_log.py::test_log_records_the_exact_a
 tests/amane_adapter/test_amane_host_witness_log.py::test_tree_hashes_equal_the_current_repository_state
 tests/amane_adapter/test_amane_host_witness_log.py::test_log_is_canonical_reproducible_output_without_clock_or_environment_data
 tests/amane_adapter/test_amane_host_witness_log.py::test_key_witness_observations_match_the_frozen_contract
+tests/amane_adapter/test_amane_host_witness_log.py::test_h04_witnesses_the_raw_type_matrix_and_host_parser_parity_on_the_real_host
+tests/amane_adapter/test_amane_host_witness_log.py::test_h08_witnesses_the_original_exception_cause_at_the_provider_boundary
 tests/amane_adapter/test_amane_isolation.py::test_the_main_process_never_imported_amane
 tests/amane_adapter/test_amane_isolation.py::test_host_scripts_were_never_imported_by_pytest
 tests/amane_adapter/test_amane_isolation.py::test_collecting_the_adapter_and_contract_test_trees_never_imports_amane
@@ -597,6 +659,15 @@ tests/amane_adapter/test_amane_outcome_status.py::test_foreign_number_is_an_unex
 tests/amane_adapter/test_amane_outcome_status.py::test_an_engine_exception_becomes_a_bounded_unexpected_failure_naming_only_the_type
 tests/amane_adapter/test_amane_outcome_status.py::test_fatal_exceptions_from_the_engine_are_not_converted[KeyboardInterrupt]
 tests/amane_adapter/test_amane_outcome_status.py::test_fatal_exceptions_from_the_engine_are_not_converted[SystemExit]
+tests/amane_adapter/test_amane_outcome_status.py::test_lookup_with_cause_returns_the_original_exception_object_and_a_redacted_failure
+tests/amane_adapter/test_amane_outcome_status.py::test_lookup_without_cause_is_unchanged_and_lookup_still_returns_only_the_outcome
+tests/amane_adapter/test_amane_outcome_status.py::test_boundary_failures_and_no_match_carry_no_cause[ABC-1-fc2]
+tests/amane_adapter/test_amane_outcome_status.py::test_boundary_failures_and_no_match_carry_no_cause[FC2-PPV-4825061-censored]
+tests/amane_adapter/test_amane_outcome_status.py::test_boundary_failures_and_no_match_carry_no_cause[12345-fc2]
+tests/amane_adapter/test_amane_outcome_status.py::test_concurrent_lookups_each_keep_their_own_original_exception
+tests/amane_adapter/test_amane_outcome_status.py::test_lookup_with_cause_does_not_convert_fatal_exceptions[KeyboardInterrupt]
+tests/amane_adapter/test_amane_outcome_status.py::test_lookup_with_cause_does_not_convert_fatal_exceptions[SystemExit]
+tests/amane_adapter/test_amane_outcome_status.py::test_lookup_with_cause_propagates_cancelled_error_unchanged
 tests/amane_adapter/test_amane_provenance.py::test_record_has_no_internal_provenance_fields
 tests/amane_adapter/test_amane_provenance.py::test_single_source_identity_is_left_to_the_host
 tests/amane_adapter/test_amane_provenance.py::test_failure_detail_is_a_closed_vocabulary_over_many_scenarios
@@ -745,6 +816,57 @@ tests/amane_adapter/test_amane_settings.py::test_error_messages_never_echo_confi
 tests/amane_adapter/test_amane_settings.py::test_error_messages_are_deterministic
 tests/amane_adapter/test_amane_settings.py::test_descriptor_constants_follow_the_contract
 tests/amane_adapter/test_amane_settings.py::test_no_secret_like_configuration_field_names
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[empty]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[sources null]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[one source]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[sources as tuple]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[mirror + disabled]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[unknown source id]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[duplicate source id]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[empty sources list]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[all disabled]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[base_url userinfo]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[base_url ftp]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[base_url query]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[base_url int]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[enabled 'yes']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[enabled 1]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[entry extra field]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[id int]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[sources str]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[unknown top-level field]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline int 20]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline float 20.0]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline float 0.5]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline int 600]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline float 600.0]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline str '20']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline str '20.0']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline str ' 20 ']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline str '1e1']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline str 'x']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline str '']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline bool True]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline bool False]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline nan]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline inf]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline -inf]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline int 0]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline float 0.0]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline int -1]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline float -0.5]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline int 601]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline float 600.0001]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline None]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline bytes b'20']
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline list [20]]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline dict]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_matches_the_shared_validation_matrix[deadline Decimal 20]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_rejects_coercible_numeric_strings_before_any_conversion[20]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_rejects_coercible_numeric_strings_before_any_conversion[20.0]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_rejects_coercible_numeric_strings_before_any_conversion[ 20 ]
+tests/amane_adapter/test_amane_settings.py::test_parse_settings_rejects_coercible_numeric_strings_before_any_conversion[1e1]
+tests/amane_adapter/test_amane_settings.py::test_deadline_matrix_covers_the_frozen_contract_cases
 tests/amane_adapter/test_amane_zip_build.py::test_builder_plugin_id_equals_the_adapter_plugin_id
 tests/amane_adapter/test_amane_zip_build.py::test_build_is_deterministic_byte_for_byte
 tests/amane_adapter/test_amane_zip_build.py::test_zip_has_one_top_level_folder_named_by_the_plugin_id_and_exactly_the_tree_files
