@@ -1333,9 +1333,12 @@ C10-R1                         : COMPLETED —— e0ee8c15d9d8d238ee76e3f142870a
 Formal G-T                     : PASS —— 142 / 142，0 failed，0 errors，0 skipped（正式环境 Windows 11 / Python 3.12.10 / httpx 0.27.2 / pytest 9.1.1 / 普通用户；含 S-09A、S-09B、S-12 same-volume-native、S-21）
 Formal G-P4                    : NOT PASS —— P4-C10-AUTH-GP4-01（冻结的 exact command 稳定 INTERNALERROR；pre-existing / baseline-like existing-test isolation constructibility blocker；第 22 节）
 P4-C10-AUTH-GP4-01             : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（HIGH / BLOCKING；Authority / Frozen-Gate Constructibility / Existing-Test Isolation；不得写 CLOSED / PASS / ACCEPTED）
-P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT REVIEW REQUIRED（docs-only；本合同第 22 节与计划第 18 节；Risk Class B）
-Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa —— UNCHANGED PENDING REVIEW（仅在 AUTH-A4 Independent Authority Amendment Review PASS 后由 Reviewer 提升为 AUTH-A4 reviewed head；作者不得自行提升）
-Next                           : P4-C10-AUTH-GP4-01 INDEPENDENT AUTHORITY AMENDMENT REVIEW（该 Review PASS 后才允许实际 test-isolation repair（第 22.7 节）；之后重取 Formal G-T / G-P4 / PC-04 / G-FULL / skip 对账，再 Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review；顺序与计划第 15 / 17.3 / 18 节一致）
+P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE 299a821b45b6e39a9cfcc60b4537487d697715ae（docs-only；本合同第 22 节与计划第 18 节；Risk Class B）
+P4-C10-AUTH-A4 Independent Authority Amendment Review : COMPLETED — BLOCKED（针对 299a821b…；Review 级 blocker：该 Reviewer 环境无法独立读取 local HEAD 与 local worktree CLEAN，属于 REVIEW ENVIRONMENT / CONTEXT HANDSHAKE LIMITATION，不是项目 finding，不新增任何 finding；由下一位有本地 Git worktree 访问能力的 Reviewer 完成完整 handshake 即消失）
+P4-C10-AUTH-A4-R-01            : REMEDIATED — INCREMENTAL INDEPENDENT REVIEW REQUIRED（MEDIUM / BLOCKING；Authority / Current-State / Verdict Lifecycle Consistency：计划第 17.4 节曾把 Technical Acceptance Verdict 写成 BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING，与计划第 15、18.7 节的 NOT ESTABLISHED 冲突；已把第 17.4 节当前值同步为 NOT ESTABLISHED，并把旧值标记为历史；不得写 CLOSED / PASS / ACCEPTED）
+P4-C10-AUTH-A4-R1              : CURRENT DOCS-ONLY CLOSURE CANDIDATE —— INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW REQUIRED（Base 299a821b…；只闭合 P4-C10-AUTH-A4-R-01；不改变第 22 节任何语义）
+Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa —— UNCHANGED PENDING REVIEW（AUTH-A4 299a821b… 与 AUTH-A4-R1 均不是 active authority；仅在后续 Incremental Independent Review PASS 后由 Reviewer 建立新的 Active Authority Amendment Head；作者不得自行提升）
+Next                           : P4-C10-AUTH-A4-R1 INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW（必须在有本地 Git worktree 访问能力的 session 中执行，以真正核验 local HEAD 与 local worktree CLEAN；该 Review PASS 后才允许实际 test-isolation repair（第 22.7 节）；之后重取 Formal G-T / G-P4 / PC-04 / G-FULL / skip 对账，再 Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review；顺序与计划第 15 / 17.3 / 18 节一致）
 P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；详见 docs/review/P4_C10_HANDOFF.md）；当前 Formal G-P4 NOT PASS（P4-C10-AUTH-GP4-01）
 P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写；独立 Review 之前不是 PASS）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
@@ -1367,6 +1370,7 @@ Tests                  : UNCHANGED（AUTH-A1 无权修改任何测试；当前 S
 HANDOFF                : UNCHANGED 的历史 candidate evidence snapshot（docs/review/P4_C10_HANDOFF.md 不被追溯修改）
 Risk Class             : B（不变）
 Technical Acceptance   : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；Final Reviewed Acceptance Head = NOT ESTABLISHED
+                         （HISTORICAL —— AUTH-A1 candidate 时点的记录，不是当前值；当前 Technical Acceptance Verdict = NOT ESTABLISHED，见第 20、22.9 节）
 ```
 
 AUTH-A1 **不是**新的 Design-R4：历史 Design Accepted Head `fc59e2020e4df237bf3bed83a07950d67c19b475`、S1 `f9f95567b9f6ea243e7587219404b1e258023233`、

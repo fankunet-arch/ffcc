@@ -631,8 +631,11 @@ C10-R1                         : COMPLETED —— e0ee8c15d9d8d238ee76e3f142870a
 Formal G-T                     : PASS —— 142 / 142，0 failed，0 errors，0 skipped
 Formal G-P4                    : NOT PASS —— P4-C10-AUTH-GP4-01（exact command 稳定 INTERNALERROR；pre-existing / baseline-like existing-test isolation blocker；合同第 22 节）
 P4-C10-AUTH-GP4-01             : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（HIGH / BLOCKING；不得写 CLOSED / PASS / ACCEPTED）
-P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT REVIEW REQUIRED（docs-only；Risk Class B；本计划第 18 节）
-Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa —— UNCHANGED PENDING REVIEW（仅在 AUTH-A4 Independent Review PASS 后由 Reviewer 提升；作者不得自行提升）
+P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE 299a821b45b6e39a9cfcc60b4537487d697715ae（docs-only；Risk Class B；本计划第 18 节）
+P4-C10-AUTH-A4 Independent Authority Amendment Review : COMPLETED — BLOCKED（针对 299a821b…；Review 级 blocker：该 Reviewer 环境无法独立读取 local HEAD 与 local worktree CLEAN，属于 REVIEW ENVIRONMENT / CONTEXT HANDSHAKE LIMITATION，不是项目 finding，不新增任何 finding）
+P4-C10-AUTH-A4-R-01            : REMEDIATED — INCREMENTAL INDEPENDENT REVIEW REQUIRED（MEDIUM / BLOCKING；Authority / Current-State / Verdict Lifecycle Consistency：第 17.4 节曾与第 15、18.7 节的 Technical Acceptance Verdict = NOT ESTABLISHED 冲突；已同步第 17.4 节当前值，旧值标记为历史；不得写 CLOSED / PASS / ACCEPTED）
+P4-C10-AUTH-A4-R1              : CURRENT DOCS-ONLY CLOSURE CANDIDATE —— INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW REQUIRED（Base 299a821b…；只闭合 P4-C10-AUTH-A4-R-01；不改变第 18 节任何语义）
+Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa —— UNCHANGED PENDING REVIEW（AUTH-A4 299a821b… 与 AUTH-A4-R1 均不是 active authority；仅在后续 Incremental Independent Review PASS 后由 Reviewer 建立新的 Active Authority Amendment Head；作者不得自行提升）
 P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；详见 docs/review/P4_C10_HANDOFF.md）；当前 Formal G-P4 NOT PASS
 P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（原 S3 HANDOFF 快照不被改写；独立 Review 之前不是 PASS）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
@@ -654,11 +657,11 @@ Phase 5                        : NOT STARTED
 不关闭 XD-A08、不开始 EC-15、不开始 Phase 5；S3 完成时的下一步曾是 P4-C10 Independent Level 1 Final Acceptance Review。
 该 Level 1 Review 已经完成并返回 BLOCKED（随后 AUTH-A1 Review 为 FAIL、AUTH-A2 Review 为 FAIL、AUTH-A3 Review 为 PASS，见上方状态块）；因此该句**不再是当前有效的下一步**，仅保留为 S3 时点的历史记录。
 
-**当前唯一有效的下一步（Current Operative Next Step）**：`P4-C10-AUTH-GP4-01 INDEPENDENT AUTHORITY AMENDMENT REVIEW`（AUTH-A4 Candidate 的独立复查）。
+**当前唯一有效的下一步（Current Operative Next Step）**：`P4-C10-AUTH-A4-R1 INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW`（必须在有本地 Git worktree 访问能力的 session 中执行，以真正核验 local HEAD 与 local worktree CLEAN）。
 
-* 若该 Review PASS：Reviewer 建立 `P4-C10 Active Authority Amendment Head = AUTH-A4 reviewed head`；之后才允许第 18.4 节唯一 scope 的 test-isolation repair，再按第 18.5 节重取 focused evidence 与 Formal evidence，
+* 若该 Review PASS：Reviewer 建立新的 `P4-C10 Active Authority Amendment Head`（AUTH-A4-R1 reviewed head）；之后才允许第 18.4 节唯一 scope 的 test-isolation repair，再按第 18.5 节重取 focused evidence 与 Formal evidence，
   然后 Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review（顺序以第 17.3、18.6 节为准）。
-* 在该 Review PASS 之前：Active Authority Amendment Head 仍为 `82f96a21e210b0b63b904df1f8a8e62be741a9aa`；不执行实际 test-isolation repair、不运行 pytest 证据、不重跑 Formal G-P4 / G-FULL、
+* 在该 Review PASS 之前：Active Authority Amendment Head 仍为 `82f96a21e210b0b63b904df1f8a8e62be741a9aa`（AUTH-A4 与 AUTH-A4-R1 均不是 active authority）；不执行实际 test-isolation repair、不运行 pytest 证据、不重跑 Formal G-P4 / G-FULL、
   不创建 Evidence Refresh Candidate、不启动 EC-15 / Phase 5。
 
 ---
@@ -754,7 +757,10 @@ Windows 原生                     : S-09（含 S-09B，并记录 os.path.isabs 
 ### 17.4 不变项
 
 XD-A08 = OPEN（不阻塞 Technical Acceptance，阻塞 Phase 4 Exit；与 AUTH-A1 无关）；OBS-03（基线 / F0 类补充问题，无 C10 回归 finding）与 OBS-04（无 finding）不重新设计；
-Technical Acceptance Verdict = BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；Final Reviewed Acceptance Head = NOT ESTABLISHED；Phase 4 = NOT CLOSED；Phase 5 = NOT STARTED。
+Technical Acceptance Verdict = NOT ESTABLISHED（当前值，与第 15、18.7 节及合同第 20、22.9 节一致：尚无新的独立 Level 1 Technical Acceptance Review 建立 PASS / FAIL / BLOCKED；
+authority amendment review 不是 Technical Acceptance Level 1 Review，其“待复查”状态不是 Technical Acceptance Verdict 的取值，只体现在 Phase 4 Exit Authorization 的阻塞原因中）；
+Final Reviewed Acceptance Head = NOT ESTABLISHED；Phase 4 = NOT CLOSED；Phase 5 = NOT STARTED。
+（历史：AUTH-A1 candidate 时点该字段曾写作 `BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING`，那是 AUTH-A1 时点的历史记录，不是当前值；原 Level 1 Review 对 S3 candidate 1012968e… 的历史 reviewed verdict 为 BLOCKED，亦不是当前值。）
 
 ---
 
