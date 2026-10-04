@@ -6,12 +6,17 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 
 import pytest
 
+from fc2_amane_adapter import _settings as _module_under_test
+
 ROOT = Path(__file__).resolve().parents[2]
-TREE = ROOT / "adapters" / "amane" / "fc2_amane_adapter"
+REPO_TREE = ROOT / "adapters" / "amane" / "fc2_amane_adapter"
+#: 被检查的树 = 被测模块实际所在的树（mutation 运行时是被篡改的副本；平时是仓库内的插件树）。
+TREE = Path(_module_under_test.__file__).resolve().parent
 TESTS = ROOT / "tests"
 NEW_TESTS = TESTS / "amane_adapter"
 HOST_SCRIPTS = NEW_TESTS / "host_scripts"
@@ -69,6 +74,15 @@ def _nested_in_function(tree: ast.Module):
             yield from visit(child, now_inside)
 
     yield from visit(tree, False)
+
+
+def test_the_adapter_under_test_is_the_expected_tree():
+    """哨兵：被测的 ``fc2_amane_adapter`` 来自预期的树。mutation 运行时（``P5_C1_MUTANT_ROOT``）必须来自被篡改的副本，
+    证明被杀死的测试确实测的是被篡改的代码；平时必须来自仓库内的插件树。"""
+    located = Path(_module_under_test.__file__).resolve()
+    mutant_root = os.environ.get("P5_C1_MUTANT_ROOT")
+    expected_parent = (Path(mutant_root) / "fc2_amane_adapter") if mutant_root else REPO_TREE
+    assert located.parent == expected_parent.resolve(), (located, expected_parent)
 
 
 def test_layout_is_exactly_the_frozen_plugin_tree():
@@ -278,14 +292,31 @@ def test_no_test_imports_amane_except_host_scripts():
                     assert not str(node.args[0].value).startswith("amane"), path
 
 
-def test_new_tests_never_touch_sys_modules_or_stub_amane():
+def _is_sys_modules(node: ast.AST) -> bool:
+    return isinstance(node, ast.Attribute) and node.attr == "modules" and isinstance(node.value, ast.Name) and node.value.id == "sys"
+
+
+def test_new_tests_never_clear_replace_or_inject_sys_modules_or_stub_amane():
+    """P5-C1 §25.1：新测试不使用 ``sys.modules`` 清理 / 替换 / 注入（只读的哨兵断言，如 ``"amane" not in sys.modules``，允许）。"""
+    mutators = {"pop", "update", "setdefault", "clear", "popitem", "__setitem__", "__delitem__"}
     for path in sorted(NEW_TESTS.glob("*.py")):
         if path.name == Path(__file__).name:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and node.attr == "modules" and isinstance(node.value, ast.Name) and node.value.id == "sys":
-                raise AssertionError(f"{path.name}: sys.modules")
+            if not _is_sys_modules(node):
+                continue
+            parent = parents[node]
+            if isinstance(parent, ast.Subscript):
+                assert isinstance(parent.ctx, ast.Load), f"{path.name}: sys.modules[...] write/delete"
+            if isinstance(parent, ast.Attribute) and parent.attr in mutators:
+                raise AssertionError(f"{path.name}: sys.modules.{parent.attr}")
+            if isinstance(parent, ast.Call):  # 例如 monkeypatch.setitem(sys.modules, ...) / patch.dict(sys.modules, ...)
+                raise AssertionError(f"{path.name}: sys.modules passed to a call")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"ModuleType"}:
+                raise AssertionError(f"{path.name}: stub module")
 
 
 def test_new_tests_have_no_skip_or_xfail():

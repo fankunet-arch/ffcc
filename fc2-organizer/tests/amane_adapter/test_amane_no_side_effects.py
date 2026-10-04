@@ -9,11 +9,12 @@ import socket
 from pathlib import Path
 
 from _amane_scenarios import client_4825061, client_4979299, runtime_for
+from fc2_amane_adapter import _settings as _module_under_test
 from fc2_amane_adapter._outcome import AdapterFound
 from fc2_amane_adapter._runtime import AdapterRuntime
 from fc2_amane_adapter._settings import parse_settings
 
-TREE = Path(__file__).resolve().parents[2] / "adapters" / "amane" / "fc2_amane_adapter"
+TREE = Path(_module_under_test.__file__).resolve().parent  # 被测模块实际所在的树
 
 
 def _snapshot(root: Path) -> dict[str, tuple[int, int]]:

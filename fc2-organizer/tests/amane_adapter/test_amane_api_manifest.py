@@ -12,8 +12,11 @@ from pathlib import Path
 
 import pytest
 
+from fc2_amane_adapter import _settings as _module_under_test
+
 ROOT = Path(__file__).resolve().parents[2]
-TREE = ROOT / "adapters" / "amane" / "fc2_amane_adapter"
+#: 被检查的树 = 被测模块实际所在的树（mutation 运行时是被篡改的副本）。
+TREE = Path(_module_under_test.__file__).resolve().parent
 MANIFEST = json.loads((ROOT / "adapters" / "amane" / "api_manifest" / "amane_v0.15.0_api_manifest.json").read_text(encoding="utf-8"))
 
 AMANE_COMMIT = "45dff2159369883e028a296d775a4598836c1ddd"
