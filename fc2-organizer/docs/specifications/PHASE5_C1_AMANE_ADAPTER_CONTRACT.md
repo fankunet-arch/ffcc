@@ -15,12 +15,31 @@ Risk Class            : B（带强制升级门 U-1..U-8；第 5 节）
 ## 当前状态（CURRENT）
 
 ```text
-P5-C1 Design                : CANDIDATE —— INDEPENDENT DESIGN REVIEW REQUIRED
-P5-C1 Contract（本文件）    : CANDIDATE
-P5-C1 Construction Plan     : CANDIDATE
+P5-C1 Design R1             : CANDIDATE —— INCREMENTAL REVIEW REQUIRED
+P5-C1 Contract（本文件）    : CANDIDATE（Design R1）
+P5-C1 Construction Plan     : CANDIDATE（Design R1）
 P5-C1 Implementation        : NOT STARTED
 Phase 5                     : ENTRY AUTHORIZED
 ```
+
+### Design R1 修订记录（最小 docs-only precision closure；不是重新设计）
+
+```text
+R1 Base（Original Design Candidate） : 1e29b4b0c1ee959a2cd061778258f8b7347f5d4d
+上一轮独立 Design / Authority Review : Architecture ACCEPTED；Risk Class B VALID；Blocking architecture findings NONE
+Owner 决定                           : 在 S1 之前做一次最小 Design R1 precision closure
+```
+
+| Finding | 本合同的修订 | 状态 |
+|---|---|---|
+| P5-C1-DESIGN-R1-01（请求数量口径） | 第 15.2 节把“最大物理请求数”拆成三层精确口径（Core adapter.fetch attempts S；宿主 WebClient/session attempts ≤ S×H；含重定向的 HTTP network hops ≤ S×H×21）；W-05 / W-08；I15；E9 / H-09 / M-02 同步（计划） | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| P5-C1-DESIGN-R1-02（Python 3.14 Evidence Gate） | 合同第 25.3 节 + 计划第 5.3 节：冻结 exact allow-list、命令与 PASS 判据（集合 A / B / C / D） | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| P5-C1-DESIGN-R1-03（`ok_statuses` / status ≥ 600） | 第 14 节表 E 与 W-09：显式集合 `300..599` 内旁路宿主状态重试 / 报错路径，集合之外（例如 600）宿主行为仍可能发生，由既有 `HttpTransportError` 兜底映射承接；mapping 架构不变 | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| P5-C1-DESIGN-R1-04（悬空 `W2` 引用） | 第 12 节 -> H-06；第 18 节 -> H-11（按上下文语义核对后修正） | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| OBS-02 / OBS-03 / OBS-06（非阻塞） | 记入 L-15 / L-01 / L-07（不改 architecture、不改 Core） | RECORDED |
+
+Design R1 **不改变**：Risk Class B、升级门、Core A = 1 与 Core 语义重试关闭、宿主 H 有界、`ok_statuses` 桥设计、表 B-J 的映射语义、不变量 I1-I26 的含义、P5-C1 / P5-C2 边界。
+R1 不得写为 FROZEN / R1 PASS；Design Accepted Head 仍为 NOT ESTABLISHED。
 
 本文件**不是**冻结合同。只有独立 Design / Authority Review 给出 PASS 之后，才由该 Review 建立 Frozen Contract、Frozen Construction Plan 与 Design Accepted Head。
 在此之前不得开始 S1。本文件不声明 Contract FROZEN、Design PASS 或 P5-C1 STARTED。
@@ -175,7 +194,7 @@ P5-C1 是**新的用户能力**（Amane 插件），其 authority 是本合同�
 U-1 任何 src/** 改动（含 Core 公共 API / 行为）
 U-2 需要把 Core 源码复制 / vendor / 打包进 plugin.py 或 plugin 树（Core 供给方式变更；属 P5-C2 决策）
 U-3 任何持久化 / 文件写入 / 磁盘缓存（含 data_dir 写入）
-U-4 无法在不修改 CLOSED Core 合同的前提下证明重试 / 物理请求数有界（DESIGN BLOCKED）
+U-4 无法在不修改 CLOSED Core 合同的前提下证明重试 / 请求数有界（第 15.2 节三层口径；DESIGN BLOCKED）
 U-5 需要绕过宿主 HTTP 生命周期（自建 httpx / requests / curl / socket 客户端）
 U-6 Core 在 Python 3.14 上出现需要生产修改才能修复的缺陷（第 6 节 W-04：目前只有一个与 adapter 无关的测试假设差异）
 U-7 需要修改 ≥ 1 个已 CLOSED package 的既有测试语义（P5-C1 只允许新增测试文件）
@@ -199,14 +218,16 @@ U-8 出现新的 security boundary（例如接受凭据 / cookie 配置、引入
 | W-01 | Amane v0.15.0 exact 坐标 | 只读克隆 `sqzw-x/amane`，`git checkout v0.15.0`：`HEAD = 45dff2159369883e028a296d775a4598836c1ddd`；`git rev-parse v0.15.0 = 3292c957…`（tag 对象） |
 | W-02 | Amane 要求 Python ≥ 3.14 | `pyproject.toml: requires-python = ">=3.14"`；`src/amane/net/http.py` 使用 PEP 758 语法 `except ValueError, TypeError:`（3.14 才合法）。**宿主解释器 = 3.14+，而 Core 的正式证据环境是 3.11 / 3.12** |
 | W-03 | Core 公共 API 的 import 不需要 `httpx` 等第三方包 | 阻断 `httpx / httpcore / requests / aiohttp / curl_cffi / pydantic / amane` 后，在 3.12.10 与 3.14.7 上均可 import `fc2_metadata_core` 及 `aggregation / sources.adapters / normalize / resource_control / http`（附录 B）。`httpx_client` 与 `fc2_organizer.images.transport` 才依赖 `httpx`；adapter 不 import 它们 |
-| W-04 | Core 在 3.14 上的基本可用性 | 在 3.14.7 上运行 `tests/unit/{core,sources,aggregation,batch,resource_control,http}` + `tests/contract/test_core_independent_of_amane.py`：**2398 passed / 1 failed**。唯一失败：`tests/unit/http/test_httpx_transport_decode_c3.py::…[punycode]`（3.14 上 `punycode` codec 的行为与该测试假设不同；仅涉及 `HttpxTransport`，adapter 不使用）。另：`tests/unit/execution/test_execution_manifest.py` 在 3.14 / Windows 收集期失败（`'/x'` 在 3.13+ 的 Windows 上不再是绝对路径），属 Phase 4 organizer，**与 P5-C1 无关**，记入 L-07 |
-| W-05 | 真实 v0.15.0 `WebClient.request` 的重试 / 状态行为 | 把 `WebClient._session` 换成脚本化会话，调用真实 `request`，统计物理请求数（见下表；脚本见附录 A） |
+| W-04 | Core 在 3.14 上的基本可用性 | 在 3.14.7 上运行 `tests/unit/{core,sources,aggregation,batch,resource_control,http}` + `tests/contract/test_core_independent_of_amane.py`：**2398 passed / 1 failed**。唯一失败：`tests/unit/http/test_httpx_transport_decode_c3.py::…[punycode]`（3.14 上 `punycode` codec 的行为与该测试假设不同；仅涉及 `HttpxTransport`，adapter 不使用）。另：`tests/unit/execution/test_execution_manifest.py` 在 3.14 / Windows 收集期失败（`'/x'` 在 3.13+ 的 Windows 上不再是绝对路径），属 Phase 4 organizer，**与 P5-C1 无关**，记入 L-07。**R1 补充：** 第 25.3 节冻结的集合 A（显式路径 allow-list，无任何 `--deselect` / `--ignore` / `-k`）在 3.14.7 上实测 **1833 passed / 0 failed / 0 skipped**，这是该集合的设计期基线 |
+| W-05 | 真实 v0.15.0 `WebClient.request` 的重试 / 状态行为 | 把 `WebClient._session` 换成脚本化会话，调用真实 `request`，统计 **host attempts**（= `session.request` 调用次数；见下表；脚本见附录 A）。注意：这一口径**不含**单次 attempt 内被跟随的重定向跳数（见 W-08） |
 | W-06 | 真实 v0.15.0 `PluginManager.discover` / `install_plugin_path` 在 Core 缺失时的行为 | 见下方 W-06 记录（脚本见附录 B） |
 | W-07 | 宿主漂移（v0.15.0 → 当前） | 见第 29 节 |
+| W-08 | 重定向跳数口径（R1-01） | v0.15.0 `WebClient` 以 `max_redirects=20` 构造 `curl_cffi.AsyncSession`（`src/amane/net/http.py:156`），curl_cffi 直接设置 `CURLOPT_MAXREDIRS = 20`（`curl_cffi/requests/utils.py`，curl_cffi 0.16.3）。**实测**（本机回环 HTTP 服务器无限 302、真实 curl_cffi、`max_redirects=20`、`allow_redirects=True`）：服务器收到 **21** 次 GET（初始 1 + 被跟随 20），随后 `curl: (47) Maximum (20) redirects followed` → `TooManyRedirects`；`TooManyRedirects` 的 MRO 含 `CurlError`（`issubclass(TooManyRedirects, CurlError) == True`），因此被 `WebClient.request` 的 `except CurlError` 捕获并**按 H 重试**。结论：一次 host attempt 最多 **21 个 HTTP network hops**（`R = 20`，hops = `R + 1`） |
+| W-09 | `ok_statuses` 之外的状态码（R1-03） | 同一脚本化会话：`status_code = 599` + `ok_statuses=range(300,600)` → 返回响应（1 次 attempt）；`status_code = 600` + 同一集合 → `RequestError(reason=http_error, http_status=600)`（1 次 attempt，不重试）。即：旁路只对**显式集合内**的状态码成立 |
 
-**W-05 记录（Amane v0.15.0；`max_retries = 3`，脚本化会话；`ok` = `ok_statuses=frozenset(range(300,600))`）：**
+**W-05 记录（Amane v0.15.0；`max_retries = H = 3`，脚本化会话；`ok` = `ok_statuses=frozenset(range(300,600))`；表中“次数”均为 host attempts，不含重定向跳数）：**
 
-| 场景 | 物理请求数 | 结果 |
+| 场景 | host attempts（`session.request` 调用数） | 结果 |
 |---|---|---|
 | 429，不传 `ok_statuses` | 3（退避 ≈1.3 s、4.0 s） | `RequestError(reason=rate_limited, http_status=429)` |
 | 429，`ok` | **1** | 返回 `status_code = 429` 的响应 |
@@ -447,7 +468,7 @@ engine    = MultiSourceEngine(agg_cfg, registry, bridge, governor=governor)
 
 * **复用**：每次 `fetch` 只调用 `engine.aggregate(canonical)`。**禁止**每次 fetch 重建 engine / registry / governor / bridge（测试以构造计数证明，E-mutant M-10）。adapter 是无状态的，governor / breaker 状态是内存态，随 provider 生命周期；宿主 rebuild 时重置（L-09）。
 * **没有需要关闭的资源**：bridge 只持有宿主 client 的引用；Core 的 `HttpxTransport` 不被使用，故无 `aclose`。
-* **配置校验时机**：Amane 在写配置 / rebuild 时经 Pydantic 校验（`configuration_model().model_validate`），`build()` 再次 `parse_settings`（总是在网络活动之前）。`build()` 抛出的异常由宿主工厂记录并使该来源本次不可用；因为校验已前置，`build()` 在合法配置下**不得抛出**（W2 见证）。
+* **配置校验时机**：Amane 在写配置 / rebuild 时经 Pydantic 校验（`configuration_model().model_validate`），`build()` 再次 `parse_settings`（总是在网络活动之前）。`build()` 抛出的异常由宿主工厂记录并使该来源本次不可用；因为校验已前置，`build()` 在合法配置下**不得抛出**（由真实宿主见证 **H-06**：经真实 `CrawlerFactory` 构造 provider；配置矩阵由 **H-04** 见证）。
 * **单事件循环**：Core 的 resource_control 不是线程安全的、假设单事件循环——与 Amane 宿主一致（L-12）。
 * `engine.aggregate` 的调用与 Core 合同一致：非 canonical 输入抛 `InvalidCanonicalNumberInputError`（B 系列已保证不会发生，若发生视为 adapter 缺陷 → `Failed(unexpected)`）。
 
@@ -477,7 +498,7 @@ class AmaneHttpBridge:                       # 满足 SourceHttpClient Protocol�
 | 项 | 规则 |
 |---|---|
 | 请求 | `await web_client.request("GET", url, headers=dict(headers) if headers else None, timeout=timeout, ok_statuses=frozenset(range(300, 600)))`。**不传** `cookies / data / json / use_proxy / allow_redirects / max_attempts`（取宿主缺省；`max_attempts` 仅存在于较新版本，I26） |
-| 为什么传 `ok_statuses` | 实测（W-05）：不传时 429 / 503 被宿主**重试 3 次**并抛 `RequestError`，既违反 Core “`RATE_LIMITED` 永不自动重试”的冻结语义，又使 Core 看不到状态码与响应体（无法做 Cloudflare challenge 检测与 `NOT_FOUND` 分类）。传入后所有 HTTP 状态码以**普通响应**返回，单次物理请求 |
+| 为什么传 `ok_statuses` | 实测（W-05）：不传时 429 / 503 被宿主**重试 3 次**并抛 `RequestError`，既违反 Core “`RATE_LIMITED` 永不自动重试”的冻结语义，又使 Core 看不到状态码与响应体（无法做 Cloudflare challenge 检测与 `NOT_FOUND` 分类）。传入后，**显式集合 `300..599` 内**的 HTTP 状态码以**普通响应**返回，状态码路径只产生 **1 个 host attempt**（该 attempt 内的重定向跳数另计，见第 15.2 节）；集合之外的状态码（例如 `600`，W-09）不受该旁路保护，宿主行为仍可能发生（`RequestError(http_error)`），由第 14 节的 `HttpTransportError` 兜底承接 |
 | `status_code` | `resp.status_code`（必须是 `int` 且非 `bool`，否则 `HttpTransportError`） |
 | `url` | `str(resp.url)`（最终 URL；缺失或为空则回退为请求 URL） |
 | `headers` | 键**统一小写**；同名多值以 `, ` 按宿主迭代顺序连接（确定性）；Core adapter 只读取 `cf-mitigated` |
@@ -499,11 +520,11 @@ class AmaneHttpBridge:                       # 满足 SourceHttpClient Protocol�
 | `RequestError`，`reason == TIMEOUT` | `TimeoutError` × H → `timeout` | `HttpTimeoutError` | `TIMEOUT` |
 | `RequestError`，`reason == NETWORK` | `CurlError` × H → `network`；`max_retries = 0` → `network` | `HttpConnectionError` | `CONNECTION_ERROR` |
 | DNS / TCP 连接 / TLS 失败 | **NOT DISTINGUISHABLE**（均为 `CurlError`） | 并入上一行（`HttpConnectionError`） | `CONNECTION_ERROR` |
-| 重定向超限（宿主 `max_redirects = 20`，不可配） | **NOT DISTINGUISHABLE**（`CurlError`） | 并入 `HttpConnectionError`；桥**从不**抛 `HttpRedirectLimitError` | `CONNECTION_ERROR` |
+| 重定向超限（宿主 `max_redirects = 20`，不可配；`TooManyRedirects` 是 `CurlError` 子类，W-08） | **NOT DISTINGUISHABLE**（`RequestError(reason=network)`）；且会被宿主 transport retry **重复 H 次**（每次 attempt 至多 21 个 network hops） | 并入 `HttpConnectionError`；桥**从不**抛 `HttpRedirectLimitError`；**不得**声称它是 Core `REDIRECT_ERROR` | `CONNECTION_ERROR` |
 | 响应体解压失败（`Content-Encoding`） | **NOT DISTINGUISHABLE**（`CurlError`） | 并入 `HttpConnectionError` | `CONNECTION_ERROR` |
 | 桥自身的 charset 解码失败 | — | `HttpDecodingError` | `DECODE_ERROR` |
 | 响应体超过 5 MiB | — | `HttpResponseTooLargeError` | `RESPONSE_TOO_LARGE` |
-| `RequestError`，其它任意 `reason`（含 `unexpected`、`http_error` 等；在 v0.15.0 + `ok_statuses` 下，HTTP 状态类 reason 不可达） | `unexpected` 单次、不重试 | `HttpTransportError`（通用） | `NETWORK_ERROR`（通用 kind） |
+| `RequestError`，其它任意 `reason`（含 `unexpected`、`http_error` 等）。精确规则：`ok_statuses` 覆盖 `300..599`，**在该显式集合内**宿主的状态码重试 / 报错路径被旁路；**集合之外**（例如 `status_code = 600`，W-09 实测为 `RequestError(http_error)`）宿主行为仍可能发生，**不声称不可达** | `unexpected` 单次、不重试；`600` -> `http_error`，1 次 attempt | `HttpTransportError`（通用；既有兜底映射，不新增分支） | `NETWORK_ERROR`（通用 kind） |
 | 非 `RequestError` 的 `SourceError` | — | `HttpTransportError`（通用） | `NETWORK_ERROR`（通用） |
 | `asyncio.CancelledError` | 取消干净传播 | **原样传播**（桥不捕获） | —（第 18 节） |
 | 其它 `Exception`（编程错误） | — | **不捕获**，交由 Core 执行边界：`INVALID_RESPONSE / ADAPTER_EXCEPTION`（消息仅含异常类型名） | `ADAPTER_EXCEPTION` |
@@ -518,8 +539,8 @@ class AmaneHttpBridge:                       # 满足 SourceHttpClient Protocol�
 
 | 关注点 | 所有者 | 具体规则 |
 |---|---|---|
-| 传输层重试（`CurlError` / 超时） | **宿主 `WebClient`** | 每次 `request()` 至多 `H` 次物理请求（`H = network.max_retries`，宿主配置 `0..10`，默认 3），退避 `attempt·3 + 2 ± 1` s。插件**无法**在单次调用上关闭它（v0.15.0 没有该参数） |
-| HTTP 状态码重试（408 / 429 / 503 / 504） | **无人**（被桥的 `ok_statuses` 关闭） | 所有状态码单次请求；429 / 403 / 404 / 5xx 均不被自动重试，与 Core 冻结矩阵一致 |
+| 传输层重试（`CurlError` / 超时） | **宿主 `WebClient`** | 每次 `request()` 至多 `H` 次 **host attempts**（= `session.request` 调用；`H = network.max_retries`，宿主配置 `0..10`，默认 3），退避 `attempt·3 + 2 ± 1` s。每个 attempt 内宿主还会跟随重定向（`max_redirects = 20`，**不可配**），因此一个 attempt 最多 **21 个 HTTP network hops**（W-08）；`TooManyRedirects` 属 `CurlError`，同样被按 `H` 重试。插件**无法**在单次调用上关闭这些行为（v0.15.0 没有对应参数） |
+| HTTP 状态码重试（408 / 429 / 503 / 504） | **无人**（被桥的 `ok_statuses` 关闭） | `ok_statuses` 覆盖 `300..599`：**在该显式集合内**，状态码路径只产生 1 个 host attempt，429 / 403 / 404 / 5xx 均不被自动重试，与 Core 冻结矩阵一致；集合之外的状态码（如 `600`）不受保护，仍可能触发宿主的 `RequestError(http_error)`（1 个 attempt，W-09） |
 | 语义 / 来源级重试 | **无人** | Core 层重试关闭：`RetryPolicy.no_retry()`。放弃的只有“5xx 的 Core 单次重试”；5xx 在一次 fetch 内不重试，由 Amane 的任务级 `RETRY`（仅 `FAILED` 任务）或后续 Phase 6 批量重试承担 |
 | 单来源总时限 | **Core** | `source_deadline_seconds`（默认 20 s）覆盖该来源的全部宿主重试与退避，由 `asyncio.timeout` 强制，取消传播进宿主 `request()`（W-05 末行证明干净取消） |
 | 站点级限速（Host 限速器） | **宿主 `RateLimiters`** | 在 `request()` 开头**获取一次**（不是每次物理重试一次）；优先级 `network.rate_limits` > descriptor `rate_limit`（本插件为 `None`）> `default_rate_limit`（默认 5 req/s） |
@@ -527,27 +548,35 @@ class AmaneHttpBridge:                       # 满足 SourceHttpClient Protocol�
 | 来源熔断 | **Core governor** | 默认：连续 3 次**最终**失败 → 打开 30 s → 半开 1 次探测；`CIRCUIT_OPEN` 不发请求 |
 | 并发的任务数 | **宿主 Worker** | `worker.concurrency`（默认 10）个任务可同时调用 `fetch` |
 
-### 15.2 有界性（冻结的公式）
+### 15.2 有界性（冻结的公式；R1-01：区分三个计数层）
 
 令：
 
 ```text
 S = 启用的来源数（≤ Core 默认 registry 的来源数；98ad8eb 时为 3；每个 id 唯一）
-H = 宿主 network.max_retries（有效范围 1..10；v0.15.0 中 0 = 一次请求都不发，见 L-04）
+H = 宿主 network.max_retries（有效范围 1..10；v0.15.0 中 0 = 一次 attempt 都不发，见 L-04）
+R = 宿主 max_redirects = 20（v0.15.0 写死，不可配；一个 attempt 内至多 R 次被跟随的重定向）
 D = source_deadline_seconds（默认 20 s，≤ 600 s）
 ```
 
-* Core 层 attempt 数 **A = 1**（`no_retry`）；Phase 2 已冻结“每次 adapter fetch 恰好一个 `client.get`”。因此每个来源对桥恰好发起 **1 次** `get`，每次 `get` 至多 **H** 次物理请求：
+**禁止**把 `S × H` 无限定地称作“最大物理 HTTP 请求数”。计数分三层，每层有各自的口径与公式：
+
+| 层 | 口径（精确含义） | 公式 | 默认 S=3、H=3 | 配置空间 S=3、H=10 |
+|---|---|---|---|---|
+| L1 Core `adapter.fetch` attempts / 桥 `get` 调用数 | Core 层对每个来源的 attempt 数 **A = 1**（`no_retry`）；Phase 2 已冻结“每次 adapter fetch 恰好一个 `client.get`” | `S`（熔断打开的来源 = 0） | 3 | 3 |
+| L2 宿主 `WebClient` / session attempts | `session.request` 的调用次数（W-05 的计数口径）；每次 `get` 至多 `H` 次 | `≤ S × H` | **≤ 9** | **≤ 30** |
+| L3 含被跟随重定向的 HTTP network hops | 一个 attempt = 初始 1 跳 + 至多 `R` 次被跟随的重定向 = **至多 `R + 1 = 21`** 跳（W-08 实测 21） | `≤ S × H × (R + 1) = S × H × 21` | **≤ 189** | **≤ 630** |
 
 ```text
-每次 fetch 的桥调用数        = S                       （无熔断打开时；熔断打开的来源 = 0）
-每次 fetch 的最大物理请求数  = S × H                   （默认 3 × 3 = 9；v0.15.0 配置空间内上限 3 × 10 = 30）
-每来源最大物理请求数         = H
-每来源墙钟上限               = D（permit 排队时间不计入，Core 合同 §5.1）
+每个来源：L1 = 1；L2 ≤ H；L3 ≤ H × 21
+每来源墙钟上限 = D（permit 排队时间不计入，Core 合同 §5.1）
 ```
 
-* **不存在乘法重试**：A = 1 使 Core 层不再重复宿主重试；`ok_statuses` 使状态码路径恒为 1 次。若设计留下 `A = 2`，上限会变成 `S × 2 × H`，这正是本合同禁止的（M-02 mutant 检验）。
-* **没有“两层都会 retry，大概没事”的模糊合同**：以上公式由 E9 的测试在真实 v0.15.0 `WebClient` 上以脚本化会话逐项验证（状态码路径、`CurlError` 路径、超时路径、混合路径、熔断路径、`max_retries ∈ {1, 3, 10}`）。
+* L3 是**上界**，不是典型值：只有每个 attempt 都撞满 20 次重定向并以 `TooManyRedirects`（`CurlError`）失败、再被宿主按 `H` 重试时才会达到；典型的状态码路径 L2 = 1、L3 = 1 + 实际重定向次数。
+* **这不是 retry architecture change**：Core A = 1、Core 语义重试关闭、宿主 H 有界、`ok_statuses` 桥——全部不变；本节只把**口径写精确**。
+* **不存在乘法重试**：A = 1 使 Core 层不再重复宿主重试；`ok_statuses`（显式集合 `300..599`）使该集合内的状态码路径恒为 1 个 host attempt。若设计留下 `A = 2`，L2 上限会变成 `S × 2 × H`，L3 变成 `S × 2 × H × 21`，这正是本合同禁止的（M-02 mutant 检验）。
+* **没有“两层都会 retry，大概没事”的模糊合同**：L1 / L2 由 E9 的测试与 H-09 在真实 v0.15.0 `WebClient` 上以脚本化会话逐项验证（状态码路径、`CurlError` 路径、超时路径、混合路径、熔断路径、`max_retries ∈ {1, 3, 10}`）；L3 的**每 attempt 21 跳**由 H-09 的回环重定向场景在真实 curl_cffi 上验证（服务器端命中计数），并按公式对 `S × H × 21` 做**算术核对**（不要求真实地跑满 189 / 630 跳）。
+* 本文其它处凡写“物理请求”者，一律指 **L2：host attempts**，且不含 L3 的重定向跳数。
 
 ### 15.3 备选方案及其被拒原因（审计记录）
 
@@ -650,7 +679,7 @@ Amane host（invoke_source）
 
 * adapter **不得**吞掉取消：整个 adapter 树**不得**出现 `except BaseException`、裸 `except:`、`except asyncio.CancelledError` 后不重抛的代码（AST 守护）；唯一允许的宽捕获是 `runtime` 中包住 `engine.aggregate` 的 `except Exception`（`CancelledError` 是 `BaseException`，不会被捕获），它只把非取消异常转成 `AdapterFailure("unexpected", …)`。
 * 取消**不**转换成普通 source failure，**不**产生 `AdapterFailure`；`KeyboardInterrupt` / `SystemExit` 等致命异常同样原样传播。
-* Core 已冻结的行为被继承：调用方取消 → `CancelledError` 原样传播，所有同级任务被取消，无遗留后台任务，governor 不泄漏 permit / ticket（E15 以 `GovernorSnapshot` 验证）；宿主 `invoke_source` 只捕获 `Exception`，因此 `CancelledError` 穿过它（W2 以真实 `invoke_source` 验证）。
+* Core 已冻结的行为被继承：调用方取消 → `CancelledError` 原样传播，所有同级任务被取消，无遗留后台任务，governor 不泄漏 permit / ticket（E15 以 `GovernorSnapshot` 验证）；宿主 `invoke_source` 只捕获 `Exception`，因此 `CancelledError` 穿过它（由真实宿主见证 **H-11**：以真实 `invoke_source` 验证）。
 * 若宿主内部在没有请求取消时自发抛 `CancelledError`：Core 既有规则把该来源记为 `INVALID_RESPONSE / ADAPTER_EXCEPTION`，其它来源继续（继承，不改变）。
 
 ---
@@ -788,6 +817,100 @@ FC2 Metadata Core 未安装或版本不兼容：请在 Amane 所在的 Python �
 * 见证运行器是**脚本**，不是 pytest 测试：主套件在没有 Python 3.14 + Amane 的环境里也**不会 skip**；独立 Reviewer 以文档化命令重跑见证（计划第 7 节）。
 * **环境硬门槛**：S3 必须在真实 Amane v0.15.0 上完成见证。若无法提供 Python ≥ 3.14 + 已安装 Amane v0.15.0 的环境，S3 **STOP**（`needs input`），**不得**降级为“只做替身测试”。
 
+### 25.3 Python 3.14 证据集（冻结；R1-02）
+
+宿主解释器是 Python >= 3.14，而主套件的正式环境是 3.12，因此 P5-C1 必须在 **3.14** 上给出 adapter 实际运行路径的证据。证据集由 **A / B / C** 三部分组成，**D** 明确排除。
+**所有 3.14 命令只使用显式路径，禁止出现 `--deselect`、`--ignore`、`-k`、`-m`、`--lf` 或任何其它临场筛选**；Developer 不决定“跑哪些、排除哪些、什么算 PASS”。
+解释器要求：Python 3.14.x，已安装 `pytest` 与 `httpx>=0.27,<0.28`（集合 A 的既有测试需要 `httpx`）；Core 经 `PYTHONPATH=src` 提供；集合 C 另需 Amane v0.15.0。命令均在 `fc2-organizer/` 下执行。
+
+**集合 A —— Core runtime path（既有测试；显式路径，覆盖 normalize / sources / aggregation / resource_control / http protocol 的类型与分类）**
+
+```text
+tests/unit/core/test_fc2_number_canonical_boundary.py
+tests/unit/core/test_metadata.py
+tests/unit/core/test_normalize_fc2_number.py
+tests/unit/core/test_source_error_taxonomy.py
+tests/unit/core/test_source_result.py
+tests/unit/sources/test_base.py
+tests/unit/sources/test_failure_classification_c2.py
+tests/unit/sources/test_fake_adapter_end_to_end.py
+tests/unit/sources/test_registry.py
+tests/unit/sources/test_registry_create_boundary.py
+tests/unit/sources/adapters/test_adapter_registration.py
+tests/unit/sources/adapters/test_adapter_common.py
+tests/unit/sources/adapters/test_adapter_canonical_boundary.py
+tests/unit/aggregation/test_agg_c2_l2_trace_hardening.py
+tests/unit/aggregation/test_agg_c3_challenge_any_status.py
+tests/unit/aggregation/test_agg_c3_simultaneous_fatal.py
+tests/unit/aggregation/test_agg_config.py
+tests/unit/aggregation/test_agg_engine.py
+tests/unit/aggregation/test_agg_execution.py
+tests/unit/aggregation/test_agg_guards.py
+tests/unit/aggregation/test_agg_low1_result_invariants.py
+tests/unit/aggregation/test_agg_low2_cancellation.py
+tests/unit/aggregation/test_agg_low3_config_immutability.py
+tests/unit/aggregation/test_agg_low4_client_shape.py
+tests/unit/aggregation/test_agg_merge.py
+tests/unit/aggregation/test_agg_retry_execution.py
+tests/unit/aggregation/test_agg_retry_http.py
+tests/unit/aggregation/test_agg_retry_policy.py
+tests/unit/resource_control                      （整个目录，11 个文件）
+tests/contract/test_core_independent_of_amane.py
+```
+
+* A 的 PASS 条件：退出码 0；**0 failed / 0 error / 0 skipped / 0 xfailed**；`collected == passed == 1833`（Core `src/**` 在 P5-C1 内零 diff，因此该数字**不得变化**；设计期在 3.14.7 上实测 1833 passed）。
+
+**集合 B —— adapter 纯模块与 Core 运行路径冒烟（P5-C1 新测试；显式文件）**
+
+```text
+tests/amane_adapter/test_amane_py314_core_path.py        ← 冻结 nodeid：test_core_runtime_objects_and_one_fake_bridge_aggregate
+tests/amane_adapter/test_amane_api_manifest.py
+tests/amane_adapter/test_amane_architecture_guards.py
+tests/amane_adapter/test_amane_settings.py
+tests/amane_adapter/test_amane_number_boundary.py
+tests/amane_adapter/test_amane_bridge_response.py
+tests/amane_adapter/test_amane_bridge_errors.py
+tests/amane_adapter/test_amane_retry_bounds.py
+tests/amane_adapter/test_amane_outcome_status.py
+tests/amane_adapter/test_amane_error_mapping.py
+tests/amane_adapter/test_amane_metadata_mapping.py
+tests/amane_adapter/test_amane_narrowing.py
+tests/amane_adapter/test_amane_provenance.py
+tests/amane_adapter/test_amane_cancellation.py
+tests/amane_adapter/test_amane_missing_core.py
+tests/amane_adapter/test_amane_determinism.py
+tests/amane_adapter/test_amane_logging_redaction.py
+tests/amane_adapter/test_amane_no_side_effects.py
+tests/amane_adapter/test_amane_runtime_lifetime.py
+tests/amane_adapter/test_amane_isolation.py
+tests/amane_adapter/test_amane_zip_build.py
+tests/amane_adapter/test_amane_host_witness_log.py
+```
+
+* 唯一不在 B 的 adapter 测试文件：`test_amane_mutation_nonvacuity.py`（mutation 门只在 3.12 运行，证据是 E21，不属于 3.14 集合）。
+* 冻结的冒烟用例 `test_core_runtime_objects_and_one_fake_bridge_aggregate`：用**真实的** `AdapterRuntime` 构造路径（registry / `AggregationConfig`（`no_retry`）/ `SourceResourceGovernor` / `AmaneHttpBridge` / `MultiSourceEngine`），以 duck-typed 宿主 web client 替身（脚本化返回既有 fixture 页面与 404）执行**一次** `aggregate`：断言 `AggregateStatus.SUCCESS`、桥 `get` 调用数 = S = 3（L1）、每次调用都带 `ok_statuses ⊇ 300..599`。
+* B 的 PASS 条件：退出码 0；0 failed / 0 error / 0 skipped / 0 xfailed；**3.14 上的 `collected` 与 3.12 上对同一文件清单的 `collected` 相等**（HANDOFF 记录两个数字）。
+
+**集合 C —— 真实 Amane v0.15.0 宿主见证（3.14）**
+
+* 命令：计划第 5.3 节的运行器命令；产出 `docs/acceptance/evidence/P5_C1_HOST_WITNESS.json`。
+* C 的 PASS 条件：**H-01..H-15 全部 `passed`**；日志中 `python` >= 3.14；`amane.commit == 45dff2159369883e028a296d775a4598836c1ddd`；`adapter_tree_sha256` / `core_tree_sha256` 与当前仓库一致（由 B 中的 `test_amane_host_witness_log.py` 在 3.12 与 3.14 上各验证一次）。
+
+**集合 D —— 明确排除（不属于 P5-C1 的 3.14 证据集；不得通过模糊筛选影响 A / B / C 的 PASS 判定）**
+
+```text
+D-1  tests/unit/http/**   整个目录（HttpxTransport 的测试；adapter 不 import httpx_client）。其中已知 3.14 失败 nodeid：
+     tests/unit/http/test_httpx_transport_decode_c3.py::test_a_non_text_or_unusable_charset_raises_http_decoding_error_and_nothing_else[punycode]
+     原因：punycode codec 在 3.12 与 3.14 上行为不同（OBS-06）。不修改 Core，不修改该测试。
+D-2  tests/unit/{execution,planning,publication,nfo,images,materialization,orchestration,diagnostics,discovery,acceptance,batch}/**、tests/phase4_acceptance/**
+     （Phase 4 Organizer 与 batch 范围；其中 tests/unit/execution/test_execution_manifest.py 在 3.14 / Windows 收集期失败：'/x' 在 3.13+ 的 Windows 上不再是绝对路径。与 P5-C1 无关。）
+D-3  tests/unit/aggregation/test_probe_aggregate_summary.py（tools 脚本测试，不在 runtime path）
+D-4  tests/unit/sources/adapters/ 下除 A 中列出的三个文件之外的 parser / fixture 测试（站点解析器已在 3.12 主套件验收，且不属于 adapter 的 runtime 构造路径）
+```
+
+* D 中的已知失败**仅作信息**记入 HANDOFF（L-07）：既不要求通过，也不得被记为 P5-C1 的失败；A / B / C 的命令里**不得**为了它们加任何筛选参数。
+* 若 A / B / C 中**任何**一个用例在 3.14 上失败：这是 P5-C1 的真实缺陷或 Core 的 3.14 缺陷（后者 = U-6 / STOP-05），**不得**用 `--deselect` 掩盖。
+
 ---
 
 ## 26. 表 J —— P5-C1 / P5-C2 责任边界
@@ -802,7 +925,7 @@ FC2 Metadata Core 未安装或版本不兼容：请在 Amane 所在的 Python �
 | **当前发布线**（`v0.16.1` / `v0.17.0` / `app-1.0.x` / main）兼容矩阵与跨版本集成 | ❌（仅记录观察到的漂移，第 29 节） | ✅ |
 | 真实网络冒烟（真实站点） | ❌（P5-C1 全离线、确定性） | ✅（或 Phase 6） |
 | Core 的**最终供给方式**与最终可分发包（含安装指南、升级流程） | ❌（仅冻结“Core 必须可 import”与确定性 zip 构建骨架） | ✅（含 U-2 决策） |
-| Python 3.14 上 adapter + Core 子集测试 | ✅（记录结果） | ✅（回归） |
+| Python 3.14 证据集 A / B / C（第 25.3 节） | ✅（冻结并通过） | ✅（回归） |
 | HANDOFF | P5-C1 HANDOFF | P5-C2 / Phase 5 Final HANDOFF |
 
 P5-C1 的设计保证**没有阻止 P5-C2 的结构性死路**：adapter 只用 v0.15.0 与当前 main 的公共子集（I26）；Core 供给是单一、可替换的决策点；打包骨架可被 P5-C2 直接扩展。
@@ -826,7 +949,7 @@ I11 不伪造出处（不把内部 provider id / 多个内部来源冒充成 Ama
 I12 诊断与秘密不泄漏到 MediaMetadata / SourceError / descriptor / 日志（封闭词汇）
 I13 取消不被吞掉、不被转换
 I14 无文件系统改动、无持久化
-I15 重试 / 物理请求数有界（第 15 节公式；A = 1）
+I15 重试 / 请求数有界（第 15.2 节三层口径：L1 = S、L2 ≤ S×H、L3 ≤ S×H×21；A = 1）
 I16 映射确定性
 I17 Phase 1-4 的生产语义不变（src/** 零 diff）
 I18 既有架构测试保持顺序无关（主进程从不 import amane；无 sys.modules 操作）
@@ -847,13 +970,13 @@ I26 对宿主 API 的使用限于 v0.15.0 与当前 main 的公共子集（不�
 
 | ID | 局限 |
 |---|---|
-| L-01 | 宿主传输**无法区分** DNS / 连接 / TLS / 重定向超限 / 内容编码失败（均为 `CurlError`），统一为 `CONNECTION_ERROR`；不据文本猜测 |
+| L-01 | 宿主传输**无法区分** DNS / 连接 / TLS / 重定向超限 / 内容编码失败（均为 `CurlError`），统一为 `CONNECTION_ERROR`；不据文本猜测。**（OBS-03）** 重定向超限（`TooManyRedirects`，`CurlError` 子类，W-08）会被宿主 transport retry **重复 H 次**（每次 attempt 至多 21 个 network hops），最终统一映射为 `CONNECTION_ERROR`；**不得**声称它是 Core `REDIRECT_ERROR`（桥无法结构化辨别） |
 | L-02 | 响应体上限只能**事后**检查（宿主缓冲整个响应）；内存 / 流量上界由宿主决定 |
 | L-03 | TLS 校验（宿主 `verify=False`）、浏览器指纹伪装、`max_redirects = 20`、代理，都是宿主策略，adapter 继承而不能改变；与 Core 的 `HttpxTransport` 行为（UA、5 次重定向上限）不同 |
 | L-04 | v0.15.0 的宿主缺陷：`network.max_retries = 0` 时 `request()` 一次请求都不发 → 所有来源 `CONNECTION_ERROR` → `FAILED / network`（fail-closed、确定性）；较新版本已修复 |
 | L-05 | `PARTIAL` 的降级在 Amane 的 outcome 里**不可见**（只有一条 `WARNING` 日志）；Amane 没有“部分成功”的表示 |
 | L-06 | 有意不被表达的 Core 数据：`fanart_urls`；`source_urls` 的第 2 项起；全部 `external_ids`；`field_sources`；`conflicts`；演员性别（Core 没有） |
-| L-07 | Python 3.14：Core 子集测试 2398 passed / 1 failed（`punycode` 解码假设，仅 `HttpxTransport`）；Phase 4 organizer 在 3.14 / Windows 上有一个收集期失败（`'/x'`）。均与 P5-C1 无关，记录为后续（Phase 6 / 7）平台输入 |
+| L-07 | Python 3.14（OBS-06）：`punycode` codec 在 3.12 与 3.14 上行为不同，`HttpxTransport` 解码测试 `…[punycode]` 在 3.14 失败（nodeid 见第 25.3 节 D-1）；Phase 4 organizer 在 3.14 / Windows 上有一个收集期失败（`'/x'`，D-2）。二者均**不在 P5-C1 的 3.14 证据集内**（第 25.3 节 D），不修改 Core / 既有测试，记录为后续（Phase 6 / 7）平台输入；adapter 的桥解码测试**不得**把 `punycode` 作为参数 |
 | L-08 | 宿主文档不承诺插件可依赖第三方包；Core 必须预装到宿主解释器（模式 A）；这是 P5-C2 的显式输入 |
 | L-09 | governor / breaker 是 provider 级内存态，随宿主 rebuild 重置 |
 | L-10 | P5-C1 不做任何真实网络请求；对真实站点的行为证据来自 Phase 2 / 3 的既有验收 |
@@ -861,6 +984,7 @@ I26 对宿主 API 的使用限于 v0.15.0 与当前 main 的公共子集（不�
 | L-12 | Core resource_control 非线程安全，要求单事件循环（与宿主一致） |
 | L-13 | 较新 Amane 的浏览器回退（挑战页渲染）**不被使用**：Core 的 `BLOCKED` 永不绕过；桥直接使用 `WebClient.request`，不经 `HttpClient.get_html` |
 | L-14 | 不规划多语言（`multi_language` / `languages`）；`FetchOptions.language` 被忽略 |
+| L-15 | **（OBS-02）** Core host permit 在宿主内部的 retry / backoff 期间**持续持有**：Core A = 1，因此没有 Core 层 retry backoff；宿主内部 retry 属于单次 transport call 内部行为，permit 在整个 `get` 期间被占用。总持有时间受来源 deadline `D` 约束（超时即取消并释放）。这使同 host 的并发上限（默认 4）在宿主重试期间对其它查询形成排队，是已接受的行为，不改变 architecture |
 
 ---
 
@@ -891,9 +1015,9 @@ I26 对宿主 API 的使用限于 v0.15.0 与当前 main 的公共子集（不�
 ## 30. 状态
 
 ```text
-P5-C1 Design                 : CANDIDATE —— INDEPENDENT DESIGN REVIEW REQUIRED
-P5-C1 Contract               : CANDIDATE
-P5-C1 Construction Plan      : CANDIDATE
+P5-C1 Design R1              : CANDIDATE —— INCREMENTAL REVIEW REQUIRED
+P5-C1 Contract               : CANDIDATE（Design R1）
+P5-C1 Construction Plan      : CANDIDATE（Design R1）
 P5-C1 Implementation         : NOT STARTED
 Phase 5                      : ENTRY AUTHORIZED
 Risk Class                   : B（升级门 U-1..U-8）
@@ -901,7 +1025,7 @@ New Architecture Blocker     : NONE
 Risk Escalation              : NONE（B → C 未触发）
 ```
 
-唯一 authority transition：独立 Design / Authority Review PASS ⇒ 该 Review 建立 Frozen Contract / Frozen Construction Plan 与 Design Accepted Head ⇒ 才允许 S1。
+唯一 authority transition：独立 Design R1 Incremental Review PASS ⇒ 该 Review 建立 Frozen Contract / Frozen Construction Plan 与 Design Accepted Head（= R1 Head）⇒ 才允许 S1。（上一轮 Design Review 的 Architecture ACCEPTED / Risk Class B VALID 结论不被重新打开。）
 Design PASS 之后，开发者只能**执行**本合同与计划：不得重新设计、不得调整 S 边界、不得把任何设计项推迟到“开发时再决定”。
 
 ### 设计者希望复查者重点质疑的决定（记录，供 Review 使用）
@@ -961,7 +1085,7 @@ async def run(label, script, ok=None, max_retries=3):
             result = f"response status={r.status_code}"
         except RequestError as e:
             result = f"RequestError reason={e.reason.value} http_status={e.http_status}"
-        print(label, json.dumps({"result": result, "physical_calls": wc._session.calls, "backoff_waits": waits}))
+        print(label, json.dumps({"result": result, "host_attempts": wc._session.calls, "backoff_waits": waits}))
     finally:
         asyncio.sleep = real_sleep
 

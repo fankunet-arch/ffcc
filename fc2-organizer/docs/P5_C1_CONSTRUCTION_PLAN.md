@@ -17,7 +17,8 @@ Why Not Split Further              : 号码边界、桥、Core 调用、结果�
                                      任何一段单独都不能得出结论，拆成 models / config / mapping / errors / tests / packaging 只增加等待而不提高
                                      correctness / safety / auditability（本计划第 1 节）。P5-C1 / P5-C2 的边界保留，理由见合同第 4 节 Q2-Q4
 Internal Stages                    : S1 / S2 / S3（连续施工；无中间 Review；无 S 级状态 docs）
-Independent Review Plan            : Design / Authority Review（实现之前，必需；本文件与合同均为 CANDIDATE）
+Independent Review Plan            : Design / Authority Review（实现之前，必需；原 Design Review 结论 Architecture ACCEPTED / Risk B VALID；
+                                     Design R1 Incremental Review 只复查 R1-01..R1-04 + direct regression）
                                      + 1 次 C 级 Independent Level 1 Review（S1-S3 全部完成之后）
                                      + 必要时统一 R1 + Final Closure
                                      C 内中间 Review：NONE（除非触发第 11.3 节的升级条件）
@@ -35,7 +36,8 @@ Production Change                  : NONE（`src/**` 零 diff；任何 src/** �
 Package               = P5-C1 Amane Adapter End-to-End
 Branch                = claude/phase5-c1-amane-adapter（自 98ad8eb… 创建；不在 claude/phase5-entry-planning 上工作）
 规范合同              = docs/specifications/PHASE5_C1_AMANE_ADAPTER_CONTRACT.md
-Design Candidate      = 本 docs-only 提交（git log -1 --format=%H -- fc2-organizer/docs/P5_C1_CONSTRUCTION_PLAN.md）
+Original Design Cand. = 1e29b4b0c1ee959a2cd061778258f8b7347f5d4d（独立 Design / Authority Review：Architecture ACCEPTED；Risk Class B VALID；Blocking architecture findings NONE）
+Design R1 Candidate   = 本 docs-only 提交（git log -1 --format=%H -- fc2-organizer/docs/P5_C1_CONSTRUCTION_PLAN.md）
 Frozen Contract       = NOT ACCEPTED
 Construction Plan     = NOT ACCEPTED（本文件）
 Design Accepted Head  = NOT ESTABLISHED
@@ -43,8 +45,20 @@ Implementation        = NOT AUTHORIZED
 Phase 5               = ENTRY AUTHORIZED
 ```
 
+### Design R1 修订记录（本计划侧；与合同“Design R1 修订记录”一一对应）
+
+| Finding | 本计划的同步内容 | 状态 |
+|---|---|---|
+| P5-C1-DESIGN-R1-01（请求数量口径） | U-4、第 6 节映射、E9、H-09、H-15、M-02、自审第 4 项：把“物理请求”统一改为合同第 15.2 节的三层口径（L1 = S；L2 host attempts ≤ S×H；L3 含重定向的 network hops ≤ S×H×21；默认 S=3、H=3 为 9 / 189；S=3、H=10 为 30 / 630）；Core A = 1 / Core 语义重试关闭 / 宿主 H 有界不变 | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| P5-C1-DESIGN-R1-02（Python 3.14 Evidence Gate） | 第 5.3 节冻结 exact 命令、显式路径 allow-list（集合 A / B）、集合 C（H-01..H-15）与排除集合 D；PASS 条件；第 3 节 S3 第 6 项、第 6 节映射新增 `test_amane_py314_core_path.py` | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| P5-C1-DESIGN-R1-03（`ok_statuses` / status ≥ 600） | H-09 / H-10 增加 `599` 与 `600` 两个边界场景（`599` 旁路成立；`600` 不受保护，由 `HttpTransportError` 兜底） | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| P5-C1-DESIGN-R1-04（悬空 `W2`） | 本计划原无 `W2` 引用（核对：`grep W2` 为空）；合同第 12 节 -> H-06、第 18 节 -> H-11 | REMEDIATED —— INCREMENTAL REVIEW REQUIRED |
+| OBS-02 / OBS-03 / OBS-06 | E28 记录 L-15 / L-01 / L-07；不改 architecture、不改 Core | RECORDED |
+
+Design R1 不改变：Risk Class B、S1 / S2 / S3 边界、升级门、Evidence E1..E28 的编号与含义、Core A = 1。R1 不得写为 FROZEN / R1 PASS；Design Accepted Head 仍为 NOT ESTABLISHED。
+
 坐标规则（冻结）：Package Frozen Base = Planning Parent = `98ad8eb…`；Governance Authority = `3b9d39e…`（`98ad8eb…` 的祖先，治理文档自此未变）。
-唯一 authority transition：独立 Design / Authority Review PASS -> 该 Review 建立 Design Accepted Head -> Frozen Contract / Construction Plan -> 才允许进入 S1。
+唯一 authority transition：独立 Design R1 Incremental Review PASS -> 该 Review 建立 Design Accepted Head（= R1 Head）-> Frozen Contract / Construction Plan -> 才允许进入 S1。
 不创建 design closure / design accepted 之类的纯状态 docs 提交（治理文档第 11.1 节）。
 
 Design PASS 之后，开发者只能**执行**本计划：不得重新设计、不得调整 S 边界、不得把设计项推迟到“开发时再决定”。合同与本计划未写明的实现细节
@@ -78,7 +92,7 @@ Risk Class = **B**（合同第 5 节）。升级门（任一触发 = 立即 STOP
 U-1 任何 src/** 改动                              U-5 需要绕过宿主 HTTP 生命周期（自建客户端）
 U-2 vendor / 复制 / 打包 Core 源码                U-6 Core 在 Python 3.14 上出现需要生产修改的缺陷
 U-3 任何持久化 / 文件写入 / 磁盘缓存              U-7 需要改变已 CLOSED 测试的语义
-U-4 无法证明重试 / 物理请求有界（DESIGN BLOCKED） U-8 出现新的 security boundary（凭据 / cookie / 监听 / 读宿主 DB）
+U-4 无法证明重试 / 请求数有界（合同 15.2 三层口径；DESIGN BLOCKED） U-8 出现新的 security boundary（凭据 / cookie / 监听 / 读宿主 DB）
 ```
 
 另：真实宿主见证与设计期实测（合同 W-05）**不一致**（例如 `ok_statuses` 行为不同）= 设计前提失效，STOP 并回到 Design Review。
@@ -133,7 +147,7 @@ commit message 记录重要裁决。S 级 checkpoint 不是 Review 触发点。
 3. `test_amane_host_witness_log.py`（恒执行、不 skip）：见证日志的新鲜度与完整性。
 4. `test_amane_isolation.py` + E22 的三种收集顺序与 pre-import 见证。
 5. mutation 门（第 9 节 M-01..M-17）及恢复证明。
-6. Python 3.14 子集：adapter 纯测试 + `tests/unit/{aggregation,resource_control,sources,core}` 在 3.14 上的结果（已知 `punycode` 失败按 L-07 记录，不修复）。
+6. Python 3.14 证据集：**严格按第 5.3 节冻结的集合 A / B / C 执行**（显式路径，无任何 `--deselect` / `--ignore` / `-k`）；集合 D 的已知失败按 L-07 仅作信息记录，不修复、不筛选。
 7. 全量回归 `pytest tests -q`（3.12）；skip / xfail 对账（E27）；`git diff --check`；diff scope（E1）。
 8. `adapters/amane/README.md`（中文安装骨架说明，明确标注“最终分发与 Core 供给属 P5-C2”）。
 9. 编写 `docs/review/P5_C1_HANDOFF.md`（第 10 节）。**S3 完成状态只能写 `READY FOR LEVEL 1 REVIEW` / `FAILED` / `BLOCKED`，绝不写 PASS / CLOSED。**
@@ -202,15 +216,57 @@ git -C <amane-checkout> rev-parse HEAD                                          
 <py312> -m pytest tests/contract tests/phase4_acceptance tests/unit tests/amane_adapter -q -p no:cacheprovider
 ```
 
-### 5.3 真实宿主见证与 3.14 子集
+### 5.3 真实宿主见证与 Python 3.14 证据集（冻结；R1-02；合同第 25.3 节是其权威定义）
+
+`<py314>` 环境要求：Python 3.14.x，`pip install -e <amane-checkout>`（v0.15.0）+ `pytest` + `httpx>=0.27,<0.28`；Core 通过 `PYTHONPATH=src` 提供。
+若无法提供该环境 = **STOP-02（needs input）**，不得降级为替身测试。
+
+**禁止**：3.14 命令中出现 `--deselect`、`--ignore`、`-k`、`-m`、`--lf` 或任何临场筛选。Developer 不决定跑哪些、排除哪些、什么算 PASS。
 
 ```powershell
+# ---- 集合 C：真实宿主见证（H-01..H-15）----
 <py314> tools\run_amane_host_witness.py --amane-src <amane-checkout> --core-src src --adapter-tree adapters\amane\fc2_amane_adapter --out docs\acceptance\evidence\P5_C1_HOST_WITNESS.json
-<py314> -m pytest tests/amane_adapter -q -p no:cacheprovider --deselect <仅需主进程 3.12 的测试>      # 记录结果
-<py314> -m pytest tests/unit/core tests/unit/sources tests/unit/aggregation tests/unit/resource_control -q -p no:cacheprovider
+
+# ---- 集合 A：Core runtime path（既有测试；显式路径；设计期实测 1833 passed）----
+$A = @(
+ 'tests/unit/core/test_fc2_number_canonical_boundary.py','tests/unit/core/test_metadata.py','tests/unit/core/test_normalize_fc2_number.py',
+ 'tests/unit/core/test_source_error_taxonomy.py','tests/unit/core/test_source_result.py',
+ 'tests/unit/sources/test_base.py','tests/unit/sources/test_failure_classification_c2.py','tests/unit/sources/test_fake_adapter_end_to_end.py',
+ 'tests/unit/sources/test_registry.py','tests/unit/sources/test_registry_create_boundary.py',
+ 'tests/unit/sources/adapters/test_adapter_registration.py','tests/unit/sources/adapters/test_adapter_common.py','tests/unit/sources/adapters/test_adapter_canonical_boundary.py',
+ 'tests/unit/aggregation/test_agg_c2_l2_trace_hardening.py','tests/unit/aggregation/test_agg_c3_challenge_any_status.py','tests/unit/aggregation/test_agg_c3_simultaneous_fatal.py',
+ 'tests/unit/aggregation/test_agg_config.py','tests/unit/aggregation/test_agg_engine.py','tests/unit/aggregation/test_agg_execution.py','tests/unit/aggregation/test_agg_guards.py',
+ 'tests/unit/aggregation/test_agg_low1_result_invariants.py','tests/unit/aggregation/test_agg_low2_cancellation.py','tests/unit/aggregation/test_agg_low3_config_immutability.py',
+ 'tests/unit/aggregation/test_agg_low4_client_shape.py','tests/unit/aggregation/test_agg_merge.py','tests/unit/aggregation/test_agg_retry_execution.py',
+ 'tests/unit/aggregation/test_agg_retry_http.py','tests/unit/aggregation/test_agg_retry_policy.py',
+ 'tests/unit/resource_control','tests/contract/test_core_independent_of_amane.py')
+<py314> -m pytest @A -q -p no:cacheprovider --no-header
+
+# ---- 集合 B：adapter 纯模块 + 冻结冒烟（P5-C1 新测试；显式文件）----
+$B = @(
+ 'tests/amane_adapter/test_amane_py314_core_path.py','tests/amane_adapter/test_amane_api_manifest.py','tests/amane_adapter/test_amane_architecture_guards.py',
+ 'tests/amane_adapter/test_amane_settings.py','tests/amane_adapter/test_amane_number_boundary.py','tests/amane_adapter/test_amane_bridge_response.py',
+ 'tests/amane_adapter/test_amane_bridge_errors.py','tests/amane_adapter/test_amane_retry_bounds.py','tests/amane_adapter/test_amane_outcome_status.py',
+ 'tests/amane_adapter/test_amane_error_mapping.py','tests/amane_adapter/test_amane_metadata_mapping.py','tests/amane_adapter/test_amane_narrowing.py',
+ 'tests/amane_adapter/test_amane_provenance.py','tests/amane_adapter/test_amane_cancellation.py','tests/amane_adapter/test_amane_missing_core.py',
+ 'tests/amane_adapter/test_amane_determinism.py','tests/amane_adapter/test_amane_logging_redaction.py','tests/amane_adapter/test_amane_no_side_effects.py',
+ 'tests/amane_adapter/test_amane_runtime_lifetime.py','tests/amane_adapter/test_amane_isolation.py','tests/amane_adapter/test_amane_zip_build.py',
+ 'tests/amane_adapter/test_amane_host_witness_log.py')
+<py314> -m pytest @B -q -p no:cacheprovider --no-header
+<py312> -m pytest @B --collect-only -q -p no:cacheprovider        # 与 3.14 的 collected 数必须相等
+<py314> -m pytest @B --collect-only -q -p no:cacheprovider
 ```
 
-`<py314>` 环境要求：Python 3.14.x，`pip install -e <amane-checkout>`（v0.15.0）+ `pytest`；Core 通过 `PYTHONPATH=src` 提供。若无法提供该环境 = **STOP-02（needs input）**，不得降级为替身测试。
+**PASS 条件（冻结）**
+
+| 集合 | 判据 |
+|---|---|
+| A | 退出码 0；0 failed / 0 error / 0 skipped / 0 xfailed；`collected == passed == 1833`（`src/**` 零 diff，故该数字不得变化） |
+| B | 退出码 0；0 failed / 0 error / 0 skipped / 0 xfailed；3.14 的 `collected` == 3.12 对同一 `$B` 的 `collected`；其中冻结 nodeid `tests/amane_adapter/test_amane_py314_core_path.py::test_core_runtime_objects_and_one_fake_bridge_aggregate` 必须出现且通过 |
+| C | `P5_C1_HOST_WITNESS.json` 中 **H-01..H-15 全部 `passed`**；`python` >= 3.14；`amane.commit == 45dff2159369883e028a296d775a4598836c1ddd`；两个树哈希与当前仓库一致 |
+| D | **不属于 P5-C1 的 3.14 证据集**：`tests/unit/http/**`（含已知失败 `tests/unit/http/test_httpx_transport_decode_c3.py::test_a_non_text_or_unusable_charset_raises_http_decoding_error_and_nothing_else[punycode]`）、Phase 4 Organizer / batch 测试与 `tests/phase4_acceptance/**`（含 3.14 / Windows 收集期失败 `tests/unit/execution/test_execution_manifest.py`，`'/x'`）、`test_probe_aggregate_summary.py`、`tests/unit/sources/adapters/` 下 A 之外的 parser 测试。仅作信息记入 HANDOFF（L-07），既不要求通过，也不得被记为 P5-C1 失败，且不得用任何筛选参数影响 A / B / C |
+
+若 A / B / C 任何用例在 3.14 失败：真实缺陷（adapter）或 Core 3.14 缺陷（= STOP-05 / U-6）；**不得**用 `--deselect` 掩盖。
 
 ### 5.4 diff scope 与整洁性
 
@@ -236,7 +292,7 @@ pytest 文件名一律 `test_amane_<主题>.py`（既有 tests 目录没有 `__i
 | 表 B / §10：SearchQuery 与 canonical | `_number.py` | `test_amane_number_boundary.py` | E5 E6 |
 | 表 D / §13：响应映射 | `_bridge.py` | `test_amane_bridge_response.py` | E7 |
 | 表 E / §14：传输异常映射 | `_bridge.py` | `test_amane_bridge_errors.py` | E8 |
-| §15：所有权与有界性 | `_runtime.py`、`_bridge.py` | `test_amane_retry_bounds.py` | E9 |
+| §15：所有权与三层有界性（L1 / L2 / L3） | `_runtime.py`、`_bridge.py` | `test_amane_retry_bounds.py` | E9 |
 | 表 F / §16：状态映射 | `_outcome.py`、`_runtime.py` | `test_amane_outcome_status.py` | E10 |
 | 表 G / §17：错误映射、优先级、detail | `_outcome.py` | `test_amane_error_mapping.py` | E14 |
 | 表 H / §19.1-19.2：逐字段 | `_outcome.py` | `test_amane_metadata_mapping.py` | E11 |
@@ -248,6 +304,7 @@ pytest 文件名一律 `test_amane_<主题>.py`（既有 tests 目录没有 `__i
 | §21 / I12 / I23：诊断与封闭词汇、日志 | `_outcome.py`、`_runtime.py` | `test_amane_logging_redaction.py` | E13 E20 |
 | §23 / I14：无副作用 | 全部 | `test_amane_no_side_effects.py` | E19 |
 | §12：Core 调用一次构造 | `_runtime.py` | `test_amane_runtime_lifetime.py` | E9 E21(M-10) |
+| §25.3：3.14 上的 Core 运行路径冒烟（真实 `AdapterRuntime` 构造 + 一次 fake-bridge aggregate） | `_runtime.py`、`_bridge.py` | `test_amane_py314_core_path.py::test_core_runtime_objects_and_one_fake_bridge_aggregate` | E23 E24 |
 | §25：主进程隔离 | — | `test_amane_isolation.py` | E22 |
 | 打包骨架 | `build_amane_plugin_zip.py` | `test_amane_zip_build.py` | E4(打包部分) |
 | 真实宿主见证的新鲜度 / 完整性 | `run_amane_host_witness.py` | `test_amane_host_witness_log.py` | E4 E7 E8 E9 E13 E15 E16 |
@@ -268,7 +325,7 @@ pytest 文件名一律 `test_amane_<主题>.py`（既有 tests 目录没有 `__i
 | E6 | canonical / dirty / invalid FC2 矩阵 | 同上 | 覆盖 Phase 1 正向集的全部形态（含 `[广告]FC2PPV-…`、`xxx@FC2PPV-…`）、9 位数字、Unicode 数字、空白、非 str、超长；全部委托 Core |
 | E7 | Amane HTTP 响应映射 | `test_amane_bridge_response.py`、H-09 | 表 D 每行；头小写化；charset 矩阵（utf-8 / shift_jis / 未知 / `rot13` / NUL）；5 MiB 边界；外来响应 |
 | E8 | 传输异常映射 | `test_amane_bridge_errors.py`、H-10 | 表 E 每行；**不解析消息文本**（AST + 用“消息被篡改”的异常验证）；CancelledError 原样传播；编程错误不被捕获 |
-| E9 | 重试 / 限速 / 资源控制有界性 | `test_amane_retry_bounds.py`、`test_amane_runtime_lifetime.py`、H-09 | 合同 §15.2 公式逐项成立：状态码路径 1 次；`CurlError`/超时路径 ≤ H；`H ∈ {1,3,10}`；S ∈ {1,2,3}；熔断打开的来源 0 次；Core `max_attempts == 1`；真实 `WebClient` 上物理请求总数 ≤ S×H；429 / 403 / 404 / 5xx 每来源恰 1 次 |
+| E9 | 重试 / 限速 / 资源控制有界性（**三层口径，合同 §15.2**） | `test_amane_retry_bounds.py`、`test_amane_runtime_lifetime.py`、H-09 | **L1** 桥 `get` 调用数 = S（熔断打开的来源 0），Core `max_attempts == 1`；**L2** 真实 `WebClient` 的 host attempts（`session.request` 调用数）：显式集合 `300..599` 内状态码路径每来源恰 1、`CurlError` / 超时路径每来源 ≤ H、总数 ≤ S×H（`H ∈ {1,3,10}`，`S ∈ {1,2,3}`）；**L3** 含重定向的 network hops：回环无限 302 场景在真实 curl_cffi 上每个 attempt 服务器命中 **21** 次、`TooManyRedirects` 被按 H 重试，并对 `S×H×21`（默认 189、配置空间 630）做算术核对；**不得**把 `S×H` 称作“最大物理 HTTP 请求数” |
 | E10 | SUCCESS / PARTIAL / FAILED 映射 | `test_amane_outcome_status.py`、H-08 | 表 F 每行；PARTIAL 返回 metadata + 恰 1 条 WARNING；全 NOT_FOUND → `None`；混合 → `SourceError` |
 | E11 | MediaMetadata 完整字段映射表 | `test_amane_metadata_mapping.py`、H-07 | 对 `NormalizedMetadata` 的**每个字段**与 manifest 中 `MediaMetadata` 的**每个字段**有显式处置（守护测试穷举）；`fanart_urls` 不出现在任何输出；FilmActor 性别 `unknown`；URL 卫生过滤 |
 | E12 | 复数 -> 单数确定性窄化 | `test_amane_narrowing.py` | N-1 / N-2 冲突测试：多来源不同 URL / 不同 `external_ids`、改变配置顺序、全部 URL 非法、空集合；`PYTHONHASHSEED` 无影响；`external_id` 永不取 Core `external_ids` |
@@ -282,12 +339,12 @@ pytest 文件名一律 `test_amane_<主题>.py`（既有 tests 目录没有 `__i
 | E20 | 确定性 | `test_amane_determinism.py`、H-13 | 同输入重复 N 次逐字节相同；`PYTHONHASHSEED ∈ {0,1,2}` 的 subprocess 输出相同；AST：映射模块不迭代 `set` |
 | E21 | mutation / non-vacuity | 第 9 节 | M-01..M-17 每个至少被一个指定测试杀死；记录失败用例与失败数；恢复证明 |
 | E22 | Amane pre-import / `sys.modules` 隔离见证 | 第 5.2 节三种顺序 + `test_amane_isolation.py` + pre-import 见证 | 三种顺序均通过且计数一致；主进程 `sys.modules` 从无 `amane`（哨兵测试）；`tests/**` 静态无 `import amane`（host_scripts 除外）；pre-import 见证：在 3.14 + 真实 Amane 中先 `import amane.plugin` 再运行既有 `tests/contract`，如实记录结果（既有守卫的 OBS-01 行为属 Entry Closure 范围，**不在此修复**；P5-C1 新测试不得加重） |
-| E23 | targeted tests | 第 5.2 节 | 全绿；记录 collected / passed |
+| E23 | targeted tests | 第 5.2 节；Python 3.14 集合 A / B / C（第 5.3 节） | 3.12 全绿并记录 collected / passed；3.14 集合 A / B / C 各自满足第 5.3 节 PASS 条件 |
 | E24 | adapter contract tests | 第 5.2 节 | 全绿 |
 | E25 | 既有 contract 套件 | `pytest tests/contract` | 全绿，计数与基线一致 |
 | E26 | full suite | `pytest tests` | 全绿；计数 = 基线 + 新测试数 |
 | E27 | skip / xfail 对账 | 基线 skip nodeid 清单 vs 最终清单 | 无新增 skip / xfail；清单逐项一致 |
-| E28 | evidence gaps / known limitations | 合同第 28 节 L-01..L-14 + 实施中新发现 | 逐条记录；无“静默缺口” |
+| E28 | evidence gaps / known limitations | 合同第 28 节 L-01..L-15（含 L-01 重定向超限被重试 H 次且不是 Core `REDIRECT_ERROR`、L-07 punycode / `'/x'` 的集合 D 排除、L-15 host permit 在宿主内部 retry 期间持续持有）+ 实施中新发现 | 逐条记录；无“静默缺口” |
 
 ---
 
@@ -306,13 +363,13 @@ pytest 文件名一律 `test_amane_<主题>.py`（既有 tests 目录没有 `__i
 | H-06 | 经真实 `CrawlerFactory` 构造 provider | 同一 provider 被缓存复用；Core engine 只构造一次；`build()` 在合法配置下不抛 |
 | H-07 | `fetch` SUCCESS 的真实 `MediaMetadata` | 与合同表 H 的黄金值逐字段相等（含 `source_url`、`external_id`、`extrafanart`、actors 性别 unknown、`fanart_urls` 缺席） |
 | H-08 | 经真实 `invoke_source` 的结果矩阵 | SUCCESS -> OK；PARTIAL -> OK + 日志；全 NOT_FOUND -> `None`（记 `no_usable_metadata`）；各 `SourceErrorKind` -> 记录的 `reason` / `detail` 等于合同；非 FC2 / 缺号 -> `None` 且 0 次请求；外来 query -> `SourceError(unexpected)` |
-| H-09 | 真实 `WebClient.request` 上的物理请求数 | 状态码 200 / 404 / 403 / 429 / 503 / 5xx：每来源 1 次；`CurlError` / 超时：≤ H；`max_retries ∈ {1,3,10}`；混合；熔断打开后 0 次；总数 ≤ S×H；对照合同 W-05 |
-| H-10 | 真实 `RequestError` 的异常映射 | `timeout` / `network` / `unexpected` 分别得到合同表 E 的 Core kind |
+| H-09 | 真实 `WebClient.request` 上的请求数（三层口径） | **L2 host attempts**：状态码 200 / 404 / 403 / 429 / 503 / 5xx / `599`：每来源 1；`CurlError` / 超时：≤ H；`max_retries ∈ {1,3,10}`；混合；熔断打开后 0；总数 ≤ S×H；对照合同 W-05。**L3 network hops**：回环 HTTP 服务器无限 302 + 真实 curl_cffi：每 attempt 服务器命中 21、`TooManyRedirects` 被 H 次重试；对 `S×H×21` 做算术核对（默认 189、配置空间 630；不要求真实跑满）。**边界**：`status_code = 600` 不在 `ok_statuses` 内 -> `RequestError(http_error)`、1 个 attempt、经 `HttpTransportError` 兜底映射（合同 W-09） |
+| H-10 | 真实 `RequestError` 的异常映射 | `timeout` / `network` / `unexpected` / `http_error`（`600`）分别得到合同表 E 的 Core kind；重定向超限得到 `CONNECTION_ERROR`（**不是** `REDIRECT_ERROR`） |
 | H-11 | 取消 | 挂起会话 + 取消：`CancelledError` 穿过真实 `invoke_source`；无结果；governor 空闲 |
 | H-12 | 真实 `amane.aggregate.aggregate` 贯通（仅见证运行器使用该内部 API 作 oracle；adapter 不使用） | `source_urls / external_ids / extrafanart_urls` 只以 `ffcc.fc2-metadata` 为键；标量字段来源为该 id。若 `aggregate` 无法以最小参数调用，须在 HANDOFF 中记录为 evidence gap（不得悄悄略过） |
 | H-13 | 确定性 | 同场景重复 3 次，及 `PYTHONHASHSEED ∈ {0,1,2}` 的 subprocess：输出逐字节相同 |
 | H-14 | 无副作用 | `data_dir` 前后快照：除宿主工厂自建的 `plugins/<id>/` 空目录外无变化 |
-| H-15 | v0.15.0 宿主缺陷 `max_retries = 0` | 所有来源 -> `FAILED / network`（fail-closed、确定性、0 次物理请求），与合同 L-04 一致 |
+| H-15 | v0.15.0 宿主缺陷 `max_retries = 0` | 所有来源 -> `FAILED / network`（fail-closed、确定性、0 个 host attempt），与合同 L-04 一致 |
 
 `test_amane_host_witness_log.py`（主进程，恒执行，不 skip）校验：日志 `amane.commit == 45dff21…`、`amane.version == 0.15.0`；场景 ID 集合恰等于 H-01..H-15（与运行器常量一致）；全部 `passed`；
 `adapter_tree_sha256` 与 `core_tree_sha256` 等于当前仓库计算值（防止陈旧日志 / Core 被改动）。独立 Reviewer **必须**以第 5.3 节命令重跑见证并比对。
@@ -357,8 +414,10 @@ pytest 文件名一律 `test_amane_<主题>.py`（既有 tests 目录没有 `__i
 
 ## 11. Independent Review Plan
 
-### 11.1 Design / Authority Review（实现之前；必需）
+### 11.1 Design / Authority Review 与 Design R1 Incremental Review（实现之前；必需）
 
+上一轮 Design / Authority Review：Architecture ACCEPTED、Risk Class B VALID、无 blocking architecture finding。
+Design R1 Incremental Review **只**复查 R1-01..R1-04 与 direct regression，不重新完整审查整个 P5-C1 Design。
 对象：本合同与本计划。Reviewer 应直接核对：Amane 坐标（`45dff21…`）、表 A 的文件 / 行号、W-05 / W-06 的复现（附录 A / B）、Core 白名单名字是否真实存在、
 重试有界性公式、表 B-J 的完备性与一致性、不变量 I1-I26、升级门、P5-C1 / P5-C2 边界。通过后由该 Review 建立 Design Accepted Head。
 
@@ -392,16 +451,16 @@ STOP 之后：写明 blocker 与证据，停止，不自行猜测合同。
 ## 13. 状态
 
 ```text
-P5-C1 Design                 : CANDIDATE —— INDEPENDENT DESIGN REVIEW REQUIRED
-P5-C1 Contract               : CANDIDATE
-P5-C1 Construction Plan      : CANDIDATE（本文件）
+P5-C1 Design R1              : CANDIDATE —— INCREMENTAL REVIEW REQUIRED
+P5-C1 Contract               : CANDIDATE（Design R1）
+P5-C1 Construction Plan      : CANDIDATE（Design R1；本文件）
 P5-C1 Implementation         : NOT STARTED
 Phase 5                      : ENTRY AUTHORIZED
 src Diff                     : NONE
 tests Diff                   : NONE
 New Architecture Blocker     : NONE
 Risk Escalation              : NONE（B -> C 未触发）
-Next                         : P5-C1 CONTRACT / CONSTRUCTION PLAN INDEPENDENT DESIGN REVIEW（不得开始实现）
+Next                         : P5-C1 DESIGN R1 INCREMENTAL INDEPENDENT REVIEW（不得开始实现）
 ```
 
 ---
@@ -411,8 +470,9 @@ Next                         : P5-C1 CONTRACT / CONSTRUCTION PLAN INDEPENDENT DE
 1. 头部包含治理文档第 18 节要求的全部字段，且 Risk Class 与升级门已显式声明。✔
 2. 治理四问有真实判断（合同第 4 节），P5-C1 / P5-C2 边界基于设计期实测（宿主漂移、环境依赖、Core 供给）而非照抄示例。✔
 3. 合同表 A-J 齐全；I1-I20 全部出现，另新增 I21-I26。✔
-4. 重试 / 限速 / 资源控制：所有权明确，公式有界（S×H，A=1），已由对真实 v0.15.0 `WebClient` 的实测支撑；不存在乘法重试。✔
+4. 重试 / 限速 / 资源控制：所有权明确，三层口径有界（L1 = S、L2 ≤ S×H、L3 ≤ S×H×21；A=1），已由对真实 v0.15.0 `WebClient` 与真实 curl_cffi 重定向的实测支撑；不存在乘法重试。✔
 5. 无需修改 CLOSED Core 合同：Core 重试经既有的 `RetryPolicy.no_retry()` 关闭，governor 使用既有默认。✔
 6. 测试隔离：主进程不 import amane；真实宿主在 subprocess；不 skip；见证日志有新鲜度测试。✔
 7. 本轮未修改 `src/**`、`tests/**`、`pyproject.toml`、Phase 4 docs、Phase 5 Entry Authority、治理文档、`CLAUDE.md`。✔
-8. 未写 Contract FROZEN / Design PASS / P5-C1 STARTED。✔
+8. 未写 Contract FROZEN / Design PASS / R1 PASS / P5-C1 STARTED。✔
+9. Design R1：R1-01..R1-04 已闭合为 REMEDIATED（待增量复查）；3.14 证据集 A / B / C / D 已冻结为显式路径，无任何 `--deselect`。✔
