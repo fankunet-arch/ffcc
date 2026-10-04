@@ -234,9 +234,19 @@ def test_phase3_c4_batch_scheduler_runs_end_to_end_with_amane_import_blocked_at_
         _purge_core_modules()
 
 
-def test_amane_is_not_actually_installed_in_this_test_environment():
-    """Sanity check that the dynamic test above is meaningful: `amane` isn't
-    already absent from sys.modules for some unrelated reason, and importing
-    it for real does fail here (this is a Phase 1 offline environment)."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("amane")
+def test_amane_blocker_is_non_vacuous_and_environment_independent():
+    """Sanity check that the dynamic tests above are meaningful.
+
+    Environment-independent (F3 / Phase 5 entry closure): this exercises the
+    meta-path blocker directly and never asks the real import system whether
+    Amane is installed, so it passes identically whether or not Amane is
+    importable. It proves the blockers used above are non-vacuous: they
+    reject ``amane`` / ``amane.*`` and defer on everything else."""
+    blocker = _BlockAmaneFinder()
+    with pytest.raises(ImportError) as top_level:
+        blocker.find_spec("amane")
+    assert type(top_level.value) is ImportError
+    with pytest.raises(ImportError) as submodule:
+        blocker.find_spec("amane.some_module")
+    assert type(submodule.value) is ImportError
+    assert blocker.find_spec("json") is None

@@ -14,6 +14,8 @@ tested answer for:
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from fc2_metadata_core.errors import SourceResultContractError
@@ -289,7 +291,7 @@ class TestSourceResultIsImmutable:
             metadata=_minimum_metadata(),
             elapsed_ms=10.0,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             result.status = SourceStatus.NOT_FOUND  # type: ignore[misc]
 
 
@@ -361,7 +363,7 @@ class TestSuccessLifetimeInvariant:
 
     def test_scalar_mutation_attempt_fails_and_invariant_survives(self):
         result = self._success_result()
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             result.metadata.title = ""  # type: ignore[misc]
         assert result.metadata.meets_minimum_success() is True
 
@@ -417,7 +419,7 @@ class TestSuccessLifetimeInvariant:
     def test_result_metadata_attribute_itself_cannot_be_reassigned(self):
         result = self._success_result()
         other = NormalizedMetadata(title="not minimum success on its own")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             result.metadata = other  # type: ignore[misc]
         assert result.metadata.meets_minimum_success() is True
 
@@ -442,7 +444,7 @@ class TestPartialFailureLifetimeInvariant:
         )
         assert result.metadata.meets_minimum_success() is False
 
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             result.metadata.number = "FC2-4825061"  # type: ignore[misc]
 
         assert result.metadata.meets_minimum_success() is False
@@ -463,7 +465,7 @@ class TestCallerOwnedAliasSafetyThroughSourceResult:
         )
         assert result.metadata is md
 
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             md.title = ""  # type: ignore[misc]
 
         assert result.metadata.meets_minimum_success() is True

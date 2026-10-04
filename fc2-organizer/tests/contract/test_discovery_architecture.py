@@ -157,10 +157,22 @@ def test_discover_media_runs_end_to_end_with_forbidden_modules_blocked_at_runtim
         _purge_organizer_modules()
 
 
-def test_amane_is_not_actually_installed_in_this_test_environment():
-    """Sanity check that the blocks above are meaningful."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("amane")
+def test_amane_blocker_is_non_vacuous_and_environment_independent():
+    """Sanity check that the blocks above are meaningful.
+
+    Environment-independent (F3 / Phase 5 entry closure): this exercises the
+    meta-path blocker directly and never asks the real import system whether
+    Amane is installed, so it passes identically whether or not Amane is
+    importable. It proves the blockers used above are non-vacuous: they
+    reject ``amane`` / ``amane.*`` and defer on everything else."""
+    blocker = _BlockForbiddenFinder()
+    with pytest.raises(ImportError) as top_level:
+        blocker.find_spec("amane")
+    assert type(top_level.value) is ImportError
+    with pytest.raises(ImportError) as submodule:
+        blocker.find_spec("amane.some_module")
+    assert type(submodule.value) is ImportError
+    assert blocker.find_spec("json") is None
 
 
 def test_organizer_package_has_no_other_stray_top_level_modules_yet():

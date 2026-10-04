@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import FrozenInstanceError
 from types import MappingProxyType
 
 import pytest
@@ -338,7 +339,7 @@ class TestImmutability:
 
     def test_scalar_attribute_assignment_is_rejected(self):
         md = NormalizedMetadata(number="FC2-1234567", title="valid")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             md.title = "changed"  # type: ignore[misc]
         assert md.title == "valid"
 
