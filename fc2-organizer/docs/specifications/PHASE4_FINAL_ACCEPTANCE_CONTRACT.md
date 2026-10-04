@@ -1330,27 +1330,44 @@ P4-C10-AUTH-A2-R-01            : CLOSED（经 AUTH-A3 Independent Review 确认�
 P4-C10-AUTH-A3                 : INDEPENDENT REVIEW COMPLETED — PASS（AUTH-A3 Review：COMPLETED — PASS）
 Active Authority prior to AUTH-A4 : 82f96a21e210b0b63b904df1f8a8e62be741a9aa（AUTH-A3 reviewed head；AUTH-A4 Candidate 不改变它）
 C10-R1                         : COMPLETED —— e0ee8c15d9d8d238ee76e3f142870a96d5972a60（test-only repair of P4-C10-F1-01：Windows same-volume rename SOURCE_REMOVED oracle；唯一改动 tests/phase4_acceptance/test_p4_acceptance_chain.py；Production UNCHANGED）
-Formal G-T                     : PASS —— 142 / 142，0 failed，0 errors，0 skipped（正式环境 Windows 11 / Python 3.12.10 / httpx 0.27.2 / pytest 9.1.1 / 普通用户；含 S-09A、S-09B、S-12 same-volume-native、S-21）
-Formal G-P4                    : NOT PASS —— P4-C10-AUTH-GP4-01（冻结的 exact command 稳定 INTERNALERROR；pre-existing / baseline-like existing-test isolation constructibility blocker；第 22 节）
-P4-C10-AUTH-GP4-01             : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（HIGH / BLOCKING；Authority / Frozen-Gate Constructibility / Existing-Test Isolation；不得写 CLOSED / PASS / ACCEPTED）
-P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE 299a821b45b6e39a9cfcc60b4537487d697715ae（docs-only；本合同第 22 节与计划第 18 节；Risk Class B）
-P4-C10-AUTH-A4 Independent Authority Amendment Review : COMPLETED — BLOCKED（针对 299a821b…；Review 级 blocker：该 Reviewer 环境无法独立读取 local HEAD 与 local worktree CLEAN，属于 REVIEW ENVIRONMENT / CONTEXT HANDSHAKE LIMITATION，不是项目 finding，不新增任何 finding；由下一位有本地 Git worktree 访问能力的 Reviewer 完成完整 handshake 即消失）
-P4-C10-AUTH-A4-R-01            : REMEDIATED — INCREMENTAL INDEPENDENT REVIEW REQUIRED（MEDIUM / BLOCKING；Authority / Current-State / Verdict Lifecycle Consistency：计划第 17.4 节曾把 Technical Acceptance Verdict 写成 BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING，与计划第 15、18.7 节的 NOT ESTABLISHED 冲突；已把第 17.4 节当前值同步为 NOT ESTABLISHED，并把旧值标记为历史；不得写 CLOSED / PASS / ACCEPTED）
-P4-C10-AUTH-A4-R1              : CURRENT DOCS-ONLY CLOSURE CANDIDATE —— INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW REQUIRED（Base 299a821b…；只闭合 P4-C10-AUTH-A4-R-01；不改变第 22 节任何语义）
-Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa —— UNCHANGED PENDING REVIEW（AUTH-A4 299a821b… 与 AUTH-A4-R1 均不是 active authority；仅在后续 Incremental Independent Review PASS 后由 Reviewer 建立新的 Active Authority Amendment Head；作者不得自行提升）
-Next                           : P4-C10-AUTH-A4-R1 INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW（必须在有本地 Git worktree 访问能力的 session 中执行，以真正核验 local HEAD 与 local worktree CLEAN；该 Review PASS 后才允许实际 test-isolation repair（第 22.7 节）；之后重取 Formal G-T / G-P4 / PC-04 / G-FULL / skip 对账，再 Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review；顺序与计划第 15 / 17.3 / 18 节一致）
-P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；详见 docs/review/P4_C10_HANDOFF.md）；当前 Formal G-P4 NOT PASS（P4-C10-AUTH-GP4-01）
-P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写；独立 Review 之前不是 PASS）
+Formal G-T（C10-R1 之后、repair 之前）: PASS —— 142 / 142（HISTORICAL；已被下方 E-4 重新取得）
+P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE 299a821b45b6e39a9cfcc60b4537487d697715ae（docs-only；本合同第 22 节与计划第 18 节；Risk Class B）—— 历史 candidate
+P4-C10-AUTH-A4 Independent Authority Amendment Review : COMPLETED — BLOCKED（HISTORICAL；针对 299a821b…；Review 级 blocker：REVIEW ENVIRONMENT / CONTEXT HANDSHAKE LIMITATION，不是项目 finding，不新增任何 finding）
+P4-C10-AUTH-A4-R1              : DOCS-ONLY CLOSURE CANDIDATE 7d1a48f6e9b9ce1ac3234487b1126b58b879bc8b（Base 299a821b…；只闭合 P4-C10-AUTH-A4-R-01；不改变第 22 节任何语义）
+P4-C10-AUTH-A4-R1 Review       : COMPLETED — PASS（P4-C10-AUTH-A4-R1 Incremental Independent Authority Closure Review；Final Verdict = PASS）
+P4-C10-AUTH-A4-R-01            : CLOSED（经 AUTH-A4-R1 Incremental Independent Authority Closure Review 确认）
+P4-C10-AUTH-GP4-01             : CLOSED（AUTH-A4 / AUTH-A4-R1 authority 经独立 Review PASS；授权 repair 已实施；Formal G-P4 正式 PASS，见下）
+Active Authority Amendment Head : 7d1a48f6e9b9ce1ac3234487b1126b58b879bc8b（AUTH-A4-R1 reviewed head；由 AUTH-A4-R1 Review PASS 建立；此前为 82f96a21…）
+Authorized Repair              : IMPLEMENTED @ a0d491d413a96ce9f08937dd5074adcd2144439d（parent 7d1a48f6…；TEST-ISOLATION REPAIR ONLY；唯一改动 tests/unit/orchestration/test_orchestration_recognition.py::test_source_key_is_exact_on_posix；
+                                 Production Modified NO；tests/contract Modified NO；assertion 语义 / expected result / no_io fixture / filesystem trap 强度均未改变；第 22.7 节 scope）
+E-1 Focused Target             : PASS —— 1 passed
+E-2 Causal-Order Witness       : PASS —— 2 passed / 0 failed / 0 errors（同一 pytest process：test_planning_imports_cleanly_with_amane_blocked_at_runtime -> test_source_key_is_exact_on_posix）
+E-3 tests/unit/orchestration   : PASS —— 919 passed / 0 failed / 0 errors
+Formal Evidence Environment    : Windows 11 Home NT 10.0.26200 / Python 3.12.10 / httpx 0.27.2 / pytest 9.1.1 / 普通用户（non-admin）/ C: NTFS；SUT = p4-c10 worktree @ a0d491d4…
+Formal Evidence Root           : C:\Users\Ctg\AppData\Local\Temp\p4-c10-post-repair-formal-9d1f4042f8a946c6ad73656a829ce7e2（不入库）
+Formal G-T (E-4)               : PASS —— 142 / 142，0 failed，0 errors，0 skipped（S-09A、S-09B（os.path.isabs(r"\lib") = True）、S-12 same-volume-native、S-21 PASS；C:\lib 前后均 ABSENT）
+Formal G-P4 (E-5)              : PASS —— 第 8.2 节 frozen exact command：collected 5388 / passed 5348 / skipped 40 / failed 0 / errors 0；原 INTERNALERROR NOT REPRODUCED；skip nodeid 集合 = SKIP_BASE
+Formal Constructibility        : RESTORED（原 G-P4 constructibility blocker CLOSED）
+PC-04 (E-6)                    : PASS —— Design Accepted Head 上 tests/contract 测试模块 10 个；git diff fc59e202…a0d491d4 -- tests/contract 为空；Formal G-P4 PASS
+Formal G-FULL (E-7)            : PASS —— collected 7949 / passed 7909 / skipped 40 / failed 0 / errors 0（7767 + 142 = 7909；7909 + 40 = 7949；k = 0）
+Exact Skip Reconciliation (E-8): PASS —— SKIP_BASE 40 == SKIP_CURRENT 40 exact nodeids；两个差集均为空；skip reasons 逐行相同；new unexplained skips NONE
+Trusted Historical Baseline    : 7807 collected / 7767 passed / 40 skipped / 0 failed / 0 errors；SKIP_BASE 来源 C:\Users\Ctg\AppData\Local\Temp\p4-c10-formal-30e11fdc4604444cab2916cc939cb1de\skip-base.txt（本轮未重建）
+PC-08                          : NOT RUN（FC2_EXECUTION_CROSS_VOLUME_ROOT 未设置）
+XD-B04                         : OPEN ACCEPTED EVIDENCE GAP —— NON-BLOCKING
+Open F1 / F2 / F3 / F4         : NONE / NONE / NONE / NONE
+New Authority Finding          : NONE
+Evidence Refresh Candidate     : CURRENT DOCS CANDIDATE = 本提交（Base / parent a0d491d413a96ce9f08937dd5074adcd2144439d；exact SHA 由 git 在提交后确定；不是 Final Reviewed Acceptance Head）
+P4-C10 Technical Acceptance Candidate Status : READY FOR LEVEL 1 REVIEW（当前；READY != PASS）
+Historical S3 Candidate Status : BLOCKED — ENVIRONMENT（HISTORICAL / COMPLETED / NOT CURRENT；原 S3 快照 1012968e…）
+P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（只由 Incremental Independent Level 1 Closure Review 建立）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
 Final Reviewed Acceptance Head : NOT ESTABLISHED
-PC-04 Evidence                 : NOT ESTABLISHED（依赖 Formal G-P4 PASS；PC-04 规则本身 UNCHANGED）
-Formal G-FULL                  : NOT RUN（Formal G-P4 停止之后未运行）
-Evidence Refresh Candidate     : NOT CREATED
-XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Phase 4 Exit Authorization     : BLOCKED — P4-C10-AUTH-GP4-01 AUTHORITY AMENDMENT REVIEW PENDING；LEVEL 1 / EC-15 PENDING；XD-A08
+XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（只阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
+Phase 4 Exit Authorization     : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08
 Production Modified            : NO
 Production repair              : NOT PERFORMED
-Actual test isolation repair   : NOT PERFORMED（需 AUTH-A4 Independent Review PASS 之后）
+Actual test isolation repair   : PERFORMED @ a0d491d4…（test-only；第 22.7 节唯一 scope）
+Next                           : P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW
 P4-C10                         : NOT CLOSED
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED

@@ -1,16 +1,36 @@
 # P4-C10 HANDOFF —— Phase 4 最终验收（Final Acceptance）候选证据快照
 
 ```text
-文档性质                         : candidate evidence snapshot（S3 时点的开发者证据；不是 reviewed verdict）
+文档性质                         : candidate evidence snapshot（S3 时点的开发者证据 + Post-Repair Evidence Refresh（Part III）；不是 reviewed verdict）
 Package                          : P4-C10 Phase 4 Final Acceptance（无生产代码；只有 tests/phase4_acceptance/** 与 docs）
 Risk Class                       : B（升级门 U-1..U-7 均未触发，见 Part I 第 13 项）
 Frozen Contract / Plan           : ACCEPTED @ fc59e2020e4df237bf3bed83a07950d67c19b475（Design Accepted Head；Independent Design-R3 Closure Review PASS，据任务指令记录）
 ```
 
-## 0. 三层状态字段（合同第 16.1a / 17 节；S3 候选快照，开发者不得写 PASS）
+## 当前状态（CURRENT —— Post-Repair Evidence Refresh Candidate；详见 Part III 第 19 节）
 
 ```text
-P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT
+Current Evidence Refresh Candidate Status    : READY FOR LEVEL 1 REVIEW（READY != PASS）
+P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（只由 Incremental Independent Level 1 Closure Review 建立）
+Final Reviewed Acceptance Head               : NOT ESTABLISHED
+Evidence Refresh Candidate                   : 本提交（parent a0d491d413a96ce9f08937dd5074adcd2144439d；exact SHA 由 git 在提交后确定；不是 Final Reviewed Acceptance Head）
+Active Authority Amendment Head              : 7d1a48f6e9b9ce1ac3234487b1126b58b879bc8b
+P4-C10-AUTH-A4-R-01 / P4-C10-AUTH-GP4-01     : CLOSED / CLOSED
+Authorized Repair                            : IMPLEMENTED @ a0d491d413a96ce9f08937dd5074adcd2144439d
+Formal G-T / G-P4 / PC-04 / G-FULL / Skip    : PASS / PASS / PASS / PASS / PASS（第 19 节）
+Open F1 / F2 / F3 / F4                       : NONE
+XD-A08（C5-R1-L1）                           : OPEN —— 只阻塞 Phase 4 Exit / Closure，不阻塞 Technical Acceptance
+Phase 4 Exit Authorization                   : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08
+P4-C10 / Phase 4 / Phase 5                   : NOT CLOSED / NOT CLOSED / NOT STARTED
+Next                                         : P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW
+```
+
+下文第 0..18 节是 **S3 时点的历史 candidate evidence snapshot（HISTORICAL / COMPLETED / NOT CURRENT）**，原样保留、不追溯改写其证据；其中的状态字段只描述 S3 时点。
+
+## 0. 三层状态字段（HISTORICAL S3 快照 —— NOT CURRENT；合同第 16.1a / 17 节；开发者不得写 PASS；当前状态见文首与第 19 节）
+
+```text
+Historical S3 Candidate Status               : BLOCKED — ENVIRONMENT（HISTORICAL / COMPLETED / NOT CURRENT）
                                                （正式证据环境 Windows 11 / Python 3.12.x 在本施工会话中不可得；其余全部已知技术门的证据已收集，
                                                  见下；这不是 F2：未发现任何 CLOSED production 偏离其 Frozen Contract 的缺陷）
 P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED
@@ -25,12 +45,12 @@ Production Modified                          : NO
 Production repair                            : NOT PERFORMED
 ```
 
-**为什么是 `BLOCKED — ENVIRONMENT` 而不是 `READY FOR LEVEL 1 REVIEW`。** 合同第 12.1 节、EC-08 与第 8 节要求 G-T / G-P4 / G-FULL 在
+**（历史说明）S3 时点为什么是 `BLOCKED — ENVIRONMENT` 而不是 `READY FOR LEVEL 1 REVIEW`。** 合同第 12.1 节、EC-08 与第 8 节要求 G-T / G-P4 / G-FULL 在
 Windows 11 / Python 3.12.x 上取得；本会话是一个云容器（Linux 6.18 / Python 3.11.15，见第 4 项），开发者无法提供该环境。按合同第 16.1a 节，
 `READY FOR LEVEL 1 REVIEW` 要求“全部已知 technical gate 在 candidate evidence 中满足”，该条件不成立，因此如实写 `BLOCKED — ENVIRONMENT`（合同授权的取值之一）。
 这个值**不表示**任何技术门失败：在本环境得到的全部证据（见下）没有出现一个 C10 失败、没有出现新的失败 / 错误 / 未解释 skip。
 Level 1 Reviewer 按计划第 11 节本来就必须在正式环境独立重跑；开发者另外补充了 PC-09 的非正式（Python 3.11 / POSIX）证据。
-正式环境结果、以及据此重新判定 Candidate Status，属于下一步（见第 18 节“交接点”）。
+正式环境结果、以及据此重新判定 Candidate Status，属于下一步（见第 18 节“交接点”）。该环境缺口此后已由正式 Windows 证据闭合，当前 Candidate Status 见第 19 节。
 
 ---
 
@@ -469,7 +489,7 @@ G-P4 逐目录补充运行                                                      
 git ls-files -- fc2-organizer/src | git hash-object --no-filters vs HEAD:path                                -> 104 / 104 一致
 ```
 
-## 18. 交接点（STOP）
+## 18. S3 交接点（STOP）—— HISTORICAL / COMPLETED / NOT CURRENT
 
 S3 完成。C10 Acceptance Head = 本提交。开发者不再修改本提交，不创建 Review 后状态提交。下一步**唯一**是 `P4-C10 INDEPENDENT LEVEL 1 FINAL ACCEPTANCE REVIEW`
 （Review Range = `fc59e2020e4df237bf3bed83a07950d67c19b475..<C10 Acceptance Head>`）。Reviewer 需要：
@@ -480,11 +500,154 @@ S3 完成。C10 Acceptance Head = 本提交。开发者不再修改本提交，�
 4. 核对本文件的 Candidate Status / Verdict 字段符合合同第 16.1a 节（本文件没有写 PASS）。
 
 ```text
-P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT
-P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED
-Final Reviewed Acceptance Head               : NOT ESTABLISHED
+（HISTORICAL S3 快照 —— NOT CURRENT；当前状态见第 19 节）
+Historical S3 Candidate Status               : BLOCKED — ENVIRONMENT
+P4-C10 Technical Acceptance Verdict（S3 时） : NOT ESTABLISHED
+Final Reviewed Acceptance Head（S3 时）      : NOT ESTABLISHED
 XD-A08                                       : OPEN
-Phase 4 Exit Authorization                   : BLOCKED
+Phase 4 Exit Authorization（S3 时）          : BLOCKED
 Phase 4                                      : NOT CLOSED
 Phase 5                                      : NOT STARTED
 ```
+
+该 S3 交接点已经完成：原 Level 1 Review 返回 BLOCKED，之后经 AUTH-A1..AUTH-A4 / C10-R1 / 授权 test-isolation repair 与正式证据重取，形成第 19 节的 Post-Repair Evidence Refresh Candidate。
+
+---
+
+# Part III —— Post-Repair Evidence Refresh（CURRENT）
+
+## 19. Post-Repair Evidence Refresh Candidate（当前候选证据；不是 reviewed verdict）
+
+本节是 Evidence Refresh 作者对已完成证据的同步记录（docs-only）。本提交不修改任何测试或 `src`、不重新运行 pytest、不重新执行 repair、不修改合同第 22 节 / 计划第 18 节的 reviewed authority 语义。
+
+### 19.1 坐标
+
+```text
+Historical Design Accepted Head        : fc59e2020e4df237bf3bed83a07950d67c19b475
+Historical original C10 Acceptance Head: 1012968e3068731025d2512612fa8f85e829d3d0
+C10-R1                                 : e0ee8c15d9d8d238ee76e3f142870a96d5972a60
+AUTH-A4 Candidate                      : 299a821b45b6e39a9cfcc60b4537487d697715ae
+Active Authority Amendment Head        : 7d1a48f6e9b9ce1ac3234487b1126b58b879bc8b（AUTH-A4-R1 reviewed head）
+Authorized Repair Head                 : a0d491d413a96ce9f08937dd5074adcd2144439d（parent 7d1a48f6…）
+Evidence Refresh Candidate             : 本提交（parent a0d491d413a96ce9f08937dd5074adcd2144439d；exact SHA 由 git 在提交后确定）
+Final Reviewed Acceptance Head         : NOT ESTABLISHED
+```
+
+### 19.2 Authority
+
+```text
+P4-C10-AUTH-A4-R1 Incremental Independent Authority Closure Review : COMPLETED — PASS
+P4-C10-AUTH-A4-R-01                    : CLOSED
+P4-C10-AUTH-GP4-01                     : CLOSED
+Active Authority Amendment Head        : 7d1a48f6e9b9ce1ac3234487b1126b58b879bc8b
+New Authority Finding                  : NONE
+```
+
+### 19.3 Authorized Repair（合同第 22.7 节 / 计划第 18.4 节唯一 scope）
+
+```text
+Repair commit          : a0d491d413a96ce9f08937dd5074adcd2144439d   test(orchestration): isolate POSIX source-key test
+唯一修改               : M fc2-organizer/tests/unit/orchestration/test_orchestration_recognition.py
+唯一 target            : test_source_key_is_exact_on_posix
+性质                   : TEST-ISOLATION REPAIR ONLY —— 删除 no_io 生效后的函数内 re-import；改为通过已加载的 recognize.__globals__["os"] patch os.name = "posix"
+Production Modified    : NO
+tests/contract Modified: NO
+Assertion Semantics Changed : NO
+Expected Result Changed     : NO
+no_io Fixture Changed       : NO
+Filesystem Trap Strength Changed : NO
+```
+
+### 19.4 Focused evidence（E-1..E-3）
+
+```text
+E-1 Focused target                       : PASS —— 1 passed
+E-2 Same-process causal-order witness    : PASS —— 2 passed / 0 failed / 0 errors
+    顺序：tests/contract/test_planning_architecture.py::test_planning_imports_cleanly_with_amane_blocked_at_runtime
+          -> tests/unit/orchestration/test_orchestration_recognition.py::test_source_key_is_exact_on_posix
+E-3 tests/unit/orchestration 全目录      : PASS —— 919 passed / 0 failed / 0 errors
+```
+
+### 19.5 正式证据环境（合同第 12.1 节）
+
+```text
+Evidence Root   : C:\Users\Ctg\AppData\Local\Temp\p4-c10-post-repair-formal-9d1f4042f8a946c6ad73656a829ce7e2
+                  （evidence binary / log 不入库）
+Windows         : Windows 11 Home，NT 10.0.26200
+Python          : 3.12.10
+httpx           : 0.27.2
+pytest          : 9.1.1
+Privilege       : 普通用户（non-admin）
+Filesystem      : C: NTFS
+SUT             : 当前 p4-c10 worktree 的 fc2-organizer/src（HEAD a0d491d4…）
+命令            : 合同第 8.2 节 / 计划第 7 节的 frozen exact command（G-T / G-P4 / G-FULL），未改变目录顺序、未拆分进程、未加 skip / xfail / deselect / -k
+```
+
+### 19.6 Formal evidence（E-4..E-8）
+
+```text
+E-4 Formal G-T      : PASS —— collected 142 / passed 142 / failed 0 / errors 0 / skipped 0
+                      S-09A PASS；S-09B PASS（os.path.isabs(r"\lib") = True）；S-12 same-volume-native PASS；S-21 PASS
+                      C:\lib Before = ABSENT；C:\lib After = ABSENT
+E-5 Formal G-P4     : PASS —— collected 5388 / passed 5348 / skipped 40 / failed 0 / errors 0
+                      原 INTERNALERROR：NOT REPRODUCED；原 G-P4 constructibility blocker：CLOSED；Formal Constructibility：RESTORED
+                      G-P4 skip exact nodeid 集合 = SKIP_BASE
+E-6 PC-04           : PASS —— Design Accepted Head 上 tests/contract 测试模块 = 10；
+                      git diff fc59e2020e4df237bf3bed83a07950d67c19b475..a0d491d413a96ce9f08937dd5074adcd2144439d -- fc2-organizer/tests/contract = EMPTY；Formal G-P4 PASS
+E-7 Formal G-FULL   : PASS —— collected 7949 / passed 7909 / skipped 40 / failed 0 / errors 0
+                      Frozen arithmetic：7767 + 142 = 7909 passed；7909 + 40 = 7949 collected；k = 0 —— PASS
+E-8 Exact skip reconciliation : PASS
+                      SKIP_BASE = 40 exact nodeids；SKIP_CURRENT = 40 exact nodeids
+                      SKIP_BASE − SKIP_CURRENT = EMPTY；SKIP_CURRENT − SKIP_BASE = EMPTY
+                      skip reasons 逐行相同；New unexplained skips = NONE
+```
+
+Trusted Historical Baseline（本轮未重建）：
+
+```text
+7807 collected / 7767 passed / 40 skipped / 0 failed / 0 errors
+SKIP_BASE 来源 : C:\Users\Ctg\AppData\Local\Temp\p4-c10-formal-30e11fdc4604444cab2916cc939cb1de\skip-base.txt（40 exact nodeids）
+```
+
+### 19.7 平台证据缺口与 finding
+
+```text
+FC2_EXECUTION_CROSS_VOLUME_ROOT : unset
+PC-08                           : NOT RUN
+XD-B04                          : OPEN ACCEPTED EVIDENCE GAP —— NON-BLOCKING
+Open F1                         : NONE
+F2                              : NONE
+F3                              : NONE
+F4                              : NONE
+New Authority Finding           : NONE
+P4-C10-AUTH-GP4-01              : CLOSED
+```
+
+### 19.8 当前三层状态字段（CURRENT）
+
+```text
+P4-C10 Technical Acceptance Candidate Status : READY FOR LEVEL 1 REVIEW（READY != PASS）
+P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED
+Final Reviewed Acceptance Head               : NOT ESTABLISHED
+XD-A08（C5-R1-L1）                           : OPEN —— Blocks Technical Acceptance：NO；Blocks Phase 4 Exit：YES
+Phase 4 Exit Authorization                   : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08
+Production Modified                          : NO
+P4-C10                                       : NOT CLOSED
+Phase 4                                      : NOT CLOSED
+Phase 5                                      : NOT STARTED
+```
+
+判定依据（合同第 16.1a 节）：E-1..E-8 全部 PASS；Formal G-T / G-P4 / PC-04 / G-FULL / Exact Skip Reconciliation 全部 PASS；Open F1 / F2 / F3 / F4 = NONE；
+XD-A08 只阻塞 Phase 4 Exit、不阻塞 Technical Acceptance。因此全部已知 technical gate 在 candidate evidence 中满足，Candidate Status = `READY FOR LEVEL 1 REVIEW`。
+原 S3 的 `BLOCKED — ENVIRONMENT` 已成为历史（第 0、18 节）。
+
+### 19.9 交接点（STOP）
+
+Evidence Refresh 作者在本提交 push 之后 STOP。当前唯一下一步：
+
+```text
+P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW
+```
+
+只有该 Reviewer 能建立 `Technical Acceptance Verdict`（PASS / FAIL / BLOCKED）；PASS 时由 Reviewer 建立 Final Reviewed Acceptance Head（EC-14）。
+之后 Phase 4 Exit 仍需 EC-15 与 XD-A08 disposition（合同第 16 节）。
