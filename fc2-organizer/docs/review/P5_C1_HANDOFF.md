@@ -1,21 +1,81 @@
-# P5-C1 HANDOFF —— Amane Adapter End-to-End（实现候选）
+# P5-C1 HANDOFF —— Amane Adapter End-to-End（CLOSED）
 
 ```text
-候选状态              : R1 CANDIDATE — INCREMENTAL LEVEL 1 CLOSURE REVIEW REQUIRED（不是 PASS / CLOSED / TECHNICALLY ACCEPTED）
-P5-C1 Unified R1      : P5-C1-L1-01 REMEDIATED — REVIEW REQUIRED；P5-C1-L1-02 REMEDIATED — REVIEW REQUIRED（见 §0A）
-Pre-Level-1 Correction : P5-C1-PRE-L1-01 REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED（见 §0）
+P5-C1                 : CLOSED（Final Closure 见 §0F）
+Technical Acceptance  : PASS（独立 R1 Incremental Level 1 Closure Review）
+Final Reviewed P5-C1 Head : 0289b191659234a0e74f498e7b412c06c3d28d4a
+Final Closure Docs Head   : 本 Final Closure 提交（纯状态 docs-only；Parent = 0289b191659234a0e74f498e7b412c06c3d28d4a；`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C1_HANDOFF.md`）
+P5-C1-PRE-L1-01       : CLOSED（历史见 §0）
+P5-C1-L1-01           : CLOSED（历史见 §0A）
+P5-C1-L1-02           : CLOSED（历史见 §0A）
 Previous Candidate    : f5afaa6faf8f9d9e415b3a56644a81605848d0b6（Owner 在送 Level 1 之前发现 constructor mismatch；未进入 Level 1；已被 7385ec0 取代）
-Level 1 Candidate     : 7385ec06e1f4a35765cf6259bda409d7970886b5 —— 独立 Level 1 Review：FAIL（P5-C1-L1-01 / P5-C1-L1-02）；本 R1 在其上统一修复
-Implementation        : COMPLETE CANDIDATE（不是 PASS / CLOSED / FROZEN；这些只能由独立 Review 建立）
+Level 1 Candidate     : 7385ec06e1f4a35765cf6259bda409d7970886b5 —— 独立 Level 1 Review：FAIL（P5-C1-L1-01 / P5-C1-L1-02）；由 0289b19 统一 R1 修复
+R1 Candidate          : 0289b191659234a0e74f498e7b412c06c3d28d4a —— 独立 R1 Incremental Level 1 Closure Review：PASS
+Implementation        : TECHNICALLY ACCEPTED @ 0289b191659234a0e74f498e7b412c06c3d28d4a
 Risk Class            : B（B -> C 未触发）
-New Architecture Blocker : NONE
+Architecture Blocker  : NONE
 Risk Escalation       : NONE
 Frozen Contract       : docs/specifications/PHASE5_C1_AMANE_ADAPTER_CONTRACT.md @ 10eba0b8e1d95a49f34becc5ed87301bc2e47320
 Frozen Construction Plan : docs/P5_C1_CONSTRUCTION_PLAN.md @ 10eba0b8e1d95a49f34becc5ed87301bc2e47320
 Design Accepted Head  : 10eba0b8e1d95a49f34becc5ed87301bc2e47320
 Package Frozen Base   : 98ad8eb67bfd3e09701a730487e049f3fc348789
 Branch                : claude/phase5-c1-amane-adapter
+Next                  : P5-C2 CONTRACT / CONSTRUCTION PLAN DESIGN（不是 P5-C2 实现授权）
 ```
+
+## 0F. P5-C1 Final Closure（纯状态 docs-only）
+
+本节只记录由独立 R1 Incremental Level 1 Closure Review 已经建立的状态；不改变 Frozen Contract / Frozen Construction Plan、scope、Risk 或 finding authority。下文 §0A / §0 / §1..§11 中的候选期状态（`REMEDIATED — REVIEW REQUIRED`、`SATISFIED — REVIEW REQUIRED`、`R1 CANDIDATE` 等）是各提交当时的**历史记录**，原样保留以便审计，不代表当时已经 PASS。
+
+```text
+P5-C1 Technical Acceptance : PASS
+Final Reviewed P5-C1 Head  : 0289b191659234a0e74f498e7b412c06c3d28d4a
+P5-C1-PRE-L1-01            : CLOSED
+P5-C1-L1-01                : CLOSED
+P5-C1-L1-02                : CLOSED
+Risk Class                 : B
+Risk Escalation            : NONE
+Architecture Blocker       : NONE
+E1-E28                     : SATISFIED
+H-01..H-15                 : 15/15 PASS
+M-01..M-17                 : 17/17 KILLED
+Python 3.14 Set A          : 1833 PASS
+Python 3.14 Set B          : 520 PASS
+Independent Full Suite     : 8448 passed / 40 skipped / 0 failed / 0 errors / 0 xfail
+Developer unidentified Set-A failure : NOT REPRODUCED
+Evidence Gap               : CLOSED
+E22                        : PASS（既有 P5-ENTRY-CLOSURE-OBS-01 不变）
+P5-C1                      : CLOSED
+```
+
+### 复查链（历史，按时间顺序）
+
+| 提交 | 角色 | 结论 |
+|---|---|---|
+| `f5afaa6faf8f9d9e415b3a56644a81605848d0b6` | 上一个 Review Candidate | Owner 在送 Level 1 之前发现 frozen bridge constructor mismatch（P5-C1-PRE-L1-01）；未进入 Level 1 |
+| `7385ec06e1f4a35765cf6259bda409d7970886b5` | Pre-Level-1 Correction Candidate = Level 1 Candidate | 独立 Level 1 Review：**FAIL**（P5-C1-L1-01 宿主入口原始类型校验；P5-C1-L1-02 引擎异常原因链） |
+| `0289b191659234a0e74f498e7b412c06c3d28d4a` | Unified R1 Candidate | 独立 R1 Incremental Level 1 Closure Review：**PASS** = Final Reviewed P5-C1 Head |
+| 本 Final Closure 提交（Parent = `0289b19…`） | 纯状态 docs-only | 只修改本 HANDOFF；不再进行独立 docs-only Review |
+
+### 独立 R1 Closure Review 的实测证据（Reviewer 在真实本地 checkout 上独立重跑，非引用 HANDOFF）
+
+* Context Handshake：HEAD = origin = ls-remote = `0289b19…`，HEAD^ = `7385ec0…`，工作树干净、无 untracked；增量范围 1 个提交 / 10 个文件，`src/**`、Frozen Contract、Frozen Plan、Governance 零 diff。
+* P5-C1-L1-01：`Fc2MetadataConfig.model_validate({"source_deadline_seconds": "20"})` 被拒绝；`"20"` / `"20.0"` / `" 20 "` / `"1e1"` / `True` / `False` / `0` / 负数 / `>600` / `nan` / `±inf` 拒绝，`20` / `20.0` / `600` 接受；`parse_settings`、`Fc2MetadataConfig.model_validate`、构造器三者裁决逐行一致；真实宿主 H-04 的 46 行矩阵 parity PASS（含 `HotSettings` 路由拒绝原始字符串）。
+* P5-C1-L1-02：provider 边界 `SourceError` 满足 `reason == FailureReason.UNEXPECTED`、`detail == "internal adapter error: RuntimeError"`、`__cause__ is original`（同一对象）、`url` / `http_status` 为 `None`；`SECRET MUST NOT LEAK` 不出现在 detail / 日志 / 输出；`CancelledError` / `KeyboardInterrupt` / `SystemExit` 原样传播；无原始异常时 `from None`；每次 lookup 恰 1 次 `engine.aggregate`；`AdapterFailure` 冻结形状 `(reason, detail)` 不变；真实宿主 H-08 PASS。
+* Direct Regression：NONE（architecture guard 只为 `plugin.py` 增加标准库根 `collections`，`FORBIDDEN_ROOTS` / 文件系统写入守护未改动）。
+* R1 非空洞性：R1-NV-01（恢复原 coercion 漏洞）-> H-04 FAIL + AST 守护 FAIL，KILLED；R1-NV-02（去掉 `from cause`）-> H-08 FAIL + AST 守护 FAIL，KILLED。
+* M-01..M-17：17/17 KILLED（`applied_once` / `sentinel_ok` 全部为真；失败数与 §6 一致）。
+* Python 3.14.7 Set A：`1833 passed`（0 failed / error / skipped / xfailed）；Set B：3.12 collected 520 = 3.14 collected 520，3.14 `520 passed`，冻结节点 `test_core_runtime_objects_and_one_fake_bridge_aggregate` PASSED。
+* 真实宿主见证 H-01..H-15：15/15 passed（Amane `0.15.0`，commit `45dff2159369883e028a296d775a4598836c1ddd`）；重新生成的日志与已提交的 `P5_C1_HOST_WITNESS.json` 在行尾规范化后逐字节相同。
+* 3.12：`tests/amane_adapter` 539 passed；`tests/contract` 237 passed；全量默认顺序 `8448 passed, 40 skipped`（0 failed / errors / xfail）；40 项 skip 均为既有平台 skip，`tests/amane_adapter` 中 0 项；无新增 skip / xfail。
+* E22：pre-import（先 `import amane.plugin`）`3 failed / 234 passed`，失败节点精确等于 §2 E22 所列 3 个既有 Phase 4 守卫（P5-ENTRY-CLOSURE-OBS-01，失败集合未扩大）；对照组 `237 passed`。
+* Developer 未定位的 Set A 失败（`1 failed, 1832 passed in 104.71s`）：独立重跑未复现，Evidence Gap 关闭。
+
+### 治理效果与下一步
+
+* 本 Final Closure 提交自身即建立 `P5-C1: CLOSED`；不再进行独立 docs-only Review。
+* 下一步：**P5-C2 CONTRACT / CONSTRUCTION PLAN DESIGN**。P5-C2 规划可以在本 Final Closure 提交之后开始。
+* 本 Final Closure 提交**不是**自动冻结的 P5-C2 Frozen Base；P5-C2 的 Frozen Base / Contract / Plan 必须由它自己的设计与独立 Design Review 建立。本提交不授权、也不开始任何 P5-C2 实现。
 
 ## 0A. P5-C1 Unified R1（独立 Level 1 Review FAIL 之后的统一修复）
 
@@ -107,6 +167,8 @@ P5-C1-PRE-L1-01 : REMEDIATED — INDEPENDENT LEVEL 1 REVIEW REQUIRED
 | `f5afaa6faf8f9d9e415b3a56644a81605848d0b6` | 上一个 Review Candidate（仅新增 HANDOFF；**Owner 在 Level 1 之前发现 constructor mismatch，未进入 Level 1**） |
 | `7385ec06e1f4a35765cf6259bda409d7970886b5` | Pre-Level-1 Correction Candidate（Parent = `f5afaa6…`）= **Level 1 Candidate** —— 独立 Level 1 Review：**FAIL**（P5-C1-L1-01 / P5-C1-L1-02） |
 | 本 R1 提交（`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C1_HANDOFF.md`；Parent = `7385ec0…`） | **R1 Candidate = 新 Review Candidate Head**（统一 R1：adapter 实现 + 受影响测试 + 刷新的见证日志 + 本 HANDOFF；§2 起的证据均取自该提交的树） |
+| `0289b191659234a0e74f498e7b412c06c3d28d4a` | （Final Closure 补记）上一行的 R1 提交 SHA —— 独立 R1 Incremental Level 1 Closure Review：**PASS** = **Final Reviewed P5-C1 Head** |
+| 本 Final Closure 提交（Parent = `0289b19…`） | 纯状态 docs-only Final Closure（只修改本 HANDOFF；见 §0F）；建立 `P5-C1: CLOSED` |
 
 * Amane：tag `v0.15.0`（annotated，tag 对象 `3292c957a092f85ddde1ba7462ffe9813827f4f1`），commit `45dff2159369883e028a296d775a4598836c1ddd`；检出位于仓库之外，状态干净；`pip install -e` 到 Python 3.14.7 的见证环境。
 * 环境：3.12 = 项目既有 `.venv`（Python 3.12.10，httpx 0.27.2，pytest 9.1.1）；3.14 = Python 3.14.7 + Amane v0.15.0 + pytest + `httpx>=0.27,<0.28`；Core 经 `PYTHONPATH=src`。Windows 11。
@@ -321,6 +383,26 @@ L-01..L-15 全部按合同记录且未被改变；本轮实测补充：
 8. 行尾：仓库 `core.autocrlf=true`，新文件以 LF 提交；树哈希与 zip 内容都对 `.py` 做 LF 规范化，因此不依赖检出的行尾设置。
 
 ## 11. 状态
+
+### 11.1 当前状态（Final Closure；见 §0F）
+
+```text
+P5-C1                    : CLOSED
+Technical Acceptance     : PASS
+Final Reviewed P5-C1 Head: 0289b191659234a0e74f498e7b412c06c3d28d4a
+P5-C1-PRE-L1-01          : CLOSED
+P5-C1-L1-01              : CLOSED
+P5-C1-L1-02              : CLOSED
+Risk Class               : B
+Risk Escalation          : NONE
+Architecture Blocker     : NONE
+src Diff                 : NONE
+Contract / Plan Diff     : NONE
+Next                     : P5-C2 CONTRACT / CONSTRUCTION PLAN DESIGN（本 Final Closure 提交不是 P5-C2 Frozen Base）
+DO NOT START P5-C2 IMPLEMENTATION
+```
+
+### 11.2 R1 提交（`0289b19…`）时的状态（历史记录，原样保留）
 
 ```text
 P5-C1 Implementation    : COMPLETE CANDIDATE（Unified R1 Candidate；取代 7385ec0）
