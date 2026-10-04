@@ -1,0 +1,1255 @@
+{
+  "amane": {
+    "checkout_clean": true,
+    "commit": "45dff2159369883e028a296d775a4598836c1ddd",
+    "version": "0.15.0"
+  },
+  "classes": {
+    "FetchOptions": {
+      "bases": [],
+      "fields": {
+        "language": {
+          "annotation": "Language | None",
+          "default": "None"
+        }
+      },
+      "file": "src/amane/crawlers/models.py",
+      "methods": {}
+    },
+    "FilmActor": {
+      "bases": [
+        "BaseModel"
+      ],
+      "fields": {
+        "gender": {
+          "annotation": "ActorGender",
+          "default": "ActorGender.UNKNOWN"
+        },
+        "name": {
+          "annotation": "str",
+          "default": null
+        }
+      },
+      "file": "src/amane/crawlers/models.py",
+      "methods": {}
+    },
+    "FilmSourcePlugin": {
+      "bases": [
+        "_ConfiguredPlugin"
+      ],
+      "fields": {},
+      "file": "src/amane/plugins/api.py",
+      "methods": {
+        "build": {
+          "async": false,
+          "decorators": [
+            "abstractmethod"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "context"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "config"
+            }
+          ],
+          "returns": "FilmSourceProvider"
+        }
+      }
+    },
+    "FilmSourceProvider": {
+      "bases": [
+        "ABC"
+      ],
+      "fields": {},
+      "file": "src/amane/plugins/api.py",
+      "methods": {
+        "fetch": {
+          "async": true,
+          "decorators": [
+            "abstractmethod"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "query"
+            },
+            {
+              "default": "None",
+              "kind": "positional_or_keyword",
+              "name": "options"
+            }
+          ],
+          "returns": "MediaMetadata | None"
+        }
+      }
+    },
+    "HttpClient": {
+      "bases": [],
+      "fields": {},
+      "file": "src/amane/crawlers/http.py",
+      "methods": {
+        "__init__": {
+          "async": false,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "web"
+            },
+            {
+              "default": "None",
+              "kind": "positional_or_keyword",
+              "name": "browser"
+            }
+          ],
+          "returns": null
+        },
+        "download": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "dest"
+            }
+          ],
+          "returns": "bool"
+        },
+        "get_bytes": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            }
+          ],
+          "returns": "bytes"
+        },
+        "get_html": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "'utf-8'",
+              "kind": "keyword_only",
+              "name": "encoding"
+            }
+          ],
+          "returns": "str"
+        },
+        "get_json": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            }
+          ],
+          "returns": "Any"
+        },
+        "get_rendered": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "wait_for"
+            },
+            {
+              "default": "30000",
+              "kind": "keyword_only",
+              "name": "timeout"
+            }
+          ],
+          "returns": "str"
+        },
+        "get_text": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "'utf-8'",
+              "kind": "keyword_only",
+              "name": "encoding"
+            }
+          ],
+          "returns": "str"
+        },
+        "post_json": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": null,
+              "kind": "keyword_only",
+              "name": "json"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            }
+          ],
+          "returns": "Any"
+        },
+        "web_client": {
+          "async": false,
+          "decorators": [
+            "property"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            }
+          ],
+          "returns": "WebClient"
+        }
+      }
+    },
+    "MediaMetadata": {
+      "bases": [
+        "BaseModel"
+      ],
+      "fields": {
+        "actors": {
+          "annotation": "list[FilmActor]",
+          "default": "Field(default_factory=list)"
+        },
+        "directors": {
+          "annotation": "list[str]",
+          "default": "Field(default_factory=list)"
+        },
+        "external_id": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "extrafanart": {
+          "annotation": "list[str]",
+          "default": "Field(default_factory=list)"
+        },
+        "number": {
+          "annotation": "str",
+          "default": null
+        },
+        "plot": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "poster_urls": {
+          "annotation": "list[str]",
+          "default": "Field(default_factory=list)"
+        },
+        "publisher": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "release": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "runtime": {
+          "annotation": "int | None",
+          "default": "None"
+        },
+        "score": {
+          "annotation": "float | None",
+          "default": "None"
+        },
+        "series": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "source_url": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "studio": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "tags": {
+          "annotation": "list[str]",
+          "default": "Field(default_factory=list)"
+        },
+        "thumb_urls": {
+          "annotation": "list[str]",
+          "default": "Field(default_factory=list)"
+        },
+        "title": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "trailer_urls": {
+          "annotation": "list[str]",
+          "default": "Field(default_factory=list)"
+        }
+      },
+      "file": "src/amane/crawlers/models.py",
+      "methods": {
+        "_coerce_actors": {
+          "async": false,
+          "decorators": [
+            "field_validator('actors', mode='before')",
+            "classmethod"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "cls"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "value"
+            }
+          ],
+          "returns": "object"
+        },
+        "_normalize_release": {
+          "async": false,
+          "decorators": [
+            "field_validator('release', mode='before')",
+            "classmethod"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "cls"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "value"
+            }
+          ],
+          "returns": "str | None"
+        }
+      }
+    },
+    "PluginContext": {
+      "bases": [],
+      "fields": {
+        "data_dir": {
+          "annotation": "Path",
+          "default": null
+        },
+        "http_client": {
+          "annotation": "HttpClient",
+          "default": null
+        },
+        "source_id": {
+          "annotation": "str",
+          "default": null
+        },
+        "web_client": {
+          "annotation": "WebClient",
+          "default": null
+        }
+      },
+      "file": "src/amane/plugins/api.py",
+      "methods": {}
+    },
+    "RequestError": {
+      "bases": [
+        "SourceError"
+      ],
+      "fields": {},
+      "file": "src/amane/net/errors.py",
+      "methods": {
+        "__init__": {
+          "async": false,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "positional_or_keyword",
+              "name": "failure"
+            }
+          ],
+          "returns": "None"
+        }
+      }
+    },
+    "SearchQuery": {
+      "bases": [],
+      "fields": {
+        "content_type": {
+          "annotation": "ContentType | None",
+          "default": "None"
+        },
+        "file_hash": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "file_path": {
+          "annotation": "str | None",
+          "default": "None"
+        },
+        "number": {
+          "annotation": "str",
+          "default": null
+        },
+        "partial_result": {
+          "annotation": "AggregatedMetadata | None",
+          "default": "None"
+        },
+        "raw_results": {
+          "annotation": "dict[str, MediaMetadata | None] | None",
+          "default": "None"
+        }
+      },
+      "file": "src/amane/crawlers/models.py",
+      "methods": {}
+    },
+    "SourceDescriptor": {
+      "bases": [
+        "BaseModel"
+      ],
+      "fields": {
+        "api_version": {
+          "annotation": "str",
+          "default": "PLUGIN_API_VERSION"
+        },
+        "capabilities": {
+          "annotation": "frozenset[str]",
+          "default": "frozenset({SourceCapability.FILM_METADATA})"
+        },
+        "content_types": {
+          "annotation": "frozenset[str]",
+          "default": "frozenset()"
+        },
+        "id": {
+          "annotation": "SourceId",
+          "default": "Field(description='Stable source identifier')"
+        },
+        "languages": {
+          "annotation": "frozenset[str]",
+          "default": "frozenset()"
+        },
+        "metadata_fields": {
+          "annotation": "frozenset[str]",
+          "default": "frozenset()"
+        },
+        "multi_language": {
+          "annotation": "bool",
+          "default": "False"
+        },
+        "name": {
+          "annotation": "str",
+          "default": "Field(description='Human-readable source name')"
+        },
+        "rate_limit": {
+          "annotation": "float | None",
+          "default": "Field(default=None, ge=0.1, le=100)"
+        },
+        "urls": {
+          "annotation": "tuple[str, ...]",
+          "default": "()"
+        },
+        "version": {
+          "annotation": "str",
+          "default": "'builtin'"
+        }
+      },
+      "file": "src/amane/plugins/models.py",
+      "methods": {
+        "_non_empty_name": {
+          "async": false,
+          "decorators": [
+            "field_validator('name')",
+            "classmethod"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "cls"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "value"
+            }
+          ],
+          "returns": "str"
+        },
+        "_valid_id": {
+          "async": false,
+          "decorators": [
+            "field_validator('id')",
+            "classmethod"
+          ],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "cls"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "value"
+            }
+          ],
+          "returns": "str"
+        },
+        "supports": {
+          "async": false,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "capability"
+            }
+          ],
+          "returns": "bool"
+        }
+      }
+    },
+    "SourceError": {
+      "bases": [
+        "Exception"
+      ],
+      "fields": {},
+      "file": "src/amane/net/errors.py",
+      "methods": {
+        "__init__": {
+          "async": false,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "reason"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "http_status"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "detail"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "url"
+            }
+          ],
+          "returns": "None"
+        }
+      }
+    },
+    "WebClient": {
+      "bases": [],
+      "fields": {},
+      "file": "src/amane/net/http.py",
+      "methods": {
+        "__init__": {
+          "async": false,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "proxy"
+            },
+            {
+              "default": "30.0",
+              "kind": "keyword_only",
+              "name": "timeout"
+            },
+            {
+              "default": "3",
+              "kind": "keyword_only",
+              "name": "max_retries"
+            },
+            {
+              "default": "50",
+              "kind": "keyword_only",
+              "name": "max_clients"
+            },
+            {
+              "default": null,
+              "kind": "keyword_only",
+              "name": "limiters"
+            }
+          ],
+          "returns": null
+        },
+        "_download_chunked": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "dest"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "file_size"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            },
+            {
+              "default": "1 * 1024 ** 2",
+              "kind": "keyword_only",
+              "name": "chunk_size"
+            },
+            {
+              "default": "10",
+              "kind": "keyword_only",
+              "name": "concurrency"
+            }
+          ],
+          "returns": "bool"
+        },
+        "_record_exchange": {
+          "async": false,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "method"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": null,
+              "kind": "keyword_only",
+              "name": "resp"
+            },
+            {
+              "default": null,
+              "kind": "keyword_only",
+              "name": "error"
+            },
+            {
+              "default": null,
+              "kind": "keyword_only",
+              "name": "t0"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "attempts"
+            }
+          ],
+          "returns": "None"
+        },
+        "close": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            }
+          ],
+          "returns": "None"
+        },
+        "download": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "dest"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            },
+            {
+              "default": "2 * 1024 ** 2",
+              "kind": "keyword_only",
+              "name": "chunked_threshold"
+            },
+            {
+              "default": "1 * 1024 ** 2",
+              "kind": "keyword_only",
+              "name": "chunk_size"
+            },
+            {
+              "default": "10",
+              "kind": "keyword_only",
+              "name": "download_concurrency"
+            }
+          ],
+          "returns": "bool"
+        },
+        "get_bytes": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            }
+          ],
+          "returns": "bytes"
+        },
+        "get_filesize": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            }
+          ],
+          "returns": "int | None"
+        },
+        "get_json": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            }
+          ],
+          "returns": "Any"
+        },
+        "get_text": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "'utf-8'",
+              "kind": "keyword_only",
+              "name": "encoding"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            }
+          ],
+          "returns": "str"
+        },
+        "post_json": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "data"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "json"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            }
+          ],
+          "returns": "Any"
+        },
+        "post_text": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "data"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "json"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "'utf-8'",
+              "kind": "keyword_only",
+              "name": "encoding"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            }
+          ],
+          "returns": "str"
+        },
+        "request": {
+          "async": true,
+          "decorators": [],
+          "params": [
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "self"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "method"
+            },
+            {
+              "default": null,
+              "kind": "positional_or_keyword",
+              "name": "url"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "headers"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "cookies"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "data"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "json"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "use_proxy"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "timeout"
+            },
+            {
+              "default": "True",
+              "kind": "keyword_only",
+              "name": "allow_redirects"
+            },
+            {
+              "default": "None",
+              "kind": "keyword_only",
+              "name": "ok_statuses"
+            }
+          ],
+          "returns": "Response"
+        }
+      }
+    }
+  },
+  "constants": {
+    "PLUGIN_API_VERSION": "1"
+  },
+  "enums": {
+    "ActorGender": {
+      "bases": [
+        "StrEnum"
+      ],
+      "file": "src/amane/enums.py",
+      "members": {
+        "FEMALE": "female",
+        "MALE": "male",
+        "UNKNOWN": "unknown"
+      }
+    },
+    "ContentType": {
+      "bases": [
+        "StrEnum"
+      ],
+      "file": "src/amane/parsing/file_info.py",
+      "members": {
+        "AMATEUR": "amateur",
+        "CENSORED": "censored",
+        "CHINESE": "chinese",
+        "FC2": "fc2",
+        "HENTAI": "hentai",
+        "UNCENSORED": "uncensored",
+        "WESTERN": "western"
+      }
+    },
+    "FailureReason": {
+      "bases": [
+        "StrEnum"
+      ],
+      "file": "src/amane/net/errors.py",
+      "members": {
+        "AGE_VERIFICATION": "age_verification",
+        "CLOUDFLARE_BLOCKED": "cloudflare_blocked",
+        "CLOUDFLARE_CHALLENGE": "cloudflare_challenge",
+        "CRAWLER_UNAVAILABLE": "crawler_unavailable",
+        "EMPTY_RESPONSE": "empty_response",
+        "GEO_RESTRICTED": "geo_restricted",
+        "HTTP_ERROR": "http_error",
+        "IP_BANNED": "ip_banned",
+        "NETWORK": "network",
+        "NOT_FOUND": "not_found",
+        "NO_USABLE_METADATA": "no_usable_metadata",
+        "PARSE_ERROR": "parse_error",
+        "RATE_LIMITED": "rate_limited",
+        "SERVER_ERROR": "server_error",
+        "TIMEOUT": "timeout",
+        "UNEXPECTED": "unexpected"
+      }
+    },
+    "SourceCapability": {
+      "bases": [
+        "StrEnum"
+      ],
+      "file": "src/amane/plugins/models.py",
+      "members": {
+        "ACTOR_IMAGE": "actor_image",
+        "ACTOR_PROFILE": "actor_profile",
+        "FILM_METADATA": "film_metadata",
+        "PLAYBACK": "playback"
+      }
+    }
+  },
+  "plugin_all": [
+    "ContentType",
+    "EmptyPluginConfig",
+    "FailureReason",
+    "FetchOptions",
+    "FilePlaybackTarget",
+    "FilmActor",
+    "FilmSourcePlugin",
+    "FilmSourceProvider",
+    "HlsLocator",
+    "HlsPlaybackTarget",
+    "HlsPlaylist",
+    "HttpClient",
+    "Language",
+    "MediaMetadata",
+    "PLUGIN_API_VERSION",
+    "PlaybackMediaFile",
+    "PlaybackOffer",
+    "PlaybackPlugin",
+    "PlaybackProvider",
+    "PlaybackQuery",
+    "PluginContext",
+    "RESERVED_SOURCE_NAMESPACES",
+    "RelativeHlsLocator",
+    "RequestError",
+    "SearchQuery",
+    "SourceCapability",
+    "SourceDescriptor",
+    "SourceError",
+    "SourceId",
+    "SubtitleTrack",
+    "UpstreamPlaybackTarget",
+    "WebClient",
+    "film_actors",
+    "is_external_source_id",
+    "validate_external_source_id"
+  ],
+  "schema_version": 1
+}
