@@ -627,8 +627,13 @@ C. OUT OF PHASE 4 SCOPE                —— Phase 4 / v1.0 冻结的设计边�
 authority 不足的债务（定义、严重度、期限、范围或与 Phase 4 safety 的关系无法由仓库可审计记录证明）只能处于 A 类“未决 authority 债务”，
 直到取得足够 authority 并据此给出明确 disposition。
 
-**Ledger 计数（冻结，Design-R1）：A 类 8 项（XD-A01..XD-A08）、B 类 17 项（XD-B01..XD-B17）、C 类 15 项（XD-C01..XD-C13、XD-C15、XD-C16）。**
-原 XD-C14（C5-R1-L1）已移出 C 类并改为 XD-A08；编号 XD-C14 不再使用、不重新分配（避免 stale 引用）。全文任何 summary 必须与此计数一致。
+**Ledger 计数（Phase 4 Final Closure Docs Candidate；EC-15 REVIEW REQUIRED）：A 类 8 项（XD-A01..XD-A08）、B 类 17 项（XD-B01..XD-B17）、C 类 16 项（XD-C01..XD-C13、XD-C15、XD-C16、XD-C17）。**
+原 XD-C14（C5-R1-L1）已移出 C 类并改为 XD-A08；编号 XD-C14 不再使用、不重新分配（避免 stale 引用；RETIRED / NOT REUSED）。全文任何 **current** summary 必须与此计数一致。
+
+计数变更记录（Final Closure Docs Candidate）：原冻结计数（Design-R1）为 A = 8 / B = 17 / C = 15。按第 10.1 节 XD-A08 Required closure 的承接规则，C5-R1-L1 取得原始 authority 后，
+其实质 disposition 由**新增**的 XD-C17（第 10.3 节）承接；XD-A08 行作为 unresolved-authority wrapper 保留在 A 类表中（disposition 见第 10.1 节），因此 A 类条目数仍为 8，
+C 类条目数由 15 变为 16，B 类不变。没有任何其它 Ledger 项的分类被修改。本合同 Design-R1 / R2 / R3 修订记录与附录 A DF-04、施工计划 Design 修订记录与第 16 节自审、
+HANDOFF 第 12 项（S3 快照）中出现的“C = 15 / C 类 15”是各自时点的**历史**记录，不追溯改写，并由本行取代。
 
 ### 10.1 A 类：MUST CLOSE BEFORE PHASE 4 CLOSURE
 
@@ -644,7 +649,7 @@ Technical Acceptance 与 Phase Exit。XD-A08 是**历史未决 authority 债务*
 | XD-A05 | 40 个基线 skip 的逐项对账 | 各 package HANDOFF 只给数字 | EC-08 | 第 8.3 节 | YES |
 | XD-A06 | Phase 4 Package Authority Matrix 机器核对 | 本合同第 4 节 | EC-01 | 坐标祖先关系、`src` 零漂移、状态行 CLOSED 的命令输出（施工计划第 7.1 节） | YES |
 | XD-A07 | v1.0 关键验收中 Phase 4 层面的部分 | v1.0 规格书“关键验收” | “500 项注入单源 / 单项失败整体仍完成”、“Failed / Partial 可单独批量重刮”、“整理冲突、跨盘、目标不可写不得导致源视频静默丢失”在 Phase 4（离线、接缝级）层面的验证 | G-500、S-13/S-14/S-17、S-12（接缝跨卷）、S-14（接缝 `EACCES`）、S-21 | YES（Phase 4 层面）；真实环境部分见 XD-B04 / XD-B05 |
-| XD-A08 | **C5-R1-L1 未决 authority 债务（unresolved authority debt）** | 历史 carry-forward finding ID（见下方 Known fact） | 见下方“冻结语义”：authority 不足，无法合法给出 non-blocking / OUT OF PHASE 4 disposition；“未知 authority 债务尚未被合法 disposition”本身阻止宣布 Phase 4 Exit / CLOSED（**不**阻塞 P4-C10 Technical Acceptance，第 16 节） | 取得 authority 并据此给出明确 disposition 的记录（见下方 Required closure）；P4-C10 不猜测其内容、不产生与其内容相关的测试 | **YES（XD-A08 = OPEN；阻塞 Phase Exit，不阻塞 Technical Acceptance）** |
+| XD-A08 | **C5-R1-L1 未决 authority 债务（unresolved authority debt）** | 历史 carry-forward finding ID（见下方 Known fact） | 见下方“冻结语义”：authority 不足，无法合法给出 non-blocking / OUT OF PHASE 4 disposition；“未知 authority 债务尚未被合法 disposition”本身阻止宣布 Phase 4 Exit / CLOSED（**不**阻塞 P4-C10 Technical Acceptance，第 16 节） | 取得 authority 并据此给出明确 disposition 的记录（见下方 Required closure）；P4-C10 不猜测其内容、不产生与其内容相关的测试。**Final Closure Docs Candidate：原始 authority 已取得并经独立 Authority Recovery Review 验证；disposition 记录见下方“XD-A08 Disposition Record”；实质 disposition 由 XD-C17 承接** | **REMEDIATED — EC-15 INDEPENDENT FINAL CLOSURE REVIEW REQUIRED**（EC-15 PASS 之前按本节 Required closure 仍计为 OPEN：继续阻塞 Phase Exit，不阻塞 Technical Acceptance） |
 
 **XD-A08 冻结语义**
 
@@ -681,6 +686,99 @@ Required closure before Phase 4 CLOSED（二选一，且必须来自可审计 au
   这不是声称 C5-R1-L1 本身一定是 HIGH 或一定影响 source loss；而是“未知 authority 债务尚未被合法 disposition”阻止宣布 Phase 4 Exit /
   Phase 4 CLOSED。XD-A08 OPEN 时允许 Technical Acceptance = PASS，但 Phase 4 Exit Authorization = BLOCKED — XD-A08（第 16 节）。
   在 XD-A08 闭合前 Phase 5 不能从“已验收的 Phase 4 Frozen Base”开始（第 18 节）。
+```
+
+上方“冻结语义”是 Design-R1 冻结时（authority 未取得）的记录，原样保留。其 Unknown 项现已由下方 Disposition Record 回答；在 EC-15 Review PASS 之前，
+其“状态”一段（XD-A08 计为 OPEN、阻塞 Phase 4 Exit / Closure、不阻塞 Technical Acceptance）继续有效。
+
+**XD-A08 Disposition Record（Phase 4 Final Closure Docs Candidate；首次写入；EC-15 必须按第 16.4 节审查）**
+
+```text
+Record status                : CANDIDATE —— 由 Phase 4 Final Closure Authority Docs Author 写入；不是 reviewed closure；
+                               只有独立 Phase 4 Final Closure Docs-Only Review（EC-15）PASS 才能使 XD-A08 = CLOSED
+
+—— Original source authority（原始来源）——
+Exact source                 : C:\Users\Ctg\.claude\projects\C--Users-Ctg-Projects-ffcc\b7881a4d-fbb8-48ae-bdd2-a5d4bfb343c0.jsonl
+                               （Claude Code 会话记录；不在仓库内、不入库；以下 SHA-256 / size 把本记录绑定到该文件的确切字节）
+Source SHA-256               : 59e365e07fc48d3f162744151422601fc210311a29204e27b2dea9030a4f2dcf
+Source size                  : 453584 bytes
+Session ID                   : b7881a4d-fbb8-48ae-bdd2-a5d4bfb343c0
+Source location              : 第 127 行（0 起计）JSONL 记录，type = assistant；全文件中 "C5-R1-L1" 恰出现 1 次
+                               （会话元数据 gitBranch = claude/phase-0-amane-integration-fnvhpq，是该会话运行时所在的工作分支；
+                                被审查的分支以 Review 正文为准：claude/phase3-c5-resource-control）
+Original Review              : Phase 3 C5-R1 — Docs-Only Independent Closure Review
+Review timestamp             : 2026-09-22T10:47:13.245Z
+Repo lineage                 : fankunet-arch/ffcc
+Reviewed branch              : claude/phase3-c5-resource-control
+C5 Code Head                 : fb4dddaf4ef00ed201c94d9a7e29d1e86a20f17d
+C5-R1 Base                   : caf1655336b96a02a64cfdd515932c594d86da0a
+Reviewed C5-R1 Docs Head     : 3edab6eb4ab363c1fedabd847c61b7061be8343d
+                               （= 第 2.2 节 Phase 3 C5 closure、P4-C1 Frozen Base；是本分支 HEAD 的祖先）
+Original Review Verdict      : PASS WITH NON-BLOCKING NOTES；C5-R-01 : CLOSED；"Phase 3 C5 may be CLOSED."
+Original new findings        : BLOCKER none / HIGH none / MEDIUM none / LOW：仅 C5-R1-L1
+
+—— Finding definition（原文引用，精确字面量；后附中文摘要）——
+  Finding ID         : C5-R1-L1
+  Severity           : LOW (non-blocking)
+  Scope              : documentation completeness
+  Status             : OPEN (informational, does not block closure)
+  Title              : "Breaker coupling" not explicitly disclaimed alongside permit-leak/budget-coupling disclaimers
+  Evidence           : Contract §5 (lines 70–72) and R1 handoff §2 state the HoL delay "is not a host-permit leak and not
+                       cross-host budget coupling" but do not add a third explicit "...and not breaker coupling" clause.
+  Expected           : An explicit disclaimer that the cross-host admission delay is unrelated to breaker state coupling,
+                       mirroring the permit-leak/budget-coupling disclaimers.
+  Observed           : Breaker independence is stated elsewhere in the handoff ("their breakers are independent") but not
+                       tied back to this specific HoL explanation.
+  Why it matters     : Minor completeness gap only — no text anywhere claims or implies breaker coupling in this scenario,
+                       so there is no actual overclaim or contradiction to close.
+  Closure requirement: None required for C5-R-01; optional wording polish for a future docs pass.
+
+  中文摘要：Phase 3 资源控制合同（PHASE3_RESOURCE_CONTROL_CONTRACT.md）§5 与 PHASE3_C5_R1_HANDOFF.md §2 在解释跨 host 的 HoL 延迟时，
+  明确排除了 host-permit leak 与 cross-host budget coupling，但没有在同一处再显式排除 breaker coupling；breaker 相互独立在 HANDOFF 其它位置已明确写出。
+  原 Reviewer 判定这只是文档完整性上的小缺口：没有任何文字声称或暗示 breaker coupling，不存在 overclaim、矛盾或行为缺陷。
+
+—— Disposition fields（全部来自上方原文；不推断、不补充）——
+Severity                     : LOW
+Blocking                     : NO（non-blocking）
+Scope                        : documentation completeness（Phase 3 C5 文档）
+Original status              : OPEN —— informational；does not block closure
+Closure requirement          : OPTIONAL WORDING POLISH ONLY（"None required for C5-R-01; optional wording polish for a future docs pass."）
+Mandatory closure            : NO
+Deadline                     : NONE / NOT PRESENT（来源中不存在）
+Phase assignment             : NONE / NOT PRESENT（来源中不存在；"a future docs pass" 未指定阶段）
+Production obligation        : NONE
+Test obligation              : NONE
+Safety obligation            : NONE
+Contract behavior correction : NONE
+Additional acceptance evidence requirement : NONE
+Phase 4 obligation           : NONE
+Original source supports Phase 4 blocking  : NO
+Impact on P4-C10 Technical Acceptance PASS : NONE（无需重开 Technical Acceptance；第 16.4 节 fail-closed 条件不成立）
+
+—— Verification authority（独立 Authority Recovery Review；不是原始来源）——
+C5-R1-L1 Original Authority  : RECOVERED AND INDEPENDENTLY VERIFIED
+Authority Sufficiency        : SUFFICIENT
+Phase 4 Obligation           : NONE
+Original Source Supports Phase 4 Blocking : NO
+Impact on Technical Acceptance PASS       : NONE
+（Independent Authority Recovery Review 只是对上述原始 JSONL 的验证 authority；原始 JSONL 才是 original source authority。据任务指令记录；
+ 本 Author 另行只读复核：SHA-256 与 size 一致；"C5-R1-L1" 在文件中恰出现 1 次；上方原文与该记录一致。）
+
+—— Disposition（candidate）——
+Disposition authority        : 第 10.1 节 Required closure 第 1 项（原始独立 review 报告）+ 上述独立 Authority Recovery Review 验证
+Disposition                  : C5-R1-L1 本身 = LOW / non-blocking / 文档完整性 / 无强制闭合 / 无 deadline / 无阶段指派 / 无 Phase 4 obligation；
+                               属于“Phase 4 之前阶段（Phase 3 C5）的债务”，按第 10 节分类定义归入 C 类 OUT OF PHASE 4 SCOPE，
+                               由新 ID XD-C17 承接（第 10.3 节；不重用 XD-C14）。
+                               不归入 B 类：B 类语义包含“目标阶段的规划性指派”，而来源中不存在任何 target phase / deadline / 强制后续工作，不得发明。
+XD-A08 的含义                : XD-A08 曾因“original authority unavailable”而位于 A 类；阻塞 Phase Exit 的是 authority 缺失，不是 C5-R1-L1 自身的严重度。
+                               authority 现已取得并验证，因此 unresolved-authority condition = REMEDIATED。XD-A08 行作为历史 wrapper 保留在 A 类表中，
+                               不是对 C5-R1-L1 实质分类的描述；C5-R1-L1 的实质分类以 XD-C17 为准。
+与第 18.3 节的关系            : 第 18.3 节“XD-A08 不得被写成 Phase 3 债务、OUT OF PHASE 4 或永久 non-blocking”约束的是 authority 缺失时的 XD-A08；
+                               本记录没有改写 XD-A08 的 A 类位置，而是按第 10.1 节 Required closure 预先规定的承接路径（non-blocking / 其它阶段 -> 第 10.2 / 10.3 节新 ID）
+                               让 XD-C17 承接实质 disposition。此一致性由 EC-15 审查。
+Optional wording polish      : 不是 Phase 4 closure obligation；本 Final Closure 不修改任何 Phase 3 C5 文档。
+XD-A08 status（candidate）   : REMEDIATED — EC-15 INDEPENDENT FINAL CLOSURE REVIEW REQUIRED
+                               （EC-15 PASS 之前仍计为 OPEN：Phase 4 Exit Authorization = BLOCKED；EC-15 PASS 之后 XD-A08 = CLOSED）
 ```
 
 ### 10.2 B 类：ACCEPTED DEFERRED TO LATER PHASE
@@ -724,6 +822,7 @@ Required closure before Phase 4 CLOSED（二选一，且必须来自可审计 au
 | XD-C13 | C4-R1-N1..N3（非 `MultiSourceEngine` 生产者、恶意 metaclass、诊断信息丢失） | Phase 3 C4-R1 / C5 | Phase 3 batch 层债务，Phase 4 未依赖相应机制 | NO |
 | XD-C15 | Phase 3 C5 已记录未修复的资源控制局限（熔断状态只在内存、无 `Retry-After`、静态 host 限制、单事件循环 governor） | `PHASE3_C5_HANDOFF.md` §13 | Phase 3 设计边界 | NO |
 | XD-C16 | Amane 集成、CLI、UI | v1.0 规格书；治理文档第 14.3 节以后 | Phase 5+ | NO |
+| XD-C17 | C5-R1-L1 —— breaker-coupling disclaimer wording completeness（Phase 3 资源控制合同 §5 与 C5-R1 HANDOFF §2 的 HoL 解释未在同处显式排除 breaker coupling；breaker 独立性已在 HANDOFF 其它位置写明） | Phase 3 C5-R1 Docs-Only Independent Closure Review（session b7881a4d-fbb8-48ae-bdd2-a5d4bfb343c0；Reviewed Docs Head 3edab6eb4ab363c1fedabd847c61b7061be8343d） | LOW / non-blocking / documentation completeness；原状态 OPEN informational；无强制闭合；原文 closure requirement = “None required for C5-R-01; optional wording polish for a future docs pass”；原 verdict “Phase 3 C5 may be CLOSED”；Phase 4 之前阶段的债务。无 deadline、无阶段指派（均不在来源中）。authority 与 disposition 见第 10.1 节 XD-A08 Disposition Record。**Final Closure Docs Candidate 新增：EC-15 REVIEW REQUIRED** | NO |
 
 ### 10.4 已闭合 / 已满足的入口门槛（只做回归确认，不重开）
 
@@ -1356,19 +1455,32 @@ PC-08                          : NOT RUN（FC2_EXECUTION_CROSS_VOLUME_ROOT 未�
 XD-B04                         : OPEN ACCEPTED EVIDENCE GAP —— NON-BLOCKING
 Open F1 / F2 / F3 / F4         : NONE / NONE / NONE / NONE
 New Authority Finding          : NONE
-Evidence Refresh Candidate     : CURRENT DOCS CANDIDATE = 本提交（Base / parent a0d491d413a96ce9f08937dd5074adcd2144439d；exact SHA 由 git 在提交后确定；不是 Final Reviewed Acceptance Head）
-P4-C10 Technical Acceptance Candidate Status : READY FOR LEVEL 1 REVIEW（当前；READY != PASS）
+Evidence Refresh Candidate     : a87b9352e384327ea452c31ad650206df87fc975（Base / parent a0d491d4…；HISTORICAL candidate；经下方 Level 1 Closure Review PASS 成为 Final Reviewed Acceptance Head）
+Evidence Refresh Candidate Status : READY FOR LEVEL 1 REVIEW（HISTORICAL / COMPLETED / NOT CURRENT）
 Historical S3 Candidate Status : BLOCKED — ENVIRONMENT（HISTORICAL / COMPLETED / NOT CURRENT；原 S3 快照 1012968e…）
-P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（只由 Incremental Independent Level 1 Closure Review 建立）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
-Final Reviewed Acceptance Head : NOT ESTABLISHED
-XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（只阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Phase 4 Exit Authorization     : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08
+P4-C10 Post-Repair Evidence Refresh Incremental Independent Level 1 Closure Review : COMPLETED — PASS（reviewed verdict authority；据任务指令记录）
+P4-C10 Technical Acceptance Verdict          : PASS（由上述独立 Level 1 Closure Review 建立；Final Closure Docs 作为 closure history 记录）
+Final Reviewed Acceptance Head : a87b9352e384327ea452c31ad650206df87fc975
+EC-14                          : SATISFIED
+XD-A01 .. XD-A07               : CLOSED（随 EC-14；第 10.1 节）
 Production Modified            : NO
 Production repair              : NOT PERFORMED
 Actual test isolation repair   : PERFORMED @ a0d491d4…（test-only；第 22.7 节唯一 scope）
-Next                           : P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW
-P4-C10                         : NOT CLOSED
+C5-R1-L1 Original Authority    : RECOVERED AND INDEPENDENTLY VERIFIED（source SHA-256 59e365e07fc48d3f162744151422601fc210311a29204e27b2dea9030a4f2dcf；第 10.1 节 XD-A08 Disposition Record）
+C5-R1-L1 Phase 4 Obligation    : NONE；Impact on Technical Acceptance PASS：NONE
+XD-A08（C5-R1-L1）             : REMEDIATED — EC-15 INDEPENDENT FINAL CLOSURE REVIEW REQUIRED（EC-15 PASS 之前仍计为 OPEN；只阻塞 Phase 4 Exit / Closure）
+XD-C17（新增候选）             : C5-R1-L1 实质 disposition 承接 —— C 类 OUT OF PHASE 4 SCOPE；NON-BLOCKING；EC-15 REVIEW REQUIRED
+XD-C14                         : RETIRED / NOT REUSED
+Ledger 计数（candidate）       : A = 8 / B = 17 / C = 16（原冻结 A = 8 / B = 17 / C = 15；第 10 节）
+EC-01 Final Closure Recheck    : PASS（Final Closure Authority Docs Author 只读机器复核 @ a87b9352…；见 HANDOFF 第 20 节）
+EC-10                          : REMEDIATED — EC-15 REVIEW REQUIRED（未 SATISFIED；只由 EC-15 Reviewer 建立）
+EC-15                          : PENDING —— INDEPENDENT DOCS-ONLY REVIEW REQUIRED
+Phase 4 Final Closure Docs Candidate : CURRENT CANDIDATE = 本提交（parent a87b9352e384327ea452c31ad650206df87fc975；exact SHA 由 git 在提交后确定；不是 reviewed closure）
+Phase 4 Exit Authorization     : BLOCKED — EC-15 REVIEW PENDING
+Phase 5 Frozen Base Candidate  : NOT ESTABLISHED（只在 EC-15 PASS 之后建立）
+Next                           : PHASE 4 FINAL CLOSURE DOCS INDEPENDENT EC-15 DOCS-ONLY REVIEW
+P4-C10                         : NOT CLOSED（TECHNICALLY ACCEPTED —— Technical Acceptance Verdict PASS；NOT FINAL-CLOSED）
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```

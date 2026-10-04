@@ -654,19 +654,30 @@ PC-08                          : NOT RUN（FC2_EXECUTION_CROSS_VOLUME_ROOT 未�
 XD-B04                         : OPEN ACCEPTED EVIDENCE GAP —— NON-BLOCKING
 Open F1 / F2 / F3 / F4         : NONE / NONE / NONE / NONE
 New Authority Finding          : NONE
-Evidence Refresh Candidate     : CURRENT DOCS CANDIDATE = 本提交（Base / parent a0d491d413a96ce9f08937dd5074adcd2144439d；exact SHA 由 git 在提交后确定；不是 Final Reviewed Acceptance Head）
-P4-C10 Technical Acceptance Candidate Status : READY FOR LEVEL 1 REVIEW（当前；READY != PASS）
+Evidence Refresh Candidate     : a87b9352e384327ea452c31ad650206df87fc975（Base / parent a0d491d4…；HISTORICAL candidate；经下方 Level 1 Closure Review PASS 成为 Final Reviewed Acceptance Head）
+Evidence Refresh Candidate Status : READY FOR LEVEL 1 REVIEW（HISTORICAL / COMPLETED / NOT CURRENT）
 Historical S3 Candidate Status : BLOCKED — ENVIRONMENT（HISTORICAL / COMPLETED / NOT CURRENT；原 S3 快照 1012968e…）
-P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（只由 Incremental Independent Level 1 Closure Review 建立）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
-Final Reviewed Acceptance Head : NOT ESTABLISHED
-XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（只阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Phase 4 Exit Authorization     : BLOCKED — LEVEL 1 / EC-15 PENDING；XD-A08
+P4-C10 Post-Repair Evidence Refresh Incremental Independent Level 1 Closure Review : COMPLETED — PASS（reviewed verdict authority；据任务指令记录）
+P4-C10 Technical Acceptance Verdict          : PASS（由上述独立 Level 1 Closure Review 建立）
+Final Reviewed Acceptance Head : a87b9352e384327ea452c31ad650206df87fc975
+EC-14                          : SATISFIED
+XD-A01 .. XD-A07               : CLOSED（随 EC-14；合同第 10.1 节）
 Production Modified            : NO
 Production repair              : NOT PERFORMED
 Actual test isolation repair   : PERFORMED @ a0d491d4…（test-only；合同第 22.7 节 / 本计划第 18 节唯一 scope）
-Next                           : P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW
-P4-C10                         : NOT CLOSED
+C5-R1-L1 Original Authority    : RECOVERED AND INDEPENDENTLY VERIFIED（合同第 10.1 节 XD-A08 Disposition Record）；Phase 4 Obligation NONE；Impact on Technical Acceptance NONE
+XD-A08（C5-R1-L1）             : REMEDIATED — EC-15 INDEPENDENT FINAL CLOSURE REVIEW REQUIRED（EC-15 PASS 之前仍计为 OPEN）
+XD-C17（新增候选）             : C 类 OUT OF PHASE 4 SCOPE；NON-BLOCKING；EC-15 REVIEW REQUIRED；XD-C14 RETIRED / NOT REUSED
+Ledger 计数（candidate）       : A = 8 / B = 17 / C = 16（本计划 Design 修订记录与第 16 节自审中的 “C = 15 / C 类 15” 为历史记录）
+EC-01 Final Closure Recheck    : PASS（只读机器复核 @ a87b9352…；HANDOFF 第 20 节）
+EC-10                          : REMEDIATED — EC-15 REVIEW REQUIRED
+EC-15                          : PENDING —— INDEPENDENT DOCS-ONLY REVIEW REQUIRED
+Phase 4 Final Closure Docs Candidate : CURRENT CANDIDATE = 本提交（parent a87b9352e384327ea452c31ad650206df87fc975；exact SHA 由 git 在提交后确定；不是 reviewed closure）
+Phase 4 Exit Authorization     : BLOCKED — EC-15 REVIEW PENDING
+Phase 5 Frozen Base Candidate  : NOT ESTABLISHED
+Next                           : PHASE 4 FINAL CLOSURE DOCS INDEPENDENT EC-15 DOCS-ONLY REVIEW
+P4-C10                         : NOT CLOSED（TECHNICALLY ACCEPTED；NOT FINAL-CLOSED）
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
 ```
@@ -678,13 +689,20 @@ Phase 5                        : NOT STARTED
 **已完成的历史步骤（HISTORICAL / COMPLETED / NOT CURRENT）**：`P4-C10-AUTH-A4-R1 INCREMENTAL INDEPENDENT AUTHORITY CLOSURE REVIEW`（COMPLETED — PASS；建立 Active Authority Amendment Head = `7d1a48f6e9b9ce1ac3234487b1126b58b879bc8b`）
 -> 第 18.4 节唯一 scope 的 test-isolation repair（IMPLEMENTED @ `a0d491d413a96ce9f08937dd5074adcd2144439d`）
 -> 第 18.5 节 focused evidence E-1..E-3 与 Formal Evidence Revalidation E-4..E-8（全部 PASS）
--> Post-Repair Evidence Refresh Candidate（本提交）。这些步骤均已完成，不再是当前下一步。
+-> Post-Repair Evidence Refresh Candidate（`a87b9352e384327ea452c31ad650206df87fc975`）
+-> `P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW`（COMPLETED — PASS；Technical Acceptance Verdict = PASS；
+   Final Reviewed Acceptance Head = `a87b9352…`；EC-14 SATISFIED）
+-> C5-R1-L1 原始 authority 取得与独立 Authority Recovery Review（RECOVERED AND INDEPENDENTLY VERIFIED）
+-> 第 13 节第 2 步 Phase 4 Final Closure Docs Candidate（本提交）。这些步骤均已完成，不再是当前下一步。
 
-**当前唯一有效的下一步（Current Operative Next Step）**：`P4-C10 POST-REPAIR EVIDENCE REFRESH INCREMENTAL INDEPENDENT LEVEL 1 CLOSURE REVIEW`。
+**当前唯一有效的下一步（Current Operative Next Step）**：`PHASE 4 FINAL CLOSURE DOCS INDEPENDENT EC-15 DOCS-ONLY REVIEW`（第 13 节第 3 步）。
 
-* 只有该 Review 能建立 `P4-C10 Technical Acceptance Verdict`（PASS / FAIL / BLOCKED）；PASS 时由 Reviewer 建立 Final Reviewed Acceptance Head（EC-14）。
-* 在该 Review 之前：Technical Acceptance Verdict = NOT ESTABLISHED；Final Reviewed Acceptance Head = NOT ESTABLISHED；不启动 EC-15、不关闭 XD-A08、不关闭 P4-C10 / Phase 4、不开始 Phase 5。
-* Level 1 PASS 之后 Phase 4 Exit Authorization 仍为 BLOCKED（EC-15 PENDING；XD-A08 OPEN），按合同第 16 节处理。
+* 该 Review 必须按合同第 16.4 节显式审查 XD-A08 authority source、disposition legitimacy、Ledger change（XD-C17 新增、计数 A = 8 / B = 17 / C = 16、XD-C14 不重用）
+  与 Phase 4 Exit Criteria（EC-01、EC-10 及对 EC-14 的承接）；不得只审格式 / 状态。
+* 在该 Review PASS 之前：XD-A08 计为 OPEN（candidate：REMEDIATED — EC-15 REVIEW REQUIRED）；EC-10 未 SATISFIED；EC-15 PENDING；Phase 4 Exit Authorization = BLOCKED — EC-15 REVIEW PENDING；
+  P4-C10 / Phase 4 = NOT CLOSED；Phase 5 = NOT STARTED；Phase 5 Frozen Base Candidate 不存在。
+* 本 Candidate 未把第 13 节第 2 步中的 `P4-C10 : CLOSED` / `Phase 4 : CLOSED — EFFECTIVE UPON …` 写成字段值：合同第 16.6 节禁止在 EC-15 满足之前、且 XD-A08 仍计为 OPEN 时
+  写入任何 `Phase 4 = CLOSED`；这些 closure 效果在 HANDOFF 第 20 节以“EC-15 PASS 后才生效的条件性效果”列出，由 EC-15 Reviewer 建立。
 
 ---
 
