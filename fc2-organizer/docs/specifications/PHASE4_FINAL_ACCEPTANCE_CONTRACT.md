@@ -62,7 +62,7 @@ F3 / F4 立即 STOP、G-500、L / SI / S / PC / M 矩阵、F3 / F5 处置、原�
 
 本合同与施工计划一起，一次性冻结 P4-C10 的全部验收语义。Design Review PASS 之前，本文件只是 Design Candidate；
 PASS 之后才成为 Frozen Contract。之后对本文件唯一允许的改动是第 20 节状态行；任何语义改动都是 authority 修订，
-必须 STOP 并经独立复查（治理文档第 11.2 节）。（P4-C10-AUTH-A1 即这样一次 post-acceptance authority 修订，见第 21 节。）
+必须 STOP 并经独立复查（治理文档第 11.2 节）。（P4-C10-AUTH-A1 即这样一次 post-acceptance authority 修订，见第 21 节；P4-C10-AUTH-A4 / P4-C10-AUTH-GP4-01 是另一次，见第 22 节。）
 
 Authority 优先级（冻结，治理文档第 4 节）：
 
@@ -129,6 +129,10 @@ Amane adapter 或任何 Phase 5 内容
 
 * 不修改 `src/**`（默认）；CLOSED package 生产缺陷只按第 14、15 节处理。
 * 不修改任何既有测试（`tests/unit/**`、`tests/contract/**`、`tests/support/**`、`tests/fixtures/**`）。
+  **唯一窄例外（P4-C10-AUTH-A4 / P4-C10-AUTH-GP4-01，第 22 节；只有在 AUTH-A4 Independent Authority Amendment Review PASS 之后才生效，在此之前本例外不存在、
+  上述禁止对全部既有测试绝对有效）**：允许修改唯一文件 `fc2-organizer/tests/unit/orchestration/test_orchestration_recognition.py` 中的唯一 target
+  `test_source_key_is_exact_on_posix`，唯一目的是 TEST-ISOLATION REPAIR ONLY（移除其对 suite order、`sys.modules` cache 状态与 fixture 生效期间 import machinery
+  的依赖，第 22.4 节）。其它一切既有测试（含同一文件中的其它测试、其它 `tests/unit/**`）继续禁止修改；`tests/contract/**`、`tests/support/**`、`tests/fixtures/**` 零修改、无任何例外。
 * 不修改任何 P4-C1..P4-C9 合同、施工计划、HANDOFF；不修改 `CLAUDE.md`、治理文档、`pyproject.toml`、`upstream/**`、
   `tools/**`。
 * 不访问网络；不操作任何真实用户数据；对仓库内文件只有只读访问，修改性操作只发生在可丢弃验收根内（第 3.4、12.2 节）。
@@ -584,6 +588,10 @@ G-FULL python -m pytest -q -p no:cacheprovider -rs --basetemp=<JOB_TMP>/c10-full
   （Phase 3 墙钟断言，P4-C5 与 P4-C8 HANDOFF 各记录一次高负载瞬时失败）。若它失败：单独连续运行 3 次且全部通过，并再完整重跑 G-FULL
   一次且全部通过，才可判定为瞬时；两次结果都写入 HANDOFF。其它任何失败按第 13 节分类，不得以“瞬时”处理。
 * 不得为通过而添加 skip / xfail、修改既有测试或调整断言。
+  **唯一窄例外（与第 1.4 节同一个例外，P4-C10-AUTH-A4 / P4-C10-AUTH-GP4-01，第 22 节；AUTH-A4 Independent Authority Amendment Review PASS 之前不生效）**：
+  对 `tests/unit/orchestration/test_orchestration_recognition.py::test_source_key_is_exact_on_posix` 的 test-isolation repair **不是** oracle relaxation，不违反本条；
+  它只能使被测 recognition module 引用在 `no_io` filesystem traps 生效之前以 deterministic 方式建立，不得改变 assertion、expected result，不得降低 filesystem trap，
+  不得绕过 G-P4（第 22.5、22.6 节）。除该例外外，本条全部禁止继续有效。
 
 ---
 
@@ -1318,19 +1326,28 @@ P4-C10-F4-02                   : CLOSED（经 AUTH-A1 Independent Review 确认�
 P4-C10-AUTH-A1                 : INDEPENDENT REVIEW COMPLETED — FAIL（仅因 P4-C10-AUTH-A1-R-01；candidate 5c3479a14d34fa90789921646f203d3bf0bf03b7）
 P4-C10-AUTH-A1-R-01            : CLOSED（经 AUTH-A2 Incremental Independent Review 确认；计划第 15 节“下一步”顺序歧义已闭合）
 P4-C10-AUTH-A2                 : INCREMENTAL INDEPENDENT REVIEW COMPLETED — FAIL（仅因 P4-C10-AUTH-A2-R-01；candidate c552a937494e121b1dde16fd587b1782ddff7971）
-P4-C10-AUTH-A2-R-01            : REMEDIATED — INDEPENDENT REVIEW REQUIRED（Current Authority / Status Synchronization：本合同第 20 节仍保存 AUTH-A1 candidate 时点的当前状态；由 AUTH-A3 同步）
-P4-C10-AUTH-A3                 : CURRENT STATUS SYNCHRONIZATION CANDIDATE —— INDEPENDENT CLOSURE REVIEW REQUIRED（仅同步本合同第 20 节状态；不改任何规范语义）
-Active Authority Amendment Head : NOT ESTABLISHED —— INDEPENDENT REVIEW REQUIRED（仅在 AUTH-A3 Independent Review PASS 后由 Reviewer 建立；作者不得自行建立）
-Next                           : P4-C10-AUTH-A3 INCREMENTAL INDEPENDENT AUTHORITY AMENDMENT CLOSURE REVIEW（该 Review PASS 后：P4-C10 FORMAL EVIDENCE REVALIDATION（Windows 11 / Python 3.12.x / 普通用户）-> Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review；顺序与计划第 15 / 17.3 节一致）
-P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；正式证据环境 Windows 11 / Python 3.12.x 证据未取得；详见 docs/review/P4_C10_HANDOFF.md）
-P4-C10 Technical Acceptance Verdict          : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；FORMAL WINDOWS EVIDENCE NOT OBTAINED（Level 1 Review 建立；原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写；非 PASS）
+P4-C10-AUTH-A2-R-01            : CLOSED（经 AUTH-A3 Independent Review 确认）
+P4-C10-AUTH-A3                 : INDEPENDENT REVIEW COMPLETED — PASS（AUTH-A3 Review：COMPLETED — PASS）
+Active Authority prior to AUTH-A4 : 82f96a21e210b0b63b904df1f8a8e62be741a9aa（AUTH-A3 reviewed head；AUTH-A4 Candidate 不改变它）
+C10-R1                         : COMPLETED —— e0ee8c15d9d8d238ee76e3f142870a96d5972a60（test-only repair of P4-C10-F1-01：Windows same-volume rename SOURCE_REMOVED oracle；唯一改动 tests/phase4_acceptance/test_p4_acceptance_chain.py；Production UNCHANGED）
+Formal G-T                     : PASS —— 142 / 142，0 failed，0 errors，0 skipped（正式环境 Windows 11 / Python 3.12.10 / httpx 0.27.2 / pytest 9.1.1 / 普通用户；含 S-09A、S-09B、S-12 same-volume-native、S-21）
+Formal G-P4                    : NOT PASS —— P4-C10-AUTH-GP4-01（冻结的 exact command 稳定 INTERNALERROR；pre-existing / baseline-like existing-test isolation constructibility blocker；第 22 节）
+P4-C10-AUTH-GP4-01             : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（HIGH / BLOCKING；Authority / Frozen-Gate Constructibility / Existing-Test Isolation；不得写 CLOSED / PASS / ACCEPTED）
+P4-C10-AUTH-A4                 : AUTHORITY AMENDMENT CANDIDATE —— INDEPENDENT REVIEW REQUIRED（docs-only；本合同第 22 节与计划第 18 节；Risk Class B）
+Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa —— UNCHANGED PENDING REVIEW（仅在 AUTH-A4 Independent Authority Amendment Review PASS 后由 Reviewer 提升为 AUTH-A4 reviewed head；作者不得自行提升）
+Next                           : P4-C10-AUTH-GP4-01 INDEPENDENT AUTHORITY AMENDMENT REVIEW（该 Review PASS 后才允许实际 test-isolation repair（第 22.7 节）；之后重取 Formal G-T / G-P4 / PC-04 / G-FULL / skip 对账，再 Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review；顺序与计划第 15 / 17.3 / 18 节一致）
+P4-C10 Technical Acceptance Candidate Status : BLOCKED — ENVIRONMENT（原 S3 快照；详见 docs/review/P4_C10_HANDOFF.md）；当前 Formal G-P4 NOT PASS（P4-C10-AUTH-GP4-01）
+P4-C10 Technical Acceptance Verdict          : NOT ESTABLISHED（原 S3 HANDOFF 快照保持 NOT ESTABLISHED，不被改写；独立 Review 之前不是 PASS）
 C10 Acceptance Head            : 1012968e3068731025d2512612fa8f85e829d3d0（历史 candidate，不变）
 Final Reviewed Acceptance Head : NOT ESTABLISHED
+PC-04 Evidence                 : NOT ESTABLISHED（依赖 Formal G-P4 PASS；PC-04 规则本身 UNCHANGED）
+Formal G-FULL                  : NOT RUN（Formal G-P4 停止之后未运行）
+Evidence Refresh Candidate     : NOT CREATED
 XD-A08（C5-R1-L1）             : OPEN —— UNRESOLVED AUTHORITY DEBT（阻塞 Phase 4 Exit / Closure；不阻塞 Technical Acceptance）
-Formal Windows Evidence        : NOT RUN（Active Authority Amendment Head 建立之前不运行；正式环境证据未取得）
-Phase 4 Exit Authorization     : BLOCKED — AUTHORITY AMENDMENT REVIEW PENDING；LEVEL 1 / EC-15 PENDING；XD-A08；正式环境证据未取得
+Phase 4 Exit Authorization     : BLOCKED — P4-C10-AUTH-GP4-01 AUTHORITY AMENDMENT REVIEW PENDING；LEVEL 1 / EC-15 PENDING；XD-A08
 Production Modified            : NO
 Production repair              : NOT PERFORMED
+Actual test isolation repair   : NOT PERFORMED（需 AUTH-A4 Independent Review PASS 之后）
 P4-C10                         : NOT CLOSED
 Phase 4                        : NOT CLOSED
 Phase 5                        : NOT STARTED
@@ -1408,6 +1425,158 @@ AUTH-A1 docs candidate -> Independent Authority Amendment Review
 
 不是 `AUTH-A1 -> C10-R1`，除非后续真的发现 F1 / F2。AUTH-A1 本身不运行任何正式环境命令，也不创建 Evidence Refresh Candidate。
 XD-A08 不受 AUTH-A1 影响：仍为 OPEN，只阻塞 Phase 4 Exit，不阻塞 Technical Acceptance。OBS-03（基线 / F0 类补充问题，无 C10 回归 finding）与 OBS-04（无 finding）不重新设计。
+
+---
+
+## 22. P4-C10-AUTH-A4 / P4-C10-AUTH-GP4-01 —— G-P4 Test-Isolation Authority Amendment（冻结候选；只修订本合同与施工计划）
+
+```text
+Amendment ID           : P4-C10-AUTH-A4 / P4-C10-AUTH-GP4-01
+Origin                 : Independent G-P4 Constructibility Authority Triage Review
+Finding                : P4-C10-AUTH-GP4-01
+Category               : Authority / Frozen-Gate Constructibility / Existing-Test Isolation
+Severity               : HIGH / BLOCKING（Blocking = YES；Authority Amendment Required = YES）
+Classification         : Pre-existing / baseline-like existing-test isolation defect
+C10-R1 direct regression : NO（C10-R1 e0ee8c15… 是 test-only；在 Design Accepted Head fc59e202… 上以同一 Windows / Python / exact G-P4 command 同样复现）
+Production defect      : NO
+Route A                : REJECTED（改变 / 弱化 G-P4）
+Route B                : AUTHORIZATION CANDIDATE —— INDEPENDENT REVIEW REQUIRED（Preserve G-P4 + Test-Isolation Repair）
+Authorized file        : fc2-organizer/tests/unit/orchestration/test_orchestration_recognition.py
+Authorized target      : test_source_key_is_exact_on_posix
+Production             : FORBIDDEN（src/** ZERO MODIFICATION）
+tests/contract         : FORBIDDEN（tests/contract/** ZERO MODIFICATION）
+G-P4 exact command     : UNCHANGED
+G-P4 pass rule         : UNCHANGED（0 failed / 0 errors）
+EC-08                  : UNCHANGED
+PC-04                  : UNCHANGED
+Risk Class             : B
+Finding Status         : REMEDIATED — INDEPENDENT AUTHORITY REVIEW REQUIRED（不得写 CLOSED / PASS / ACCEPTED）
+Active Authority Amendment Head : 82f96a21e210b0b63b904df1f8a8e62be741a9aa（UNCHANGED PENDING REVIEW）
+```
+
+AUTH-A4 **不是**新的 Design-R4；历史 Design Accepted Head `fc59e2020e4df237bf3bed83a07950d67c19b475`、历史 C10 Acceptance Head `1012968e3068731025d2512612fa8f85e829d3d0`、
+Active Authority Amendment Head `82f96a21e210b0b63b904df1f8a8e62be741a9aa`、C10-R1 head `e0ee8c15d9d8d238ee76e3f142870a96d5972a60` 一律保持不变。
+**Git HEAD 与 Active Authority Head 是两个不同概念**：在 AUTH-A4 Independent Authority Amendment Review PASS 之前，Active Authority Amendment Head 仍只能是 `82f96a21…`，作者不得提升为 AUTH-A4 Candidate SHA。
+
+### 22.1 问题与因果链（事实记录；已由独立 Authority Triage Review 确认）
+
+正式环境（Windows 11 / Python 3.12.10 / httpx 0.27.2 / pytest 9.1.1 / 普通用户）下，冻结的 G-P4 exact command（第 8.2 节）稳定出现 `INTERNALERROR`，触发点为
+`tests/unit/orchestration/test_orchestration_recognition.py::test_source_key_is_exact_on_posix`。该现象在当前 `e0ee8c15…` 与历史 Design Accepted Head `fc59e202…` 上均复现。
+
+```text
+(1) test_orchestration_recognition.py 的 no_io fixture trap：os.path.exists / isdir / isfile / islink / realpath / abspath 等文件系统探测。
+(2) 目标测试在 no_io 已生效之后，于函数体内执行
+        import fc2_organizer.orchestration.recognition as recognition_module
+(3) tests/contract/test_planning_architecture.py 中的 architecture guard 会 purge fc2_organizer / fc2_organizer.* / fc2_metadata_core / fc2_metadata_core.*
+    于 sys.modules，并在 finally 中再次 purge，不恢复进入该 test 之前已有的 module cache。
+(4) 在 G-P4 exact suite order（tests/contract 先于 tests/unit/orchestration）下，recognition module 可能已从 sys.modules 消失；
+    目标测试在 no_io 生效时进入真实 import machinery，触发 filesystem probe trap -> INTERNALERROR。
+```
+
+结论：这是 TEST ISOLATION / SUITE ORDER DEPENDENCY（existing-test 隔离缺陷），**不是**被测 production 行为错误，**不是** C10-R1 的直接回归，**不是** F1（C10 自身测试缺陷）、F2（生产缺陷）、F4（合同冲突）。
+本合同**不**建立 `P4-C10-F4-03`，且不重命名该 finding。
+
+### 22.2 Route 裁决
+
+* **Route A —— REJECTED**：任何改变或弱化 G-P4 的做法：改变 G-P4 command、改变目录顺序、拆成多个 pytest process、接受 `INTERNALERROR`、放宽 `0 errors`、skip、xfail、deselect、排除 target。
+* **Route B —— 授权候选（本节）**：保持 G-P4 原样 + 对唯一 existing test 做 test-isolation repair；其生效以独立 Authority Amendment Review PASS 为前提。
+
+### 22.3 窄例外（唯一；第 1.4、8.4 节引用本节）
+
+只有在 **P4-C10-AUTH-A4 Independent Authority Amendment Review PASS** 之后，才允许**未来**修改唯一文件 `fc2-organizer/tests/unit/orchestration/test_orchestration_recognition.py` 中的唯一 target
+`test_source_key_is_exact_on_posix`。唯一目的：**TEST-ISOLATION REPAIR ONLY**——消除该 target 对 suite order、`sys.modules` cache 状态与 fixture 生效期间 import machinery 的依赖。
+在该 Review PASS 之前，本例外不存在，第 1.4、8.4 节对全部既有测试的禁止绝对有效；AUTH-A4 Candidate 本身**不**修改任何测试，实际 repair = NOT PERFORMED。
+
+### 22.4 允许的 repair 形态（语义边界）
+
+允许未来 repair 使 `fc2_organizer.orchestration.recognition` 的 module reference 在 `no_io` filesystem traps 生效**之前**以 deterministic 方式建立（具体写法由 repair 作者在上述边界内裁决，并在 commit message 记录理由）。
+
+### 22.5 repair 绝对禁止（任一发生 = repair 越权，Risk B 授权立即失效，须重新 authority triage）
+
+```text
+修改 source-key assertion
+修改 expected conflict
+修改 POSIX exact-key semantics
+修改 no_io fixture trap strength
+删除 os.path.exists trap
+删除 os.path.abspath trap（及任何其它既有 trap）
+添加 filesystem exception / allowlist
+添加 skip / xfail / platform bypass
+修改 test_orchestration_recognition.py 中除 target 之外的任何测试或 fixture
+修改任何其它 tests/unit/**
+修改 tests/contract/**（尤其 test_planning_architecture.py；不得通过修改它来恢复 sys.modules cache）
+修改 tests/support/**、tests/fixtures/**、tests/phase4_acceptance/**
+修改 src/**
+修改 docs/**
+```
+
+### 22.6 G-P4 / EC-08 / PC-04 保持（冻结，UNCHANGED）
+
+```text
+G-P4 exact command  : 第 8.2 节原文，不变；不得换目录顺序、不得拆 pytest process、不得排除 node、不得接受 known INTERNALERROR
+G-P4 pass rule      : 0 failed / 0 errors；skipped 集合 ⊆ SKIP_BASE（按 nodeid）；不建立任何 baseline exception / known-error exception / special skip / special order
+EC-08               : 强度不变
+PC-04               : 10 个 tracked tests/contract/test_*.py modules + tests/contract diff = ZERO（<Design Accepted Head>..<被验收的 C10 head>）+ G-P4 PASS；不变
+tests/contract/**   : ZERO MODIFICATION
+src/**              : ZERO MODIFICATION；P4-C8 Frozen Contract / Plan / HANDOFF / production behavior UNCHANGED
+```
+
+### 22.6a Risk Class = B
+
+理由：test-only authority；唯一一个 existing unit-test 文件；`src/**` 零差异；`tests/contract/**` 零差异；无 production 语义变化；无公开 API 变化；无安全边界变化；G-P4 强度不变。
+若未来 repair 越出本节范围，Risk B 授权立即失效，必须重新 authority triage。
+
+### 22.7 未来 repair commit 的预冻结 scope（仅在 AUTH-A4 Review PASS 之后）
+
+```text
+M fc2-organizer/tests/unit/orchestration/test_orchestration_recognition.py      （唯一允许）
+```
+
+repair commit 不得修改 `src/**`、`tests/contract/**`、其它 `tests/unit/**`、`tests/phase4_acceptance/**`、`docs/**`（含本合同与计划的状态行；状态同步由后续 Evidence Refresh / authority 提交承担）。
+
+### 22.8 repair 之后的 required evidence（冻结）
+
+```text
+E-1  Focused target：tests/unit/orchestration/test_orchestration_recognition.py::test_source_key_is_exact_on_posix PASS
+E-2  Causal-order witness：同一个 pytest process 内依次运行
+        tests/contract/test_planning_architecture.py::test_planning_imports_cleanly_with_amane_blocked_at_runtime
+        然后 tests/unit/orchestration/test_orchestration_recognition.py::test_source_key_is_exact_on_posix
+     必须 PASS（原因：target 单独 PASS 在修复前本来就可能成立，不能单独证明 suite-order defect 已关闭）
+E-3  tests/unit/orchestration 全目录 PASS
+E-4  Formal G-T：第 8.2 节 frozen exact command，PASS（0 skipped）
+E-5  Formal G-P4：第 8.2 节 frozen exact command，0 failed / 0 errors
+E-6  PC-04：10 modules；tests/contract 零差异；G-P4 PASS
+E-7  Formal G-FULL：第 8.2 节 frozen exact command，0 failed / 0 errors
+E-8  Exact skip reconciliation：对照 SKIP_BASE = 40 exact nodeids（第 8.3 节；按 nodeid 比较）
+```
+
+不得复用旧的失败 G-P4 作为 PASS 证据；E-1..E-3 是 focused evidence，不替代 E-4..E-8 的 Formal 重跑。
+
+### 22.9 当前状态（如实；AUTH-A4 Candidate 时点）
+
+```text
+Formal G-T                      : PASS —— 142 / 142 / 0 skipped
+Formal G-P4                     : NOT PASS —— P4-C10-AUTH-GP4-01
+PC-04                           : NOT ESTABLISHED
+Formal G-FULL                   : NOT RUN
+Evidence Refresh Candidate      : NOT CREATED
+Technical Acceptance Verdict    : NOT ESTABLISHED
+Final Reviewed Acceptance Head  : NOT ESTABLISHED
+XD-A08                          : OPEN —— 阻塞 Phase 4 Exit，不阻塞 Technical Acceptance（AUTH-A4 不处理它）
+Phase 4                         : NOT CLOSED
+Phase 5                         : NOT STARTED
+```
+
+### 22.10 AUTH-A4 之后的冻结顺序
+
+```text
+AUTH-A4 docs candidate -> P4-C10-AUTH-GP4-01 Independent Authority Amendment Review
+  PASS -> Reviewer 建立 Active Authority Amendment Head = AUTH-A4 reviewed head
+       -> test-isolation repair（第 22.7 节唯一 scope）
+       -> focused evidence E-1..E-3 -> Formal Evidence Revalidation E-4..E-8（Windows 11 / Python 3.12.x / 普通用户）
+       -> Evidence Refresh Candidate -> Incremental Independent Level 1 Closure Review
+  FAIL -> authority 修订后再次 Independent Authority Amendment Review
+```
 
 ---
 
