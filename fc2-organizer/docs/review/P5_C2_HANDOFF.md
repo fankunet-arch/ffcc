@@ -188,7 +188,19 @@ P5_C2_COMPATIBILITY_MATRIX.json（Part A + Part B）文件 sha256 = 86d4a0c04303
 
 验证（`final_pipeline`，不入库的编排脚本）：L0 / L1 在重新生成后与被验收候选的哈希**逐字节相同**（若不同即为越权，脚本会停止）；`pin` 中的 wheel 哈希 == 实际 wheel 哈希；L2 -> L3 -> L4 在同一 Part A 上两次独立构建逐字节相同；最终的 L2 -> L3 -> L4 -> Part B 由网关自己的 `finalize` 命令生成（它拒绝不完整 / 非全绿的 Part A 且不写任何产物，见 §0.1）；Part B 的取值不影响 L2–L4（E29 测试）。`core_admission` 共 70 行（旧 66 行 + 4 个必需宿主各 1 行符号链接子项，其中 4 行 = `ENVIRONMENTALLY_UNAVAILABLE`）。
 
-@@CLEAN@@
+### 5.1 干净检出验证（对提交 `be11b48` 实际执行；本文随后只填入本节与 §6 的数字，未改动任何被哈希的输入）
+
+```text
+git worktree add --detach <dir> be11b48   -> git status 干净（0 个条目；检出为 CRLF 文本，即 autocrlf 的 Windows 检出）
+在该检出里：build_core_wheel -> build_amane_release stage1 -> run_amane_compat_gate run（独立的真实宿主运行，4 个必需宿主 × 19 个场景）-> run_amane_compat_gate finalize（L2 -> L3 -> L4 -> Part B）
+L0 / L1 哈希 == 被验收候选 4358b3d 的值（0b3db80c… / 2181a12a…）          : True
+Part A 与最终运行的 Part A 逐字节相同（sha256 b83f3986…）                 : True
+L2 / L3 / L4（COMPATIBILITY.json / SHA256SUMS / bundle）逐字节相同         : True
+Part B / 最终 MATRIX 与已提交 MATRIX 相同（LF 规范化后整文件相同，sha256 86d4a0c0…）: True
+在该检出里运行 scope_gate / install_doc / matrix_json / artifact_dag / release_layout / evidence_reconciliation 测试 : 167 passed
+```
+
+如实记录：该检出上的**第一次**完整运行，`b-win` 在控制栈阶段（配置往返的受控栈）遇到一次 Windows `PermissionError [WinError 5]`（宿主自己重命名暂存目录被拒绝；瞬时现象，与仓库内容无关；其余三个宿主 19/19、L0 / L1 正确）。在新的场景完成语义下，该运行得到 `b-win` 18/19（HC-05 false）、网关退出码 1，流水线**在 finalize 之前停止**，没有产出任何产物；该运行被丢弃。**未改任何文件**，在同一干净检出上完整重跑，四个必需宿主均 19/19，上表全部来自这次重跑。这次失败本身也是对 §0.1 机制的一次真实验证（中断 -> false -> 不 finalize）。
 
 ## 6. 测试数字（E25 / E26 / E27 / E28）
 
@@ -196,10 +208,10 @@ P5_C2_COMPATIBILITY_MATRIX.json（Part A + Part B）文件 sha256 = 86d4a0c04303
 基线（P5-C2 S1 起始 / 被验收候选 4358b3d；3.12.10 项目 venv）: 8738 passed / 40 skipped / 0 failed
 本轮新增 targeted 测试 : +89 = tests/amane_compat 290 -> 379
                           （test_amane_compat_matrix_json 32 -> 57：+25；新增 test_amane_compat_evidence_reconciliation：+64；其余文件数量不变；没有删除任何测试）
-tests/amane_compat      : @@T_COMPAT@@
+tests/amane_compat      : **379 passed**（290 -> 379；0 skipped；含全部 HANDOFF 措辞守卫，无任何 deselect）
 tests/amane_adapter     : **539 passed**（零 diff）
-tests/amane_compat + amane_adapter : @@T_BOTH@@
-python -m pytest tests -q（3.12） : @@T_FULL@@
+tests/amane_compat + amane_adapter : **918 passed / 0 skipped / 0 failed**（379 + 539；两次独立运行之和）
+python -m pytest tests -q（3.12） : **8827 passed，0 failed，40 skipped**（666 s；无任何 deselect / 筛选）
 新增 skip               : 0（`-rs` 清单与基线逐条比较：基线 `b8480e7` 同一命令的 `-rs` 输出：22 组 / 40 个，nodeid / 原因 / 数量逐条相同；`tests/amane_compat` 内 0 个 skip）
 ```
 
@@ -207,7 +219,7 @@ python -m pytest tests -q（3.12） : @@T_FULL@@
 
 | 集合 | 结果 |
 |---|---|
-| A（30 个显式路径） | **1833 passed**（31.60 s）——与 C1 终点一致 |
+| A（30 个显式路径） | **1833 passed**（32.39 s）——与 C1 终点一致 |
 | B（22 个显式文件） | **520 passed**；3.12 与 3.14 的 `collected` 均为 520 |
 | C（真实宿主见证 H-01..H-15） | **15/15 PASS**；输出写到临时路径，与已提交的冻结 `P5_C1_HOST_WITNESS.json`（LF 规范化）**逐字节相同**（`sha256(out) = 920cec8bd9b137e2e83e8cc1807c626568b2182a77c5c8177aa62e603ff5da58`）；该冻结文件零 diff |
 
