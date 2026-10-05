@@ -8,8 +8,10 @@ P5-C1 Final Reviewed Technical Head: 0289b191659234a0e74f498e7b412c06c3d28d4a
 Package                            : P5-C2 — Amane Compatibility & Adapter Closure
 Package Frozen Base                : CANDIDATE — subject to Design Review（候选 = 232ece06c1d166929846bc9c63ffc7314ea3a484；本文不自行宣称已冻结）
 Planning Parent                    : 232ece06c1d166929846bc9c63ffc7314ea3a484
-Risk Class                         : B / C（候选 B；带强制升级门 U2-1..U2-10；合同第 5 节；本次设计调查未触发 B -> C；
-                                     请 Design Reviewer 重点裁决合同第 5.3 节“sidecar 是否构成 security boundary change”，若是则升为 C）
+Risk Class                         : C（Design Pre-Review R1 裁决；合同第 5 节）。理由**不是**“用了 `sys.path`”，而是 P5-C2 新建了**外部可执行 artifact 信任边界**：
+                                     sidecar wheel -> 路径 / 类型校验 -> 完整性 pin -> `sys.path` -> 宿主进程内可执行代码；它决定哪些数据目录中的外部代码可以进入宿主进程执行
+                                     = 治理定义的 security boundary。**Risk C 不自动拆分 S1/S2/S3**（security design 已在合同第 8 节完整冻结；不涉及不可逆用户数据操作；
+                                     不修改 CLOSED production；无需中间 authority decision）；升级门 U2-1..U2-12
 Vertical Closure                   : 一个普通用户拿官方 release bundle（plugin zip + 独立 Core wheel + 校验清单 + 安装说明），按文档在
                                      受支持的 Amane 版本（最低 v0.15.0；当前稳定版 v0.18.0）的真实宿主上从零安装 -> 被发现 -> 配置往返 ->
                                      构建 provider -> 一次离线 fetch -> reload -> 升级 / 替换 -> 卸载，并在两个版本上得到等价的 adapter 语义；
@@ -24,12 +26,16 @@ Why not split further              : 兼容矩阵、Core 供给、artifact、真
                                      只增加等待，不增加 correctness / safety / auditability；**不规划 P5-C3**（合同第 4 节 Q3）
 Internal Stages                    : S1 Compatibility & Supply / S2 Install-Reload-Cross-Version Integration / S3 Final Artifact & Acceptance Evidence
                                      （S1 -> S2 -> S3 连续施工；无中间 Review；无 S 级状态 docs）
-Independent Review Plan            : one Design Review（本候选之后，实现之前，必需）
-                                     + one final C-level Review（S1-S3 全部完成之后；Independent Level 1）
+Independent Review Plan            : one Design Review（本候选之后，实现之前，必需；这是 P5-C2 **第一次且唯一一次** pre-implementation Design Review——
+                                     8870df0 与 Pre-Review R1 都尚未经过独立 Review，因此是**完整**审查，不是 incremental closure review）
+                                     + **Security Review Focus**：Design Review 必须明确审合同第 8 节 locator 信任边界，并单独给出 security 裁决
+                                     + one final C-level Review（S1-S3 全部完成之后；Independent Level 1；**必须独立执行 locator / security 证据 E31**，不得只引用 HANDOFF）
                                      + 若 FAIL：ONE unified R1 + Final Closure
-Owner Question Gate                : BUSINESS DECISIONS ONLY（本设计未发现需要 Owner 的业务问题；支持集“精确坐标 + 有见证的平台”为技术 / 证据裁决，
+                                     （仅在独立 Design Review PASS 之后才成立；本文**不**授权实现）Review 通过时：Frozen Contract / Plan = Pre-Review R1 Head；Risk Class = C；S1 -> S2 -> S3 连续施工
+Owner Question Gate                : BUSINESS DECISIONS ONLY（本设计未发现需要 Owner 的业务问题；支持声明为二维坐标 `(version, host_form, platform)`：
+                                     Windows x64 desktop = 必需受支持部署，source host = 必需集成兼容，macOS / Linux / Docker = UNVERIFIED；属技术 / 证据裁决，
                                      可被 Design Reviewer 否决，不阻塞）
-Evidence Gate                      : C2-E01..C2-E30（合同第 15 节；E01 diff scope、E02 C1 语义不变、E03 版本坐标、E04 API 矩阵、E05 Core 供给 / 安装、
+Evidence Gate                      : C2-E01..C2-E31（合同第 15 节；E31 = locator 信任边界 / security 的 PASS-FAIL 配对矩阵；E01 diff scope、E02 C1 语义不变、E03 版本坐标、E04 API 矩阵、E05 Core 供给 / 安装、
                                      E06 确定性 artifact、E07-E14 安装 / 发现 / 配置 / build / reload / 升级 / 缺失 / 不兼容 Core、E15-E16 跨版本结果 / 错误等价、
                                      E17 HTTP 生命周期、E18 无 vendor、E19 无新持久化、E20 mutation、E21-E23 宿主集成、E24 平台矩阵、E25-E28 测试 / skip 对账、
                                      E29 artifact 哈希、E30 gaps）
@@ -40,6 +46,8 @@ Production Change                  : NONE in src/**；adapters/amane/fc2_amane_a
 ```text
 Package               = P5-C2 Amane Compatibility & Adapter Closure
 Branch                = claude/phase5-c2-amane-compatibility（自 232ece0… 创建）
+Design Candidate      = 8870df0ea42e60dd142a5878ea7c0abc6ca3c4b5（未经 Independent Review）
+Design Pre-Review R1  = 本 docs-only 提交（Parent = 8870df0…；C2-DESIGN-R1-01..04；`git log -1 --format=%H -- fc2-organizer/docs/P5_C2_CONSTRUCTION_PLAN.md`）
 规范合同              = docs/specifications/PHASE5_C2_AMANE_COMPATIBILITY_CONTRACT.md
 P5-C2 Design          = CANDIDATE — INDEPENDENT DESIGN REVIEW REQUIRED
 Contract              = CANDIDATE
@@ -74,7 +82,11 @@ Design PASS 之后，开发者只能**执行**本计划：不得重新设计、�
 
 ## 2. 风险与升级门
 
-Risk Class 候选 = **B**。升级门 U2-1..U2-10 见合同第 5.2 节，任一触发 = 立即 STOP，不得自行按 B 继续。
+Risk Class = **C**（合同第 5.1 节）；**Risk C 不自动拆分 S1/S2/S3**（合同第 5.2 节）。升级门 U2-1..U2-12 见合同第 5.3 节，任一触发 = 立即 STOP，不得自行继续。
+其中 U2-11（放宽 locator 准入 / 对已加载 Core 盲信 / 热切换）与 U2-12（pin 验证无法稳定实现而临场降级 = DESIGN BLOCKER）是 Risk C 的专项门。
+
+**Authority 优先级（领域化；合同第 2 节）**：P5-C1 Frozen Contract / Plan（CLOSED semantics）> P5-C2 Accepted Contract > P5-C2 Accepted Plan > Acceleration v2 > Task Prompt。
+P5-C2 不得通过新合同静默 override P5-C1 CLOSED semantics；必须改变则 U2-1 / U2-6 / U2-7 STOP + authority amendment。
 另：**真实宿主观测与合同第 6 节设计期实证不一致**（例如冻结宿主开始读取 `PYTHONPATH`、`install_plugin_zip` 不再先导入插件、v0.18.0 的 `PluginContext` 字段变化）= 设计前提失效（U2-5），STOP 回到 Design Review。
 
 ---
@@ -95,7 +107,9 @@ Risk Class 候选 = **B**。升级门 U2-1..U2-10 见合同第 5.2 节，任一�
 5. **Core wheel 构建器** `tools/build_core_wheel.py`（合同第 10.2 节）+ **发布台账** `adapters/amane/release/core_release_ledger.json`（同版本不同 tree 哈希 -> 构建失败）。
 6. **plugin zip / bundle 构建器** `tools/build_amane_release.py`（合同第 9.1、10 节）：生成 `_ffcc_pin.py`（只含字面量）；从 `adapters/amane/fc2_amane_adapter/*.py` 字节原样（LF 规范化）放入 `_impl/`；拒绝 id != `PLUGIN_ID`；allow-list / forbidden 扫描；`ZIP_STORED`；输出 plugin zip、wheel、`SHA256SUMS`、`COMPATIBILITY.json`（S3 才填入见证派生内容，S1 先生成结构占位并有 schema 测试）、`INSTALL.zh-CN.md`（S3 定稿）、`VERSION`、bundle zip。**不 import C1 构建器**。
 7. **主进程纯逻辑测试**（3.12；`tests/amane_compat/test_amane_compat_*.py`；pytest 文件名全局唯一）：
-   * locator：4 步全部分支、每个模板、哈希篡改 1 字节 / 符号链接 / 超大文件 / 目录同名 / 多 wheel / 无 sidecar / `module_file` 为 staging 路径与正式路径；**纯函数 + `tmp_path`**，不依赖 Amane；
+   * locator（E31 的**单元层**）：合同第 8.3 节 4 步与 (W) / (D1) / (D2) 全部分支、6 个模板、E31-a..q 的 PASS / FAIL 配对（含**已加载**的正确 / 错误版本 / 被篡改同名 wheel / 错误 pip / 错误 editable，
+     正确 pip `--target` 树与正确 editable 树 PASS，额外 `.pyd` / `.pth` / 符号链接、混合来源子模块、遮蔽、namespace / 多路径、失败路径无 `sys.modules` / `sys.path` 副作用）、
+     与 C1 `tree_sha256` 对拍、CRLF 检出；`module_file` 为 staging 路径与正式路径；**`tmp_path` + 真实 Core 树 / 真实构建的 wheel**，不依赖 Amane；每个 FAIL 以 subprocess 隔离（避免污染主进程 `sys.modules`，遵守 P5-ENTRY-CLOSURE-OBS-01）；
    * 确定性（E06）：两个解释器（subprocess 3.12 与 3.14）× 两个输出目录 × CRLF 检出副本 -> 哈希相等；allow-list / forbidden；
    * 无 vendor（E18）；`_impl` 字节 == C1 树（E02）；shim / locator AST 守卫（无写 API、无网络、无 amane / pydantic / Core import）；
    * 兼容 JSON schema 与自洽规则（E23 / E24 / M2-16）。
@@ -103,7 +117,7 @@ Risk Class 候选 = **B**。升级门 U2-1..U2-10 见合同第 5.2 节，任一�
 
 ### S2 —— Install / Reload / Cross-Version Integration（真实宿主）
 
-目标：在真实宿主上跑 HC-01..HC-18（合同第 11.2 节）。
+目标：在真实宿主上跑 HC-01..HC-19（合同第 11.2 节）。
 
 1. **宿主准备工具** `tools/prepare_amane_hosts.py`：为每个 `--host` 创建独立 venv（3.14.x）并安装该 Amane 检出的依赖（记录 `pip freeze` 哈希；联网仅限依赖安装，属环境前提，写入 HANDOFF）；下载 / 校验官方冻结包（比较 SHA256 与 Release 资产；解压到临时目录）。
 2. **见证运行器** `tools/run_amane_compat_gate.py`（顶层只依赖标准库）：对每个 host 启动**真实 Amane 服务进程**（随机空闲端口、临时 `AMANE_DATA_DIR`、固定 `AMANE_TOKEN`、`AMANE_HOST=127.0.0.1`），通过真实 HTTP API 执行 HC 场景；HC-04 / HC-17 / HC-07 等需要进程内对象的场景用 C1 同法的 subprocess 脚本（`tests/amane_compat/host_scripts/`；pytest 从不导入）。
@@ -111,7 +125,9 @@ Risk Class 候选 = **B**。升级门 U2-1..U2-10 见合同第 5.2 节，任一�
 3. **回环 fixture**：`127.0.0.1` 上的 HTTP 服务器（线程；随机端口；记录请求；脚本化响应）；`base_url` 覆盖指向它。公网零访问。
 4. **配置往返一致性守卫（E09）**：对合同第 12.2 节每个样本，同时取 PATCH 状态、`validate_plugin_config`、`parse_settings`、`build_plugin_provider` 四个布尔值并断言全真或全假。
 5. **跨版本等价（E15 / E16）**：同一请求集在 v0.15.0 / v0.18.0 上产生规范化 JSON，比较 sha256；对宿主 `FailureReason` 全部成员做桥分类的全函数枚举测试。
-6. **冻结包见证**：HOST-A-WIN / HOST-B-WIN 在 Windows 上运行同一 HC 集合（服务进程 = `onedir/Amane.Server.exe`，环境变量同设计期探针；**不**设置 `PYTHONPATH`）。macOS / Linux / Docker 不可得 -> 标 `UNVERIFIED`，不伪造。
+6. **冻结包见证**：HOST-A-WIN / HOST-B-WIN（坐标 SC-01 / SC-02，**必需的受支持部署**）在 Windows 上运行同一 HC 集合（服务进程 = `onedir/Amane.Server.exe`，环境变量同设计期探针；**不**设置 `PYTHONPATH`）。
+   源码宿主 HOST-A-SRC / HOST-B-SRC（SC-03 / SC-04）= 必需的集成兼容。**macOS / Linux / Docker（SC-07 / SC-08 / SC-09）不可得 -> `UNVERIFIED`，不伪造，不进支持声明**（设计期已核对本环境无 Docker；不为扩大声明增加环境依赖）。
+   **HC-19（Core 来源准入矩阵）**：真实宿主子进程内执行 E31 的 PASS / FAIL 配对；源码宿主覆盖 pip / `--target` / editable / 预加载，冻结包覆盖 sidecar 各分支；每个 FAIL 要求 422 / `failures` + 固定模板 + 无半装 + `sys.modules` / `sys.path` 无副作用。
 7. HOST-C-MAIN：若 main == 稳定版 commit -> `IDENTICAL_TO_STABLE`，不重复运行；否则运行，**失败不阻塞**，记录为信息差异。HOST-MID 可选。
 8. S2 结束的 checkpoint：HC 全集在两个必需源码宿主 + 两个冻结包上通过（或 BLOCKED + 根因，不得绕过）；JSON 初稿生成。
 
@@ -120,10 +136,11 @@ Risk Class 候选 = **B**。升级门 U2-1..U2-10 见合同第 5.2 节，任一�
 1. 在最终提交的树上构建**最终** bundle，并确认：pin 中的 wheel 哈希 == 实际 wheel 哈希；`COMPATIBILITY.json` 由兼容见证派生；`SHA256SUMS` 通过 `sha256sum -c`；E06 在最终树上重做。
 2. `INSTALL.zh-CN.md` 定稿（简体中文，遵循《文档语言规范》）并 **“文档即测试”**（E05）：脚本按文档的每一步操作真实宿主（含第 8.6 节升级与第 8.7 节故障分支）。
 3. `adapters/amane/README.md` 状态行更新（仅文档；不改 C1 树）。
-4. **提交** `docs/acceptance/evidence/P5_C2_COMPATIBILITY_MATRIX.json`（确定性；同一环境重跑逐字节相同；测试重算 artifact 哈希并与之核对）。
-5. **Mutation / 非空洞（E20）**：M2-01..M2-16 以补丁脚本作用于**临时副本**，断言 killer 失败。
+4. **提交** `docs/acceptance/evidence/P5_C2_COMPATIBILITY_MATRIX.json`（确定性；同一环境重跑逐字节相同；测试重算 artifact 哈希并与之核对）；`status` 以**坐标** `(version, host_form, platform)` 为 key（合同第 14.1 节），含 `core_admission` 的 E31 用例结果；
+   `COMPATIBILITY.json`、`INSTALL.zh-CN.md`、E24 使用同一份支持坐标表（合同第 7.2 节）；INSTALL 中任何 Docker 步骤标 `UNVERIFIED / informational — 不在本发布验收覆盖范围内`。
+5. **Mutation / 非空洞（E20）**：M2-01..M2-20 以补丁脚本作用于**临时副本**，断言 killer 失败；其中 M2-14 / M2-15 / M2-17..M2-20 是 locator 信任边界的专项 mutant（E31）。
 6. **回归**：P5-C1 `tests/amane_adapter/**` 在 3.12 上全绿；P5-C1 要求的 3.14 证据集 A / B 在 3.14 上重跑，数字与 C1 终点一致（A 1833、B 520）；`pytest tests -q`（3.12）全量，skip 对账（E27 / E28）。
-7. 写 `docs/review/P5_C2_HANDOFF.md`（实现完成后；**不是**本设计阶段产物）：逐条 E01..E30、坐标、哈希、局限、`Next`。
+7. 写 `docs/review/P5_C2_HANDOFF.md`（实现完成后；**不是**本设计阶段产物）：逐条 E01..E31、坐标、哈希、局限、`Next`。
 8. 只在 S3 末尾提交 HANDOFF 后停止，等待**一次**独立 Level 1 Review。
 
 ---
@@ -176,7 +193,7 @@ Risk Class 候选 = **B**。升级门 U2-1..U2-10 见合同第 5.2 节，任一�
                      python tools/build_amane_release.py --core-wheel <whl> --out <dir>
 ```
 
-PASS 条件：E01..E30 全部有证据或有被接受的 `UNVERIFIED` / gap 记录；`failed = 0`；新增 skip = 0；两个必需宿主版本与两个冻结包上 HC-01..HC-18 全通过。
+PASS 条件：E01..E31 全部有证据或有被接受的 `UNVERIFIED` / gap 记录；`failed = 0`；新增 skip = 0；两个必需宿主版本与两个冻结包上 HC-01..HC-19 全通过。
 
 ---
 
@@ -185,25 +202,27 @@ PASS 条件：E01..E30 全部有证据或有被接受的 `UNVERIFIED` / gap 记�
 | 合同 | 实现 | 证据 |
 |---|---|---|
 | 第 6 / 7 节 矩阵 | `compare_amane_api.py`、两份 API 清单 | E03 / E04：`test_amane_compat_api_matrix.py`、JSON `hosts[]` |
-| 第 8.3 节 locator | `shim/_ffcc_locator.py` | E05 / E13 / E14 / M2-03 / M2-14 / M2-15：`test_amane_compat_locator.py` + HC-10 / HC-11 / HC-16 |
+| 第 8.3 节 locator（Risk C 信任边界） | `shim/_ffcc_locator.py` | E05 / E13 / E14 / **E31** / M2-03 / M2-14..M2-20：`test_amane_compat_locator.py`（单元层）+ HC-10 / HC-11 / HC-16 / **HC-19** |
 | 第 9 节 包结构 | `build_amane_release.py` | E02 / E18 / M2-01 / M2-02 / M2-04：`test_amane_compat_release_layout.py` |
 | 第 10 节 artifact | `build_core_wheel.py`、`build_amane_release.py` | E06 / E29 / M2-09 / M2-10：`test_amane_compat_determinism.py` |
 | 第 11 节 HC | `run_amane_compat_gate.py`、`host_scripts/` | E07-E12 / E21 / E22 / E17 / E19 |
 | 第 12 节 config | 同上 | E09 / M2-06 / M2-12：HC-05 / HC-08 + 一致性守卫 |
 | 第 13 节 parity | 同上 | E15 / E16 / M2-07 / M2-08 |
-| 第 14 节 JSON | `run_amane_compat_gate.py` | E23 / E24 / E29 / M2-16：`test_amane_compat_matrix_json.py` |
+| 第 7.2 / 14 节 坐标与 JSON | `run_amane_compat_gate.py` | E23 / E24 / E29 / M2-16：`test_amane_compat_matrix_json.py`（坐标 key、UNVERIFIED 不得为 SUPPORTED、与 INSTALL / COMPATIBILITY 同表） |
 | 第 16 节 mutation | `test_amane_compat_mutation_nonvacuity.py` | E20 |
 
 ---
 
 ## 7. 自审清单（设计者在提交候选前核对）
 
-1. 没有修改 `src/**`、P5-C1 树 / 测试 / 证据 / 文档、`pyproject.toml`：本候选只新增两份设计文档。
+1. 没有修改 `src/**`、P5-C1 树 / 测试 / 证据 / 文档、`pyproject.toml`：Pre-Review R1 只修改两份 P5-C2 设计文档（docs-only）。
 2. 没有宣称 FROZEN / DESIGN PASS / IMPLEMENTATION AUTHORIZED；`Package Frozen Base` 标为 CANDIDATE。
 3. Amane 坐标直接来自 upstream（`git rev-parse` / `git show` / GitHub Release API），v0.15.0、当前稳定版（v0.18.0）、main 三者分开记录；main 与稳定版同 commit 被如实标注，未当作独立见证。
 4. 设计期实证（W2-04 / W2-05）在**真实官方冻结包**上执行并记录；对未验证的平台（macOS / Linux / Docker）明确 `UNVERIFIED`。
 5. Core 供给方案满足“不 vendor / 普通用户可从零安装”，并回答了合同第 8.1 节的全部问题。
 6. 每个 mutant 有 killer；每个 E 项有判据。
+7. Pre-Review R1：Authority 优先级已领域化（不再写 “Governance > Frozen Contract”）；Risk Class = C 且理由精确；Core pin 在**每一种**执行模式下 fail closed（含已加载、editable、pip）且无 `unverified-path`；
+   支持声明为二维坐标，UNVERIFIED 平台不被版本状态覆盖；Design Review 为完整的第一次审查。
 
 ---
 
@@ -247,5 +266,6 @@ curl -s https://api.github.com/repos/sqzw-x/amane/releases?per_page=8           
 P5-C2 Design         : CANDIDATE — INDEPENDENT DESIGN REVIEW REQUIRED
 Contract             : CANDIDATE
 Construction Plan    : CANDIDATE
+Risk Class           : C
 Implementation       : NOT STARTED
 ```
