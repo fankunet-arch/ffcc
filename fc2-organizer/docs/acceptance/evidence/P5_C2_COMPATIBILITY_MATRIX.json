@@ -1743,6 +1743,6 @@
   ],
   "tool": {
     "name": "run_amane_compat_gate",
-    "sha256": "b48b3ad27898f130ac1281243e293eb013ca6c06035e70e5f9817233bc557bba"
+    "sha256": "efc9ab9c1a1b71dec07f0bc0d62f798161e8012c22c26abec325084580dcd37a"
   }
 }
