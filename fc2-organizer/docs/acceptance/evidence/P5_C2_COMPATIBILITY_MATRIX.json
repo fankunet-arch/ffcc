@@ -1,0 +1,1459 @@
+{
+  "artifacts": {
+    "adapter_tree_sha256": "9fe3dc3b9e815ec3768eec636db6747a68192d97112ea42e9a8545440cb40f82",
+    "core_tree_sha256": "6077cd6739424848137f2b8a1d6c37d20cc9cb3185cc94df07774169b3fda026",
+    "core_wheel_sha256": "0b3db80c9ab9160d9c925b0066ae9b3af72bf22cb4bf2e5278c43c9f47f4b42d",
+    "impl_tree_sha256": "9fe3dc3b9e815ec3768eec636db6747a68192d97112ea42e9a8545440cb40f82",
+    "pin_sha256": "96a80189bd7db8ac663d86f7053d067f5b135220fd081f15c3fc7aac542d2463",
+    "plugin_zip_sha256": "2181a12acb9931b4f7cecd4a1ba58b8b01035916979329b3607b4082f4187766",
+    "shim_tree_sha256": "cf6d0fd108cf81f954705099edf95f36f60b490fc019dcf061e649b08834b480"
+  },
+  "core_admission": {
+    "cases": [
+      {
+        "expected": "PASS",
+        "id": "a-src:dir_canary_with_sidecar",
+        "mode": "directory",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:dir_pip_target_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:dir_pyc_poc_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "PASS",
+        "id": "a-src:dir_pyc_poc_with_sidecar",
+        "mode": "directory",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:dir_source_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:e31l_rollback_cache_absent",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:e31l_rollback_cache_present",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:e31u_wheel_in_path_resolution_disagrees",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:e31v_subclass_loader_in_final_resolution",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "PASS",
+        "id": "a-src:exact_wheel_sidecar",
+        "mode": "wheel",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:loaded_old_core_with_new_pin",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:mixed_origin_loaded",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "PASS",
+        "id": "a-src:new_pair_after_restart",
+        "mode": "wheel",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:preloaded_directory",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "PASS",
+        "id": "a-src:preloaded_exact_wheel",
+        "mode": "loaded",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:preloaded_tampered_same_name",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:preloaded_wrong_version_wheel",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:pythonpath_pyc_poc_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "PASS",
+        "id": "a-src:pythonpath_pyc_poc_with_sidecar",
+        "mode": "directory",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:shadow_meta_path_finder",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:sidecar_only_old_wheel_with_new_pin",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:sidecar_only_other_version_wheel",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:sidecar_oversize_over_16_mib",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:sidecar_same_name_directory",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:sidecar_tampered_same_name_one_byte",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-src:tampered_same_name_sidecar",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:loaded_old_core_with_new_pin",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "PASS",
+        "id": "a-win:new_pair_after_restart",
+        "mode": "wheel",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:sidecar_only_old_wheel_with_new_pin",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:sidecar_only_other_version_wheel",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:sidecar_oversize_over_16_mib",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:sidecar_same_name_directory",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:sidecar_tampered_same_name_one_byte",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-src:dir_canary_with_sidecar",
+        "mode": "directory",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:dir_pip_target_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:dir_pyc_poc_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-src:dir_pyc_poc_with_sidecar",
+        "mode": "directory",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:dir_source_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:e31l_rollback_cache_absent",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:e31l_rollback_cache_present",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:e31u_wheel_in_path_resolution_disagrees",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:e31v_subclass_loader_in_final_resolution",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-src:exact_wheel_sidecar",
+        "mode": "wheel",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:loaded_old_core_with_new_pin",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:mixed_origin_loaded",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-src:new_pair_after_restart",
+        "mode": "wheel",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:preloaded_directory",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-src:preloaded_exact_wheel",
+        "mode": "loaded",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:preloaded_tampered_same_name",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:preloaded_wrong_version_wheel",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:pythonpath_pyc_poc_no_sidecar",
+        "mode": "directory",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-src:pythonpath_pyc_poc_with_sidecar",
+        "mode": "directory",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:shadow_meta_path_finder",
+        "mode": "shadow",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "UNVERIFIABLE"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:sidecar_only_old_wheel_with_new_pin",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:sidecar_only_other_version_wheel",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:sidecar_oversize_over_16_mib",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:sidecar_same_name_directory",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:sidecar_tampered_same_name_one_byte",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-src:tampered_same_name_sidecar",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-win:loaded_old_core_with_new_pin",
+        "mode": "loaded",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "RESTART"
+      },
+      {
+        "expected": "PASS",
+        "id": "b-win:new_pair_after_restart",
+        "mode": "wheel",
+        "observed": "PASS",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": null
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-win:sidecar_only_old_wheel_with_new_pin",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-win:sidecar_only_other_version_wheel",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_VERSION_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-win:sidecar_oversize_over_16_mib",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-win:sidecar_same_name_directory",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "b-win:sidecar_tampered_same_name_one_byte",
+        "mode": "wheel",
+        "observed": "FAIL",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      }
+    ],
+    "core_wheel_sha256": "0b3db80c9ab9160d9c925b0066ae9b3af72bf22cb4bf2e5278c43c9f47f4b42d"
+  },
+  "hosts": [
+    {
+      "adapter_used_subset_fingerprint_sha256": "13b70ba8b1c5abd16c99d9cd1e0bd21634e83ac531d317a7cb8c0ada125066d8",
+      "api_fingerprint_sha256": "701cf0940ea6419f89dc81a654617454b4da89222a2153d8a31182ec2fe84874",
+      "coordinate_id": "SC-03",
+      "deps_lock_sha256": "9ac49de4b94d2b94f58d1e8cab0b723568339806bf7323bbbb9c47305f3b1233",
+      "form": "source",
+      "identical_to_stable": false,
+      "label": "a-src",
+      "peeled_commit": "45dff2159369883e028a296d775a4598836c1ddd",
+      "platform": "windows-x64",
+      "plugin_api_version": "1",
+      "python_version": "3.14.7",
+      "release_version": "0.15.0",
+      "requires_python": ">=3.14",
+      "role": "required",
+      "scenarios": [
+        {
+          "id": "HC-01",
+          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "passed": true
+        },
+        {
+          "id": "HC-02",
+          "observations_sha256": "45a559edc639ff962d33c5a09edfe3559df7af94818805d3560a5e8860314350",
+          "passed": true
+        },
+        {
+          "id": "HC-03",
+          "observations_sha256": "ff2563d2dd690a1c75a6d4a3825a3e1dbf6c4bf41c99c7973cdb53865833d971",
+          "passed": true
+        },
+        {
+          "id": "HC-04",
+          "observations_sha256": "eeaf1e07a9133536fb4580a94819c3e5ef1f1ec220d318a0250d286deedf6a09",
+          "passed": true
+        },
+        {
+          "id": "HC-05",
+          "observations_sha256": "19902260fc0b67aafc785e63e423e98340ce5a9f762ebee8163fc7b262a98edc",
+          "passed": true
+        },
+        {
+          "id": "HC-06",
+          "observations_sha256": "1a6f18588109015302e9be7f21403e890ac13bd07551ee4bf613fb0004d8625b",
+          "passed": true
+        },
+        {
+          "id": "HC-07",
+          "observations_sha256": "578080bc6d1fb0817ad2308148103be3f79542495557fda8a1f9d54479b19b8f",
+          "passed": true
+        },
+        {
+          "id": "HC-08",
+          "observations_sha256": "f5e6df2b4e44008ae782af1400fe59eb807e72159ff7387e266784d69cfd7848",
+          "passed": true
+        },
+        {
+          "id": "HC-09",
+          "observations_sha256": "432f187c0dea6bb614e791097bd872dbd304a73f0c836356d4357033937ffdd5",
+          "passed": true
+        },
+        {
+          "id": "HC-10",
+          "observations_sha256": "03e65745d9804306488397d064d0e63b042d9b0985dda46e8874d17da80f53f5",
+          "passed": true
+        },
+        {
+          "id": "HC-11",
+          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "passed": true
+        },
+        {
+          "id": "HC-12",
+          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "passed": true
+        },
+        {
+          "id": "HC-13",
+          "observations_sha256": "6e0dd07b8e0b56287cb6d3e2d9aa997ba073c73726e54b5f2fd7d404498b9d2b",
+          "passed": true
+        },
+        {
+          "id": "HC-14",
+          "observations_sha256": "98700e88bea1b4dd7e3d003b20c7995e1f4cbe24b6a16c19c5f301ff69c7f7d3",
+          "passed": true
+        },
+        {
+          "id": "HC-15",
+          "observations_sha256": "a6243ba07208d3ce037671a72a03827f76a2d2506a3edb96a9c2e6bb11f413c1",
+          "passed": true
+        },
+        {
+          "id": "HC-16",
+          "observations_sha256": "807dc5e4e4f5b014bf36f5c4415e5e7ba1b3ab7b126b7c9bdc29b42c4b5073f5",
+          "passed": true
+        },
+        {
+          "id": "HC-17",
+          "observations_sha256": "dae8b17f30f415a6b06d6ba07aebeeedf2b0979fd102fb4bab31d2a503ffed44",
+          "passed": true
+        },
+        {
+          "id": "HC-18",
+          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "passed": true
+        },
+        {
+          "id": "HC-19",
+          "observations_sha256": "95019cd7d1d960745b6c0dbfa53aa8ffba486a7a778b129a00e581702c764690",
+          "passed": true
+        }
+      ],
+      "tag": "v0.15.0",
+      "tag_object": "3292c957a092f85ddde1ba7462ffe9813827f4f1"
+    },
+    {
+      "adapter_used_subset_fingerprint_sha256": "13b70ba8b1c5abd16c99d9cd1e0bd21634e83ac531d317a7cb8c0ada125066d8",
+      "api_fingerprint_sha256": "0b67eee83d632319e388635ce774144f3a52e7d0f9496817586b280c5b546e68",
+      "coordinate_id": "SC-04",
+      "deps_lock_sha256": "faeb4d3ad43258f2c8f7a35bc0afee256ae897aa6d4a6a31d3ac8484b5942ed9",
+      "form": "source",
+      "identical_to_stable": false,
+      "label": "b-src",
+      "peeled_commit": "0a8a731d7746bde5e8828d1eb74c7bd9752b42e4",
+      "platform": "windows-x64",
+      "plugin_api_version": "1",
+      "python_version": "3.14.7",
+      "release_version": "0.18.0",
+      "requires_python": ">=3.14",
+      "role": "required",
+      "scenarios": [
+        {
+          "id": "HC-01",
+          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "passed": true
+        },
+        {
+          "id": "HC-02",
+          "observations_sha256": "45a559edc639ff962d33c5a09edfe3559df7af94818805d3560a5e8860314350",
+          "passed": true
+        },
+        {
+          "id": "HC-03",
+          "observations_sha256": "ff2563d2dd690a1c75a6d4a3825a3e1dbf6c4bf41c99c7973cdb53865833d971",
+          "passed": true
+        },
+        {
+          "id": "HC-04",
+          "observations_sha256": "ec9c647b2d23d02cb875f36e87c2596cd900083d1de4e618d0ca58ffe775e2e9",
+          "passed": true
+        },
+        {
+          "id": "HC-05",
+          "observations_sha256": "19902260fc0b67aafc785e63e423e98340ce5a9f762ebee8163fc7b262a98edc",
+          "passed": true
+        },
+        {
+          "id": "HC-06",
+          "observations_sha256": "1a6f18588109015302e9be7f21403e890ac13bd07551ee4bf613fb0004d8625b",
+          "passed": true
+        },
+        {
+          "id": "HC-07",
+          "observations_sha256": "578080bc6d1fb0817ad2308148103be3f79542495557fda8a1f9d54479b19b8f",
+          "passed": true
+        },
+        {
+          "id": "HC-08",
+          "observations_sha256": "f5e6df2b4e44008ae782af1400fe59eb807e72159ff7387e266784d69cfd7848",
+          "passed": true
+        },
+        {
+          "id": "HC-09",
+          "observations_sha256": "432f187c0dea6bb614e791097bd872dbd304a73f0c836356d4357033937ffdd5",
+          "passed": true
+        },
+        {
+          "id": "HC-10",
+          "observations_sha256": "03e65745d9804306488397d064d0e63b042d9b0985dda46e8874d17da80f53f5",
+          "passed": true
+        },
+        {
+          "id": "HC-11",
+          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "passed": true
+        },
+        {
+          "id": "HC-12",
+          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "passed": true
+        },
+        {
+          "id": "HC-13",
+          "observations_sha256": "6e0dd07b8e0b56287cb6d3e2d9aa997ba073c73726e54b5f2fd7d404498b9d2b",
+          "passed": true
+        },
+        {
+          "id": "HC-14",
+          "observations_sha256": "98700e88bea1b4dd7e3d003b20c7995e1f4cbe24b6a16c19c5f301ff69c7f7d3",
+          "passed": true
+        },
+        {
+          "id": "HC-15",
+          "observations_sha256": "a6243ba07208d3ce037671a72a03827f76a2d2506a3edb96a9c2e6bb11f413c1",
+          "passed": true
+        },
+        {
+          "id": "HC-16",
+          "observations_sha256": "807dc5e4e4f5b014bf36f5c4415e5e7ba1b3ab7b126b7c9bdc29b42c4b5073f5",
+          "passed": true
+        },
+        {
+          "id": "HC-17",
+          "observations_sha256": "dae8b17f30f415a6b06d6ba07aebeeedf2b0979fd102fb4bab31d2a503ffed44",
+          "passed": true
+        },
+        {
+          "id": "HC-18",
+          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "passed": true
+        },
+        {
+          "id": "HC-19",
+          "observations_sha256": "95019cd7d1d960745b6c0dbfa53aa8ffba486a7a778b129a00e581702c764690",
+          "passed": true
+        }
+      ],
+      "tag": "v0.18.0",
+      "tag_object": "7d2190704fa1e3c0f7f86889111d12b9fa6701c8"
+    },
+    {
+      "adapter_used_subset_fingerprint_sha256": "13b70ba8b1c5abd16c99d9cd1e0bd21634e83ac531d317a7cb8c0ada125066d8",
+      "api_fingerprint_sha256": "701cf0940ea6419f89dc81a654617454b4da89222a2153d8a31182ec2fe84874",
+      "coordinate_id": "SC-01",
+      "deps_lock_sha256": null,
+      "form": "frozen-desktop",
+      "identical_to_stable": false,
+      "label": "a-win",
+      "peeled_commit": "45dff2159369883e028a296d775a4598836c1ddd",
+      "platform": "windows-x64",
+      "plugin_api_version": "1",
+      "python_version": "3.14.7",
+      "release_version": "0.15.0",
+      "requires_python": ">=3.14",
+      "role": "required",
+      "scenarios": [
+        {
+          "id": "HC-01",
+          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "passed": true
+        },
+        {
+          "id": "HC-02",
+          "observations_sha256": "45a559edc639ff962d33c5a09edfe3559df7af94818805d3560a5e8860314350",
+          "passed": true
+        },
+        {
+          "id": "HC-03",
+          "observations_sha256": "ff2563d2dd690a1c75a6d4a3825a3e1dbf6c4bf41c99c7973cdb53865833d971",
+          "passed": true
+        },
+        {
+          "id": "HC-04",
+          "observations_sha256": "eeaf1e07a9133536fb4580a94819c3e5ef1f1ec220d318a0250d286deedf6a09",
+          "passed": true
+        },
+        {
+          "id": "HC-05",
+          "observations_sha256": "19902260fc0b67aafc785e63e423e98340ce5a9f762ebee8163fc7b262a98edc",
+          "passed": true
+        },
+        {
+          "id": "HC-06",
+          "observations_sha256": "1a6f18588109015302e9be7f21403e890ac13bd07551ee4bf613fb0004d8625b",
+          "passed": true
+        },
+        {
+          "id": "HC-07",
+          "observations_sha256": "578080bc6d1fb0817ad2308148103be3f79542495557fda8a1f9d54479b19b8f",
+          "passed": true
+        },
+        {
+          "id": "HC-08",
+          "observations_sha256": "f5e6df2b4e44008ae782af1400fe59eb807e72159ff7387e266784d69cfd7848",
+          "passed": true
+        },
+        {
+          "id": "HC-09",
+          "observations_sha256": "432f187c0dea6bb614e791097bd872dbd304a73f0c836356d4357033937ffdd5",
+          "passed": true
+        },
+        {
+          "id": "HC-10",
+          "observations_sha256": "03e65745d9804306488397d064d0e63b042d9b0985dda46e8874d17da80f53f5",
+          "passed": true
+        },
+        {
+          "id": "HC-11",
+          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "passed": true
+        },
+        {
+          "id": "HC-12",
+          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "passed": true
+        },
+        {
+          "id": "HC-13",
+          "observations_sha256": "6e0dd07b8e0b56287cb6d3e2d9aa997ba073c73726e54b5f2fd7d404498b9d2b",
+          "passed": true
+        },
+        {
+          "id": "HC-14",
+          "observations_sha256": "98700e88bea1b4dd7e3d003b20c7995e1f4cbe24b6a16c19c5f301ff69c7f7d3",
+          "passed": true
+        },
+        {
+          "id": "HC-15",
+          "observations_sha256": "a6243ba07208d3ce037671a72a03827f76a2d2506a3edb96a9c2e6bb11f413c1",
+          "passed": true
+        },
+        {
+          "id": "HC-16",
+          "observations_sha256": "807dc5e4e4f5b014bf36f5c4415e5e7ba1b3ab7b126b7c9bdc29b42c4b5073f5",
+          "passed": true
+        },
+        {
+          "id": "HC-17",
+          "observations_sha256": "dae8b17f30f415a6b06d6ba07aebeeedf2b0979fd102fb4bab31d2a503ffed44",
+          "passed": true
+        },
+        {
+          "id": "HC-18",
+          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "passed": true
+        },
+        {
+          "id": "HC-19",
+          "observations_sha256": "32bbf6a5943c770d172e1f9045a63b37d98a3a11ade3b46adbc02b1cd48badee",
+          "passed": true
+        }
+      ],
+      "tag": "v0.15.0",
+      "tag_object": "3292c957a092f85ddde1ba7462ffe9813827f4f1"
+    },
+    {
+      "adapter_used_subset_fingerprint_sha256": "13b70ba8b1c5abd16c99d9cd1e0bd21634e83ac531d317a7cb8c0ada125066d8",
+      "api_fingerprint_sha256": "0b67eee83d632319e388635ce774144f3a52e7d0f9496817586b280c5b546e68",
+      "coordinate_id": "SC-02",
+      "deps_lock_sha256": null,
+      "form": "frozen-desktop",
+      "identical_to_stable": false,
+      "label": "b-win",
+      "peeled_commit": "0a8a731d7746bde5e8828d1eb74c7bd9752b42e4",
+      "platform": "windows-x64",
+      "plugin_api_version": "1",
+      "python_version": "3.14.7",
+      "release_version": "0.18.0",
+      "requires_python": ">=3.14",
+      "role": "required",
+      "scenarios": [
+        {
+          "id": "HC-01",
+          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "passed": true
+        },
+        {
+          "id": "HC-02",
+          "observations_sha256": "45a559edc639ff962d33c5a09edfe3559df7af94818805d3560a5e8860314350",
+          "passed": true
+        },
+        {
+          "id": "HC-03",
+          "observations_sha256": "ff2563d2dd690a1c75a6d4a3825a3e1dbf6c4bf41c99c7973cdb53865833d971",
+          "passed": true
+        },
+        {
+          "id": "HC-04",
+          "observations_sha256": "ec9c647b2d23d02cb875f36e87c2596cd900083d1de4e618d0ca58ffe775e2e9",
+          "passed": true
+        },
+        {
+          "id": "HC-05",
+          "observations_sha256": "19902260fc0b67aafc785e63e423e98340ce5a9f762ebee8163fc7b262a98edc",
+          "passed": true
+        },
+        {
+          "id": "HC-06",
+          "observations_sha256": "1a6f18588109015302e9be7f21403e890ac13bd07551ee4bf613fb0004d8625b",
+          "passed": true
+        },
+        {
+          "id": "HC-07",
+          "observations_sha256": "578080bc6d1fb0817ad2308148103be3f79542495557fda8a1f9d54479b19b8f",
+          "passed": true
+        },
+        {
+          "id": "HC-08",
+          "observations_sha256": "f5e6df2b4e44008ae782af1400fe59eb807e72159ff7387e266784d69cfd7848",
+          "passed": true
+        },
+        {
+          "id": "HC-09",
+          "observations_sha256": "432f187c0dea6bb614e791097bd872dbd304a73f0c836356d4357033937ffdd5",
+          "passed": true
+        },
+        {
+          "id": "HC-10",
+          "observations_sha256": "03e65745d9804306488397d064d0e63b042d9b0985dda46e8874d17da80f53f5",
+          "passed": true
+        },
+        {
+          "id": "HC-11",
+          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "passed": true
+        },
+        {
+          "id": "HC-12",
+          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "passed": true
+        },
+        {
+          "id": "HC-13",
+          "observations_sha256": "6e0dd07b8e0b56287cb6d3e2d9aa997ba073c73726e54b5f2fd7d404498b9d2b",
+          "passed": true
+        },
+        {
+          "id": "HC-14",
+          "observations_sha256": "98700e88bea1b4dd7e3d003b20c7995e1f4cbe24b6a16c19c5f301ff69c7f7d3",
+          "passed": true
+        },
+        {
+          "id": "HC-15",
+          "observations_sha256": "a6243ba07208d3ce037671a72a03827f76a2d2506a3edb96a9c2e6bb11f413c1",
+          "passed": true
+        },
+        {
+          "id": "HC-16",
+          "observations_sha256": "807dc5e4e4f5b014bf36f5c4415e5e7ba1b3ab7b126b7c9bdc29b42c4b5073f5",
+          "passed": true
+        },
+        {
+          "id": "HC-17",
+          "observations_sha256": "dae8b17f30f415a6b06d6ba07aebeeedf2b0979fd102fb4bab31d2a503ffed44",
+          "passed": true
+        },
+        {
+          "id": "HC-18",
+          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "passed": true
+        },
+        {
+          "id": "HC-19",
+          "observations_sha256": "32bbf6a5943c770d172e1f9045a63b37d98a3a11ade3b46adbc02b1cd48badee",
+          "passed": true
+        }
+      ],
+      "tag": "v0.18.0",
+      "tag_object": "7d2190704fa1e3c0f7f86889111d12b9fa6701c8"
+    },
+    {
+      "adapter_used_subset_fingerprint_sha256": "13b70ba8b1c5abd16c99d9cd1e0bd21634e83ac531d317a7cb8c0ada125066d8",
+      "api_fingerprint_sha256": "0b67eee83d632319e388635ce774144f3a52e7d0f9496817586b280c5b546e68",
+      "coordinate_id": "SC-05",
+      "deps_lock_sha256": null,
+      "form": "source",
+      "identical_to_stable": true,
+      "label": "main",
+      "peeled_commit": "0a8a731d7746bde5e8828d1eb74c7bd9752b42e4",
+      "platform": "windows-x64",
+      "plugin_api_version": "1",
+      "python_version": "3.14.7",
+      "release_version": "0.18.0",
+      "requires_python": ">=3.14",
+      "role": "informational",
+      "scenarios": [],
+      "tag": "main",
+      "tag_object": null
+    }
+  ],
+  "parity": {
+    "allowed_diffs_observed": [
+      "DIFF-01",
+      "DIFF-05",
+      "DIFF-07"
+    ],
+    "required_pairs": [
+      {
+        "a": "a-src",
+        "b": "b-src",
+        "equal": true,
+        "fields": [
+          "config_booleans",
+          "config_schema_sha256",
+          "descriptor_subset",
+          "fetch_cases",
+          "hc13_wrong_id_behaviour",
+          "identity",
+          "source_error_kind_mapping"
+        ],
+        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
+        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+      },
+      {
+        "a": "a-win",
+        "b": "b-win",
+        "equal": true,
+        "fields": [
+          "config_booleans",
+          "config_schema_sha256",
+          "descriptor_subset",
+          "fetch_cases",
+          "hc13_wrong_id_behaviour",
+          "identity",
+          "source_error_kind_mapping"
+        ],
+        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
+        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+      },
+      {
+        "a": "a-src",
+        "b": "a-win",
+        "equal": true,
+        "fields": [
+          "config_booleans",
+          "config_schema_sha256",
+          "descriptor_subset",
+          "fetch_cases",
+          "hc13_wrong_id_behaviour",
+          "identity",
+          "source_error_kind_mapping"
+        ],
+        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
+        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+      },
+      {
+        "a": "b-src",
+        "b": "b-win",
+        "equal": true,
+        "fields": [
+          "config_booleans",
+          "config_schema_sha256",
+          "descriptor_subset",
+          "fetch_cases",
+          "hc13_wrong_id_behaviour",
+          "identity",
+          "source_error_kind_mapping"
+        ],
+        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
+        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+      }
+    ]
+  },
+  "platforms_unverified": [
+    "macos",
+    "linux",
+    "docker"
+  ],
+  "policy": {
+    "main_role": "informational",
+    "minimum": "v0.15.0",
+    "stable_definition": "latest non-draft non-prerelease GitHub Release whose tag is v<semver>; app-* and main do not qualify",
+    "support_coordinates": [
+      {
+        "amane_version": "v0.15.0",
+        "claim_class": "deployment",
+        "host_form": "frozen-desktop",
+        "id": "SC-01",
+        "platform": "windows-x64",
+        "role": "required"
+      },
+      {
+        "amane_version": "v0.18.0",
+        "claim_class": "deployment",
+        "host_form": "frozen-desktop",
+        "id": "SC-02",
+        "platform": "windows-x64",
+        "role": "required"
+      },
+      {
+        "amane_version": "v0.15.0",
+        "claim_class": "integration",
+        "host_form": "source",
+        "id": "SC-03",
+        "platform": "windows-x64",
+        "role": "required"
+      },
+      {
+        "amane_version": "v0.18.0",
+        "claim_class": "integration",
+        "host_form": "source",
+        "id": "SC-04",
+        "platform": "windows-x64",
+        "role": "required"
+      },
+      {
+        "amane_version": "main",
+        "claim_class": "informational",
+        "host_form": "source",
+        "id": "SC-05",
+        "platform": "windows-x64",
+        "role": "informational"
+      },
+      {
+        "amane_version": "v0.16.1|v0.17.0",
+        "claim_class": "informational",
+        "host_form": "source",
+        "id": "SC-06",
+        "platform": "windows-x64",
+        "role": "informational"
+      },
+      {
+        "amane_version": "v0.15.0|v0.18.0",
+        "claim_class": "unverified",
+        "host_form": "frozen-desktop",
+        "id": "SC-07",
+        "platform": "macos",
+        "role": "unverified"
+      },
+      {
+        "amane_version": "v0.15.0|v0.18.0",
+        "claim_class": "unverified",
+        "host_form": "source",
+        "id": "SC-08",
+        "platform": "linux",
+        "role": "unverified"
+      },
+      {
+        "amane_version": "v0.15.0|v0.18.0",
+        "claim_class": "unverified",
+        "host_form": "docker",
+        "id": "SC-09",
+        "platform": "linux",
+        "role": "unverified"
+      }
+    ]
+  },
+  "schema_version": 1,
+  "status": [
+    {
+      "amane_version": "v0.15.0",
+      "coordinate_id": "SC-01",
+      "host_form": "frozen-desktop",
+      "platform": "windows-x64",
+      "reason": "HC-01..HC-19 passed and cross-version parity holds on this coordinate",
+      "status": "SUPPORTED"
+    },
+    {
+      "amane_version": "v0.18.0",
+      "coordinate_id": "SC-02",
+      "host_form": "frozen-desktop",
+      "platform": "windows-x64",
+      "reason": "HC-01..HC-19 passed and cross-version parity holds on this coordinate",
+      "status": "SUPPORTED"
+    },
+    {
+      "amane_version": "v0.15.0",
+      "coordinate_id": "SC-03",
+      "host_form": "source",
+      "platform": "windows-x64",
+      "reason": "HC-01..HC-19 passed and cross-version parity holds on this coordinate",
+      "status": "SUPPORTED"
+    },
+    {
+      "amane_version": "v0.18.0",
+      "coordinate_id": "SC-04",
+      "host_form": "source",
+      "platform": "windows-x64",
+      "reason": "HC-01..HC-19 passed and cross-version parity holds on this coordinate",
+      "status": "SUPPORTED"
+    },
+    {
+      "amane_version": "main",
+      "coordinate_id": "SC-05",
+      "host_form": "source",
+      "platform": "windows-x64",
+      "reason": "main resolves to the same commit as the current stable release; not an independent witness",
+      "status": "IDENTICAL_TO_STABLE"
+    },
+    {
+      "amane_version": "v0.16.1|v0.17.0",
+      "coordinate_id": "SC-06",
+      "host_form": "source",
+      "platform": "windows-x64",
+      "reason": "optional informational witness",
+      "status": "UNVERIFIED"
+    },
+    {
+      "amane_version": "v0.15.0|v0.18.0",
+      "coordinate_id": "SC-07",
+      "host_form": "frozen-desktop",
+      "platform": "macos",
+      "reason": "no verification environment; not part of the support claim",
+      "status": "UNVERIFIED"
+    },
+    {
+      "amane_version": "v0.15.0|v0.18.0",
+      "coordinate_id": "SC-08",
+      "host_form": "source",
+      "platform": "linux",
+      "reason": "no verification environment; not part of the support claim",
+      "status": "UNVERIFIED"
+    },
+    {
+      "amane_version": "v0.15.0|v0.18.0",
+      "coordinate_id": "SC-09",
+      "host_form": "docker",
+      "platform": "linux",
+      "reason": "no verification environment; not part of the support claim",
+      "status": "UNVERIFIED"
+    }
+  ],
+  "tool": {
+    "name": "run_amane_compat_gate",
+    "sha256": "639a9132478f36c8dea965f02cd9d2b5c89453116baded65e3f06bc3efe5ecb0"
+  }
+}

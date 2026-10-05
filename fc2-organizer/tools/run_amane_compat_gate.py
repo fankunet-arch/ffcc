@@ -211,7 +211,1290 @@ def validate_matrix(document: dict) -> list[str]:
     return problems
 
 
+
+
+# ====================================================================================================== S2：宿主运行器
+# 以下代码只在“跑真实宿主”时使用（HC-01..HC-19）；纯逻辑部分（上文）不依赖它们。
+
+import importlib.util
+import io
+import os
+import shutil
+import socket
+import subprocess
+import time
+import urllib.error
+import urllib.request
+import uuid
+import zipfile
+from dataclasses import dataclass, field
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+HOST_SCRIPTS = REPO_ROOT / "tests" / "amane_compat" / "host_scripts"
+PLUGIN_ID = "ffcc.fc2-metadata"
+PROBE_ID = "ffcc.probe"
+PROBE_MARK = "PROBE@@"
+TOKEN = "ffcc-gate-token"
+INSTALLED = 201  # POST /api/plugins 是创建资源：成功 = 201 Created（两个宿主版本相同）
+READY_TIMEOUT = {"source": 180, "frozen-desktop": 90}
+C1_MISSING_CORE_MESSAGE = (
+    "插件导入失败: FC2 Metadata Core 未安装或版本不兼容：请在 Amane 所在的 Python 环境中安装 "
+    "fc2-metadata-core（缺失模块：fc2_metadata_core）"
+)
+#: 合同第 8.3 节模板（网关**独立**硬编码；与 locator 的实现无共享代码）。
+TEMPLATES = {
+    "RESTART": "FC2 Metadata Core 已加载的版本与插件不配对（或无法验证）：请先卸载旧版插件并重启 Amane，再安装与之配对的新版（需要 Core {version}）",
+    "UNVERIFIABLE": "FC2 Metadata Core 的来源不受支持或无法验证（已拒绝加载）：请把官方发布包中的 {wheel} 放入 <Amane 数据目录>/plugins/_ffcc_core/，不要使用 pip / 源码 / editable 形态的 Core",
+    "WHEEL_VERSION_MISMATCH": "FC2 Metadata Core 随附包版本与插件不配对：请在 <Amane 数据目录>/plugins/_ffcc_core/ 中放入 {wheel}",
+    "WHEEL_HASH_MISMATCH": "FC2 Metadata Core 随附包校验失败（sha256 与插件配对记录不一致）：请重新获取官方发布包中的 {wheel}",
+}
+DESCRIPTOR_KEYS = ("api_version", "capabilities", "content_types", "id", "languages", "metadata_fields", "name", "rate_limit", "urls", "version")
+
+
+class GateError(RuntimeError):
+    """网关自身无法继续（环境 / 宿主启动失败）；与场景 ``passed = false`` 不同。"""
+
+
+def _load_module(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def free_port() -> int:
+    with socket.socket() as handle:
+        handle.bind(("127.0.0.1", 0))
+        return handle.getsockname()[1]
+
+
+@dataclass
+class HostSpec:
+    label: str
+    coordinate_id: str
+    form: str
+    tag: str
+    tag_object: str
+    peeled_commit: str
+    release_version: str
+    requires_python: str
+    plugin_api_version: str
+    python_version: str
+    executable: str
+    install_dir: str
+    deps_lock_sha256: str | None = None
+    api_fingerprint_sha256: str | None = None
+    adapter_used_subset_fingerprint_sha256: str | None = None
+    platform: str = PLATFORM_WINDOWS
+
+
+def _clean_environment(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """宿主环境：去掉会改变日志格式 / sys.path 的外部变量；不继承用户的 Amane 配置。"""
+    drop = {"FORCE_COLOR", "CLICOLOR_FORCE", "PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "PYTHONSTARTUP", "PYTHONINSPECT"}
+    env = {key: value for key, value in os.environ.items() if key not in drop and not key.startswith("AMANE_")}
+    env.update({"NO_COLOR": "1", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
+    env.update(extra or {})
+    return env
+
+
+class HostProcess:
+    """一个真实的 Amane 服务进程：``python -m amane.server``（源码宿主）或 ``Amane.Server.exe``（冻结桌面）。"""
+
+    def __init__(self, spec: HostSpec, data_dir: Path, log_dir: Path, work_dir: Path, *, extra_env: dict[str, str] | None = None):
+        self.spec, self.data_dir, self.log_dir, self.work_dir = spec, data_dir, log_dir, work_dir
+        self.extra_env = dict(extra_env or {})
+        self.port = 0
+        self.process: subprocess.Popen | None = None
+        self.output_path = work_dir / f"{uuid.uuid4().hex[:8]}.out"
+
+    def start(self) -> "HostProcess":
+        self.port = free_port()
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        env_vars = {
+            "AMANE_DATA_DIR": str(self.data_dir), "AMANE_LOG_DIR": str(self.log_dir), "AMANE_PORT": str(self.port),
+            "AMANE_HOST": "127.0.0.1", "AMANE_TOKEN": TOKEN, "AMANE_SAFE_DIRS": "ALLOW_ALL",
+        }
+        if self.spec.form == "frozen-desktop":
+            env_vars["AMANE_WEB_DIST"] = str(Path(self.spec.executable).parents[1] / "web")
+            command = [self.spec.executable]
+        else:
+            command = [self.spec.executable, "-m", "amane.server"]
+        env_vars.update(self.extra_env)
+        handle = self.output_path.open("wb")
+        self.process = subprocess.Popen(command, cwd=self.work_dir, env=_clean_environment(env_vars), stdout=handle, stderr=subprocess.STDOUT)
+        deadline = time.time() + READY_TIMEOUT[self.spec.form]
+        while time.time() < deadline:
+            if self.process.poll() is not None:
+                raise GateError(f"{self.spec.label}: host exited early ({self.process.returncode}): {self.tail()}")
+            status, _body = self.request("GET", "/api/health", timeout=5)
+            if status == 200:
+                return self
+            time.sleep(0.4)
+        raise GateError(f"{self.spec.label}: host not ready: {self.tail()}")
+
+    def tail(self) -> str:
+        try:
+            return self.output_path.read_bytes()[-1500:].decode("utf-8", "replace")
+        except OSError:
+            return ""
+
+    def stop(self) -> None:
+        if self.process is None:
+            return
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=25)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=15)
+        self.process = None
+
+    def __enter__(self) -> "HostProcess":
+        return self.start()
+
+    def __exit__(self, *exc) -> bool:
+        self.stop()
+        return False
+
+    def request(self, method: str, path: str, *, body: bytes | None = None, headers: dict[str, str] | None = None, timeout: float = 300):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", method=method, data=body, headers={"Authorization": f"Bearer {TOKEN}", **(headers or {})})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+        except (urllib.error.URLError, ConnectionError, TimeoutError, OSError):
+            return None, b""
+
+    def api(self, method: str, path: str, *, json_body=None, timeout: float = 300):
+        data = None if json_body is None else json.dumps(json_body).encode("utf-8")
+        status, raw = self.request(method, path, body=data, headers={"Content-Type": "application/json"} if data is not None else None, timeout=timeout)
+        try:
+            return status, json.loads(raw.decode("utf-8")) if raw else None
+        except (ValueError, UnicodeDecodeError):
+            return status, raw.decode("utf-8", "replace")
+
+    def upload(self, payload: bytes, filename: str = "plugin.zip"):
+        boundary = "----ffccgate" + uuid.uuid4().hex
+        head = f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: application/zip\r\n\r\n'
+        body = head.encode("utf-8") + payload + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        status, raw = self.request("POST", "/api/plugins", body=body, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        try:
+            return status, json.loads(raw.decode("utf-8")) if raw else None
+        except (ValueError, UnicodeDecodeError):
+            return status, raw.decode("utf-8", "replace")
+
+    # ------------------------------------------------------------------ 便捷读取
+    def plugin_ids(self) -> list[str]:
+        status, body = self.api("GET", "/api/plugins")
+        return sorted(item["descriptor"]["id"] for item in (body or {}).get("items", [])) if status == 200 else []
+
+    def failures(self) -> list[dict]:
+        status, body = self.api("GET", "/api/plugins")
+        return list((body or {}).get("failures", [])) if status == 200 else []
+
+    # ------------------------------------------------------------------ 探针插件（宿主进程内执行 host_scripts/in_host.py）
+    def probe(self, payload: dict) -> dict:
+        source = (HOST_SCRIPTS / "in_host.py").read_text(encoding="utf-8")
+        probe_dir = self.data_dir / "plugins" / "sources" / PROBE_ID
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        code = (
+            "import json as _json\n"
+            f"_SRC = {source!r}\n"
+            f"_PAYLOAD = _json.loads({json.dumps(payload, ensure_ascii=True, allow_nan=True)!r})\n"
+            "_ns = {'__name__': 'ffcc_in_host'}\n"
+            "exec(compile(_SRC, 'in_host.py', 'exec'), _ns)\n"
+            "try:\n"
+            "    _result = {'ok': True, 'result': _ns['run'](_PAYLOAD)}\n"
+            "except BaseException as _exc:\n"
+            "    _result = {'ok': False, 'error': type(_exc).__name__ + ': ' + str(_exc)[:600]}\n"
+            f"raise RuntimeError({PROBE_MARK!r} + _json.dumps(_result, sort_keys=True, default=repr))\n"
+        )
+        (probe_dir / "plugin.py").write_text(code, encoding="utf-8", newline="\n")
+        try:
+            status, _ = self.api("POST", "/api/plugins/reload")
+            if status != 200:
+                raise GateError(f"probe reload failed: {status}")
+            found = [item for item in self.failures() if item.get("name") == PROBE_ID]
+            if not found or PROBE_MARK not in str(found[0].get("error")):
+                raise GateError(f"probe produced no result: {found}")
+            return json.loads(str(found[0]["error"]).split(PROBE_MARK, 1)[1])
+        finally:
+            shutil.rmtree(probe_dir, ignore_errors=True)
+            self.api("POST", "/api/plugins/reload")
+
+
+# ------------------------------------------------------------------------------------------------ 构建产物与变体
+
+
+def _tool(name: str):
+    return _load_module(REPO_ROOT / "tools" / name, "ffcc_gate_tool_" + Path(name).stem)
+
+
+class Artifacts:
+    """被验收的 L0 / L1 确切字节 + 由它们派生的测试变体（临时副本；绝不修改被验收的字节）。"""
+
+    def __init__(self, wheel_path: Path, stage1_dir: Path, work: Path):
+        self.release = _tool("build_amane_release.py")
+        self.wheel_path = wheel_path
+        self.wheel_name = wheel_path.name
+        self.wheel_bytes = wheel_path.read_bytes()
+        self.zip_name = f"{PLUGIN_ID}-0.1.0.zip"
+        self.zip_path = stage1_dir / self.zip_name
+        self.zip_bytes = self.zip_path.read_bytes()
+        self.work = work
+        self._pin_b: tuple[bytes, Path] | None = None
+
+    # ---- 模板（以 pin 字面量代入）
+    def template(self, key: str, *, version: str = "0.1.0", wheel: str | None = None) -> str:
+        return TEMPLATES[key].format(version=version, wheel=wheel or self.wheel_name)
+
+    def rejection(self, key: str, **kwargs) -> str:
+        return "插件导入失败: " + self.template(key, **kwargs)
+
+    # ---- plugin zip 变体
+    def members(self) -> dict[str, bytes]:
+        with zipfile.ZipFile(io.BytesIO(self.zip_bytes)) as archive:
+            return {name: archive.read(name) for name in archive.namelist()}
+
+    def rezip(self, members: dict[str, bytes]) -> bytes:
+        return self.release.deterministic_zip(members)
+
+    def with_replacement(self, member: str, old: bytes, new: bytes) -> bytes:
+        members = self.members()
+        assert old in members[member], (member, old)
+        members[member] = members[member].replace(old, new)
+        return self.rezip(members)
+
+    def version_bumped_zip(self) -> bytes:
+        return self.with_replacement(f"{PLUGIN_ID}/_impl/_settings.py", b'PLUGIN_VERSION = "0.1.0"', b'PLUGIN_VERSION = "0.1.1"')
+
+    def wrong_id_zip(self) -> bytes:
+        return self.with_replacement(f"{PLUGIN_ID}/_impl/_settings.py", b'PLUGIN_ID = "ffcc.fc2-metadata"', b'PLUGIN_ID = "other.id"')
+
+    def file_set(self) -> dict[str, str]:
+        return {name.split("/", 1)[1]: sha256_hex(data) for name, data in self.members().items()}
+
+    # ---- wheel 变体
+    def tampered_wheel(self) -> bytes:
+        data = bytearray(self.wheel_bytes)
+        data[len(data) // 2] ^= 0x01
+        return bytes(data)
+
+    # ---- 第二个 Core（pin 变化；HC-16）
+    def pin_b(self) -> tuple[bytes, Path]:
+        """从仓库树的临时副本构建 Core 0.1.1（Core 源码多一行注释）与配对的 plugin zip B；被验收的字节不受影响。"""
+        if self._pin_b is not None:
+            return self._pin_b
+        copy = self.work / "pin_b_repo"
+        for relative in ("pyproject.toml", "src/fc2_metadata_core", "adapters/amane/fc2_amane_adapter", "adapters/amane/shim", "adapters/amane/release", "docs/acceptance/evidence/P5_C1_HOST_WITNESS.json"):
+            source = REPO_ROOT / relative
+            if source.is_file():
+                (copy / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, copy / relative)
+            else:
+                shutil.copytree(source, copy / relative, ignore=shutil.ignore_patterns("__pycache__"))
+        pyproject = copy / "pyproject.toml"
+        pyproject.write_bytes(pyproject.read_bytes().replace(b'version = "0.1.0"', b'version = "0.1.1"'))
+        init = copy / "src" / "fc2_metadata_core" / "__init__.py"
+        init.write_bytes(init.read_bytes() + b"\n# core B (pin-change fixture)\n")
+        builder = _tool("build_core_wheel.py")
+        name, payload, _tree = builder.build_wheel_bytes(copy / "src" / "fc2_metadata_core", pyproject)
+        wheel_b = self.work / "pin_b" / name
+        wheel_b.parent.mkdir(parents=True, exist_ok=True)
+        wheel_b.write_bytes(payload)
+        stage1 = self.release.build_stage1(copy, wheel_b, check_witness=False)
+        self._pin_b = (stage1["files"][f"{PLUGIN_ID}-0.1.0.zip"], wheel_b)
+        return self._pin_b
+
+
+# ------------------------------------------------------------------------------------------------ 场景记录
+
+
+class Scenario:
+    def __init__(self, scenario_id: str):
+        self.id = scenario_id
+        self.failures: list[str] = []
+        self.observations: dict[str, object] = {}
+
+    def check(self, condition: object, message: str) -> bool:
+        if not condition:
+            self.failures.append(message)
+        return bool(condition)
+
+    def record(self, key: str, value: object) -> None:
+        self.observations[key] = value
+
+    def result(self) -> dict:
+        return {"id": self.id, "passed": not self.failures, "observations": self.observations, "failures": self.failures}
+
+
+def canonical_hash(value: object) -> str:
+    return sha256_hex(json.dumps(value, sort_keys=True, ensure_ascii=True, default=repr).encode("utf-8"))
+
+
+def tree_files(root: Path, *, ignore_cache: bool = True) -> dict[str, str]:
+    result: dict[str, str] = {}
+    if not root.exists():
+        return result
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if ignore_cache and ("__pycache__" in path.parts or path.suffix == ".pyc"):
+            continue
+        if path.is_file():
+            result[relative] = sha256_hex(path.read_bytes())
+    return result
+
+
+def sources_entries(data_dir: Path) -> list[str]:
+    root = data_dir / "plugins" / "sources"
+    return sorted(item.name for item in root.iterdir()) if root.exists() else []
+
+
+def sidecar_dir(data_dir: Path) -> Path:
+    return data_dir / "plugins" / "_ffcc_core"
+
+
+def place_sidecar(data_dir: Path, name: str, data: bytes) -> None:
+    directory = sidecar_dir(data_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / name).write_bytes(data)
+
+
+def clear_sidecar(data_dir: Path) -> None:
+    shutil.rmtree(sidecar_dir(data_dir), ignore_errors=True)
+
+
+def descriptor_subset(descriptor: dict) -> dict:
+    subset = {key: descriptor.get(key) for key in DESCRIPTOR_KEYS}
+    for key in ("capabilities", "content_types", "metadata_fields", "languages"):
+        subset[key] = sorted(subset[key] or [])
+    return subset
+
+
+def snapshot_roots(roots: dict[str, Path], excludes: tuple[str, ...] = ()) -> dict[str, dict[str, list[int]]]:
+    """HC-18 / E19：文件系统快照（相对路径 -> [大小, mtime_ns]）；排除缓存目录与 ``excludes`` 下的路径。"""
+    skip = {"__pycache__", ".git", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+    result: dict[str, dict[str, list[int]]] = {}
+    for label, root in roots.items():
+        files: dict[str, list[int]] = {}
+        if root.exists():
+            for current, directories, names in os.walk(root):
+                directories[:] = [name for name in directories if name not in skip and not any((Path(current) / name).as_posix().startswith(prefix) for prefix in excludes)]
+                for name in names:
+                    path = Path(current) / name
+                    try:
+                        info = path.stat()
+                    except OSError:
+                        continue
+                    files[path.relative_to(root).as_posix()] = [info.st_size, info.st_mtime_ns]
+        result[label] = files
+    return result
+
+
+def snapshot_diff(before: dict, after: dict) -> dict[str, dict[str, list[str]]]:
+    difference: dict[str, dict[str, list[str]]] = {}
+    for label in before:
+        added = sorted(set(after[label]) - set(before[label]))
+        removed = sorted(set(before[label]) - set(after[label]))
+        changed = sorted(name for name in set(before[label]) & set(after[label]) if before[label][name] != after[label][name])
+        if added or removed or changed:
+            difference[label] = {"added": added[:10], "removed": removed[:10], "changed": changed[:10]}
+    return difference
+
+
+# ------------------------------------------------------------------------------------------------ 一次宿主运行的上下文
+
+
+@dataclass
+class HostRun:
+    spec: HostSpec
+    work: Path
+    art: Artifacts
+    loopback: object
+    oracle: dict
+    results: dict[str, Scenario] = field(default_factory=dict)
+    extras: dict[str, object] = field(default_factory=dict)
+
+    def scenario(self, scenario_id: str) -> Scenario:
+        self.results[scenario_id] = Scenario(scenario_id)
+        return self.results[scenario_id]
+
+    def host(self, name: str, *, extra_env: dict[str, str] | None = None) -> HostProcess:
+        base = self.work / name
+        (base / "data").mkdir(parents=True, exist_ok=True)
+        (base / "logs").mkdir(parents=True, exist_ok=True)
+        (base / "cwd").mkdir(parents=True, exist_ok=True)
+        return HostProcess(self.spec, base / "data", base / "logs", base / "cwd", extra_env=extra_env)
+
+
+# ------------------------------------------------------------------------------------------------ Group A：失败分支（Core 尚未被加载时）
+
+
+def admission_row(run: "HostRun", case: str, *, mode: str, expected: str, observed: str, template: str | None, before: dict, after: dict) -> dict:
+    """``core_admission.cases[]``：失败后 sys.path 与 fc2_metadata_core* 对象身份相对入口是否不变（经宿主内探针实测）。"""
+    return {
+        "id": f"{run.spec.label}:{case}", "mode": mode, "python": run.spec.python_version, "expected": expected, "observed": observed,
+        "template": template,
+        "sys_path_unchanged_on_fail": before.get("path_sha") == after.get("path_sha"),
+        "sys_modules_unchanged_on_fail": before.get("core_ids") == after.get("core_ids") and before.get("core_loaded") == after.get("core_loaded"),
+        "payload_executed": False,
+    }
+
+
+def host_state(host: HostProcess) -> dict:
+    answer = host.probe({"op": "state"})
+    return answer["result"] if answer.get("ok") else {}
+
+
+def phase_failures(run: HostRun, host: HostProcess) -> None:
+    art, data = run.art, host.data_dir
+    rows: list[dict] = run.extras.setdefault("admission_rows", [])  # type: ignore[assignment]
+    # ---- HC-10：Core 缺失
+    sc = run.scenario("HC-10")
+    before = host_state(host)
+    status, body = host.upload(art.zip_bytes)
+    after = host_state(host)
+    sc.check(status == 422, f"missing Core must be HTTP 422, got {status}")
+    sc.check(isinstance(body, dict) and body.get("detail") == C1_MISSING_CORE_MESSAGE, f"detail must be the P5-C1 section 22 message, got {body!r}")
+    sc.check(host.plugin_ids() == [], "the plugin must not be listed")
+    sc.check(sources_entries(data) == [], f"no half install: {sources_entries(data)}")
+    sc.check(before.get("core_loaded") is False and after.get("core_loaded") is False and before.get("path_sha") == after.get("path_sha"), "locator must not touch sys.path / import Core when no Core exists")
+    config_status, config = host.api("GET", "/api/config")
+    sc.check(config_status == 200 and PLUGIN_ID not in json.dumps(config), "no fallback / route may reference the missing plugin")
+    sc.record("http_status", status)
+    sc.record("detail_equals_c1_section_22", isinstance(body, dict) and body.get("detail") == C1_MISSING_CORE_MESSAGE)
+    sc.record("listed", host.plugin_ids())
+    sc.record("sources_entries", sources_entries(data))
+    sc.record("sys_path_unchanged", before.get("path_sha") == after.get("path_sha"))
+    sc.record("core_not_imported", after.get("core_loaded") is False)
+
+    # ---- HC-11：Core 不兼容（sidecar 各分支；目录形态由 S-D 在源码宿主上补充）
+    sc = run.scenario("HC-11")
+    cases: dict[str, dict] = {}
+
+    def expect(label: str, key: str, **kwargs) -> None:
+        state_before = host_state(host)
+        status, body = host.upload(art.zip_bytes)
+        state_after = host_state(host)
+        detail = body.get("detail") if isinstance(body, dict) else body
+        row = admission_row(run, f"sidecar_{label}", mode="wheel", expected="FAIL", observed="FAIL" if status == 422 else "PASS", template=key, before=state_before, after=state_after)
+        ok = status == 422 and detail == art.rejection(key, **kwargs) and sources_entries(data) == [] and host.plugin_ids() == []
+        ok = ok and row["sys_path_unchanged_on_fail"] and row["sys_modules_unchanged_on_fail"]
+        sc.check(ok, f"{label}: expected 422 + {key} + unchanged state, got {status} {detail!r} sources={sources_entries(data)} row={row}")
+        rows.append(row)
+        cases[label] = {"http_status": status, "template": key if ok else "MISMATCH", "half_install": sources_entries(data) != [],
+                        "sys_path_unchanged": row["sys_path_unchanged_on_fail"], "core_objects_unchanged": row["sys_modules_unchanged_on_fail"]}
+
+    place_sidecar(data, art.wheel_name, art.tampered_wheel())
+    expect("tampered_same_name_one_byte", "WHEEL_HASH_MISMATCH")
+    clear_sidecar(data)
+    place_sidecar(data, "fc2_metadata_core-9.9.9-py3-none-any.whl", art.wheel_bytes)
+    expect("only_other_version_wheel", "WHEEL_VERSION_MISMATCH")
+    clear_sidecar(data)
+    directory = sidecar_dir(data)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / art.wheel_name).mkdir()
+    expect("same_name_directory", "WHEEL_HASH_MISMATCH")
+    clear_sidecar(data)
+    place_sidecar(data, art.wheel_name, art.wheel_bytes + b"\0" * (16 * 1024 * 1024 + 1))
+    expect("oversize_over_16_mib", "WHEEL_HASH_MISMATCH")
+    clear_sidecar(data)
+    directory.mkdir(parents=True, exist_ok=True)
+    target = data / "plugins" / "linktarget.whl"
+    target.write_bytes(art.wheel_bytes)
+    try:
+        os.symlink(target, directory / art.wheel_name)
+        symlink_executed = True
+        expect("symlink_to_the_exact_wheel", "WHEEL_HASH_MISMATCH")
+    except (OSError, NotImplementedError):
+        symlink_executed = False
+    cases["symlink_executed"] = {"executed": symlink_executed, "note": "" if symlink_executed else "no symlink privilege on this account; the lstat-stub variant runs in the unit matrix (E31-i)"}
+    clear_sidecar(data)
+    target.unlink(missing_ok=True)
+    sc.record("cases", cases)
+    run.extras["hc11_sidecar_cases"] = cases
+
+    # ---- HC-12：畸形 plugin zip
+    sc = run.scenario("HC-12")
+    forged = io.BytesIO()
+    with zipfile.ZipFile(forged, "w") as archive:
+        archive.writestr("../evil.py", "x = 1\n")
+        archive.writestr(f"{PLUGIN_ID}/plugin.py", "x = 1\n")
+    no_entry = io.BytesIO()
+    with zipfile.ZipFile(no_entry, "w") as archive:
+        archive.writestr(f"{PLUGIN_ID}/readme.txt", "x")
+    multi = io.BytesIO()
+    with zipfile.ZipFile(multi, "w") as archive:
+        archive.writestr("a/plugin.py", "x = 1\n")
+        archive.writestr("b/plugin.py", "x = 1\n")
+    variants = {
+        "not_a_zip": b"this is not a zip archive",
+        "path_traversal": forged.getvalue(),
+        "no_plugin_py": no_entry.getvalue(),
+        "multiple_top_level_folders": multi.getvalue(),
+        "oversize_over_20_mib": b"0" * (20 * 1024 * 1024 + 1),
+    }
+    rows_http = {}
+    for label, payload in variants.items():
+        status, _body = host.upload(payload)
+        rows_http[label] = {"http_status": status, "sources_entries": sources_entries(data)}
+        # 宿主自身的路由只捕获 (ValueError, TypeError, OSError)：非 zip 会抛出未捕获的 BadZipFile -> HTTP 500（两个版本相同；宿主缺陷，
+        # 与本插件无关）。判据保持“被拒绝且无半装”；该偏差在 HANDOFF 如实记录，不为迁就而伪造 422。
+        allowed = (422, 500) if label == "not_a_zip" else (422,)
+        sc.check(status in allowed and sources_entries(data) == [] and host.plugin_ids() == [], f"{label}: expected {allowed} without residue, got {status} {sources_entries(data)}")
+    sc.record("variants", rows_http)
+    clear_sidecar(data)
+
+
+# ------------------------------------------------------------------------------------------------ Group A：成功路径（Core 随 sidecar 到位之后）
+
+BASELINE_CONFIG = {"sources": None, "source_deadline_seconds": 20}
+
+
+def _plugin_response(host: HostProcess):
+    status, body = host.api("GET", f"/api/plugins/{PLUGIN_ID}")
+    return status, body
+
+
+def _schema_names(schema: dict) -> list[str]:
+    names = set((schema.get("properties") or {}))
+    for definition in (schema.get("$defs") or {}).values():
+        names |= set((definition.get("properties") or {}))
+    return sorted(names)
+
+
+def phase_success(run: HostRun, host: HostProcess) -> None:
+    art, data = run.art, host.data_dir
+    place_sidecar(data, art.wheel_name, art.wheel_bytes)
+    plugin_dir = data / "plugins" / "sources" / PLUGIN_ID
+
+    # ---- HC-01：clean install
+    sc = run.scenario("HC-01")
+    status, body = host.upload(art.zip_bytes)
+    ids = sorted(item["descriptor"]["id"] for item in (body or {}).get("items", [])) if isinstance(body, dict) else []
+    sc.check(status == INSTALLED, f"install must be {INSTALLED} Created, got {status}: {body!r}")
+    sc.check(ids == [PLUGIN_ID], f"items must contain exactly {PLUGIN_ID}, got {ids}")
+    sc.check(isinstance(body, dict) and body.get("failures") == [], f"failures must be empty, got {body!r}")
+    disk = tree_files(plugin_dir)
+    sc.check(disk == art.file_set(), "installed file set / bytes must equal the plugin zip")
+    sc.record("http_status", status)
+    sc.record("items", ids)
+    sc.record("failures", (body or {}).get("failures") if isinstance(body, dict) else None)
+    sc.record("installed_files_equal_zip_files", disk == art.file_set())
+    sc.record("file_count", len(disk))
+
+    # ---- HC-03：descriptor / capabilities / schema
+    sc = run.scenario("HC-03")
+    status, plugin = _plugin_response(host)
+    descriptor = descriptor_subset((plugin or {}).get("descriptor", {})) if status == 200 else {}
+    sc.check(status == 200, f"GET plugin must be 200, got {status}")
+    sc.check(descriptor == run.oracle["descriptor"], f"descriptor subset differs from the C1 record: {descriptor}")
+    schema = (plugin or {}).get("config_schema", {}) if status == 200 else {}
+    sc.check(_schema_names(schema) == run.oracle["schema_fields"], f"config schema fields differ: {_schema_names(schema)}")
+    sc.record("descriptor_subset", descriptor)
+    sc.record("config_schema_fields", _schema_names(schema))
+    sc.record("config_schema_sha256", canonical_hash(schema))
+    run.extras["descriptor"] = descriptor
+    run.extras["config_schema_sha256"] = canonical_hash(schema)
+
+    # ---- HC-05（HTTP 一半；宿主内三项在 Group B 合并）
+    patch_ok: dict[str, bool] = {}
+    for sample_id, sample in run.oracle["config_samples"]:
+        status, _body = host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": sample})
+        patch_ok[sample_id] = status is not None and 200 <= status < 300
+        if patch_ok[sample_id]:
+            host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": BASELINE_CONFIG})
+    run.extras["patch_ok"] = patch_ok
+
+    # ---- HC-08（HTTP 一半：顶层浅合并 + rebuild 不报错；行为 oracle 在 Group B）
+    sc = run.scenario("HC-08")
+    disabled = {"sources": [{"id": "fc2db_net", "enabled": False}, {"id": "javdb"}, {"id": "av123"}]}
+    status1, _ = host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": disabled})
+    status2, _ = host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": {"source_deadline_seconds": 30}})
+    _status, merged = _plugin_response(host)
+    config_after = (merged or {}).get("config", {}).get("config", {})
+    sc.check(status1 == 200 and status2 == 200, f"PATCH must be 200: {status1} {status2}")
+    sc.check(config_after.get("sources") == disabled["sources"] and config_after.get("source_deadline_seconds") == 30, f"shallow merge must keep sources: {config_after}")
+    status3, _ = host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": {"sources": [{"id": "javdb"}]}})
+    _status, replaced = _plugin_response(host)
+    sc.check(status3 == 200 and (replaced or {}).get("config", {}).get("config", {}).get("sources") == [{"id": "javdb"}], f"sources replaced as a whole: {replaced!r}")
+    host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": BASELINE_CONFIG})
+    sc.record("shallow_merge_keeps_unrelated_keys", True)
+    sc.record("sources_replaced_as_a_whole", True)
+
+    # ---- HC-02：重启后仍被发现（restart persistence）
+    sc = run.scenario("HC-02")
+    persisted = {"source_deadline_seconds": 45}
+    host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": persisted})
+    host.stop()
+    host.start()
+    status, plugin = _plugin_response(host)
+    sc.check(status == 200 and host.plugin_ids() == [PLUGIN_ID], f"plugin must be discovered after restart: {host.plugin_ids()}")
+    sc.check(host.failures() == [], "no failures after restart")
+    after = descriptor_subset((plugin or {}).get("descriptor", {})) if status == 200 else {}
+    sc.check(after == run.extras["descriptor"], "descriptor subset must equal HC-01 after restart")
+    stored = (plugin or {}).get("config", {}).get("config", {}) if status == 200 else {}
+    sc.check(stored.get("source_deadline_seconds") == 45, f"persisted config must survive the restart: {stored}")
+    sc.record("discovered_after_restart", host.plugin_ids())
+    sc.record("descriptor_equals_hc01", after == run.extras["descriptor"])
+    sc.record("config_persisted", stored.get("source_deadline_seconds") == 45)
+    host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": BASELINE_CONFIG})
+
+    # ---- HC-06：reload 不改文件
+    sc = run.scenario("HC-06")
+    first = host.probe({"op": "modules"})
+    second = host.probe({"op": "modules"})
+    sc.check(first.get("ok") and second.get("ok"), f"probe failed: {first} {second}")
+    if first.get("ok") and second.get("ok"):
+        one, two = first["result"], second["result"]
+        sc.check(one["ext_names"] == two["ext_names"] and len(one["ext_names"]) >= 8, f"amane_ext modules: {one['ext_names']}")
+        sc.check(all(one["ext_ids"][name] != two["ext_ids"][name] for name in one["ext_ids"]), "every amane_ext* module must be rebuilt as a new object")
+        sc.check(one["core_loaded"] and one["core_ids"] == two["core_ids"], "fc2_metadata_core must NOT be rebuilt by reload (W2-02)")
+        sc.check(one["core_loader_exact_zipimporter"] is True and one["core_archive_basename"] == art.wheel_name, "Core must be loaded from the exact pinned wheel via zipimporter")
+        sc.record("ext_modules_rebuilt", True)
+        sc.record("core_objects_unchanged", one["core_ids"] == two["core_ids"])
+        sc.record("core_loader_exact_zipimporter", one["core_loader_exact_zipimporter"])
+        sc.record("core_loaded_from_pinned_wheel", one["core_archive_basename"] == art.wheel_name)
+        sc.record("ext_module_count", len(one["ext_names"]))
+    status, _ = host.api("POST", "/api/plugins/reload")
+    sc.check(status == 200 and host.plugin_ids() == [PLUGIN_ID], "reload must keep the plugin")
+
+    # ---- HC-07：reload 执行新代码（stale-module 守卫；只改临时数据目录里的副本）
+    sc = run.scenario("HC-07")
+    settings_path = plugin_dir / "_impl" / "_settings.py"
+    original = settings_path.read_bytes()
+    settings_path.write_bytes(original.replace(b'PLUGIN_VERSION = "0.1.0"', b'PLUGIN_VERSION = "0.1.0-sentinel"'))
+    host.api("POST", "/api/plugins/reload")
+    status, plugin = _plugin_response(host)
+    seen = (plugin or {}).get("descriptor", {}).get("version") if status == 200 else None
+    sc.check(seen == "0.1.0-sentinel", f"reload must execute the new code, saw {seen!r}")
+    settings_path.write_bytes(original)
+    host.api("POST", "/api/plugins/reload")
+    status, plugin = _plugin_response(host)
+    restored = (plugin or {}).get("descriptor", {}).get("version") if status == 200 else None
+    sc.check(restored == "0.1.0", f"restoring the file must restore the version, saw {restored!r}")
+    sc.record("sentinel_visible_after_reload", seen == "0.1.0-sentinel")
+    sc.record("restored_after_second_reload", restored == "0.1.0")
+
+    # ---- HC-09：插件替换 / 升级（pin 不变）
+    sc = run.scenario("HC-09")
+    status, body = host.upload(art.version_bumped_zip())
+    sc.check(status == INSTALLED, f"upgrade upload must be {INSTALLED}, got {status}: {body!r}")
+    _status, plugin = _plugin_response(host)
+    sc.check((plugin or {}).get("descriptor", {}).get("version") == "0.1.1", "descriptor.version must be updated")
+    probe = host.probe({"op": "modules"})
+    if probe.get("ok"):
+        sc.check(probe["result"]["plugin_version_in_loaded_settings"] == "0.1.1", "no stale module: the loaded _settings must carry the new version")
+        sc.check(probe["result"]["core_loaded"] and probe["result"]["core_archive_basename"] == art.wheel_name, "Core is unchanged by a plugin-only upgrade")
+    status, _ = host.upload(art.zip_bytes)
+    _status, plugin = _plugin_response(host)
+    sc.check(status == INSTALLED and (plugin or {}).get("descriptor", {}).get("version") == "0.1.0", "re-uploading the accepted zip restores 0.1.0")
+    sc.record("version_after_upgrade", "0.1.1")
+    sc.record("loaded_settings_version_after_upgrade", probe["result"]["plugin_version_in_loaded_settings"] if probe.get("ok") else None)
+    sc.record("version_after_restore", "0.1.0")
+
+    # ---- HC-13：错误 plugin id（宿主按 descriptor.id 提交目录；行为被记录且两版本相同）
+    sc = run.scenario("HC-13")
+    status, _body = host.upload(art.wrong_id_zip())
+    ids_after = host.plugin_ids()
+    _cstatus, config = host.api("GET", "/api/config")
+    sc.check(status == INSTALLED and ids_after == sorted(["other.id", PLUGIN_ID]), f"host commits the tree under descriptor.id: {status} {ids_after}")
+    sc.check(_cstatus == 200 and "other.id" not in json.dumps((config or {}).get("scraping", {})), "content routes / config must not reference the wrong id")
+    dstatus, _ = host.api("DELETE", "/api/plugins/other.id")
+    sc.check(dstatus == 204 and host.plugin_ids() == [PLUGIN_ID], f"cleanup of the foreign id: {dstatus}")
+    sc.record("http_status", status)
+    sc.record("ids_after_upload", ids_after)
+    run.extras["hc13"] = {"status": status, "ids": ids_after}
+
+    # ---- HC-14：重复 plugin
+    sc = run.scenario("HC-14")
+    status, body = host.upload(art.zip_bytes)
+    ids_after = host.plugin_ids()
+    sc.check(status == INSTALLED and ids_after == [PLUGIN_ID], f"second upload replaces the tree and leaves one entry: {status} {ids_after}")
+    duplicate = data / "plugins" / "sources" / "ffcc.dup"
+    shutil.copytree(plugin_dir, duplicate, ignore=shutil.ignore_patterns("__pycache__"))
+    host.api("POST", "/api/plugins/reload")
+    failures = host.failures()
+    mismatch = [item for item in failures if item.get("name") == "ffcc.dup"]
+    sc.check(host.plugin_ids() == [PLUGIN_ID] and len(mismatch) == 1 and "does not match directory name" in str(mismatch[0].get("error")), f"descriptor.id != directory name must be a discover failure: {failures}")
+    shutil.rmtree(duplicate, ignore_errors=True)
+    host.api("POST", "/api/plugins/reload")
+    sc.check(host.failures() == [], "failures cleared after removing the duplicate directory")
+    sc.record("entries_after_second_upload", ids_after)
+    sc.record("duplicate_directory_failure", "descriptor id does not match directory name" if mismatch else None)
+
+    # ---- HC-15：卸载
+    sc = run.scenario("HC-15")
+    runtime_dir = data / "plugins" / PLUGIN_ID
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "runtime.marker").write_text("keep", encoding="utf-8")
+    sidecar_before = tree_files(sidecar_dir(data))
+    status, _ = host.api("DELETE", f"/api/plugins/{PLUGIN_ID}")
+    sc.check(status == 204, f"DELETE must be 204, got {status}")
+    sc.check(not plugin_dir.exists() and host.plugin_ids() == [], "the source tree must be gone")
+    sc.check((runtime_dir / "runtime.marker").exists(), "runtime data under plugins/<id>/ must be kept")
+    sc.check(tree_files(sidecar_dir(data)) == sidecar_before, "the sidecar directory must not be touched")
+    sc.record("http_status", status)
+    sc.record("source_tree_removed", not plugin_dir.exists())
+    sc.record("runtime_data_kept", (runtime_dir / "runtime.marker").exists())
+    sc.record("sidecar_untouched", tree_files(sidecar_dir(data)) == sidecar_before)
+    shutil.rmtree(runtime_dir, ignore_errors=True)
+
+
+# ------------------------------------------------------------------------------------------------ Group B：受控宿主栈（真实 PluginManager / CrawlerFactory / WebClient -> 回环 fixture）
+
+NORMALIZED_ORIGINS = {"fc2db_net": "https://fc2db.net", "javdb": "https://javdb.com", "av123": "https://123av.com"}
+
+
+def normalize_loopback(value, base_urls: dict[str, str]):
+    """把回环 base_url 还原成站点缺省 origin，使结果可与 C1 记录逐字段对拍。"""
+    if isinstance(value, str):
+        for source, base in base_urls.items():
+            value = value.replace(base, NORMALIZED_ORIGINS.get(source, "http://closed.invalid"))
+        return value
+    if isinstance(value, list):
+        return [normalize_loopback(item, base_urls) for item in value]
+    if isinstance(value, dict):
+        return {key: normalize_loopback(item, base_urls) for key, item in value.items()}
+    return value
+
+
+def phase_own_stack(run: HostRun, host: HostProcess) -> None:
+    art, loopback = run.art, run.loopback
+    base_urls = {source: loopback.base_url(source) for source in ("fc2db_net", "javdb", "av123")}
+    closed = f"http://127.0.0.1:{free_port()}"
+    common = {"work": str(host.work_dir / "stack"), "zip_path": str(art.zip_path), "wheel_path": str(art.wheel_path), "base_urls": base_urls, "closed_base": closed}
+
+    # ---- HC-04 / HC-17 / E15 / E16：同一请求集
+    loopback.reset()
+    answer = host.probe({"op": "fetch_matrix", **common})
+    counts = {digits: loopback.counts_for(digits) for digits in ("4979299", "4825061", "4824605", "90000001", "90000002", "90000003", "90000004", "90000005", "90000006", "90000007", "90000008", "90000009", "90000010")}
+    sc4, sc17 = run.scenario("HC-04"), run.scenario("HC-17")
+    if not sc4.check(answer.get("ok"), f"fetch_matrix probe failed: {answer}"):
+        sc17.check(False, "fetch_matrix unavailable")
+        return
+    result = answer["result"]
+    cases, identity = result["cases"], result["identity"]
+    success = cases.get("success_all_sources", {})
+    sc4.check(success.get("class") == "MediaMetadata", f"success case must map to MediaMetadata: {success.get('class')}")
+    expected = run.oracle["h07_metadata"]
+    payload = normalize_loopback(success.get("payload", {}), base_urls)
+    mismatched = [key for key, value in expected.items() if key != "tags_count" and payload.get(key) != value]
+    sc4.check(not mismatched and len(payload.get("tags", [])) == expected["tags_count"], f"result differs from the frozen P5-C1 mapping on: {mismatched}")
+    sc4.check(all(identity.get(key) is True for key in ("context_web_client_is_host_web_client", "context_http_client_web_client_is_host_web_client", "bridge_holds_host_web_client")), f"E17 identity: {identity}")
+    sc4.check(cases.get("partial_one_source_missing", {}).get("class") == "MediaMetadata", "partial result still maps to MediaMetadata")
+    sc4.check(cases.get("not_found_everywhere", {}).get("class") == "None", "not found maps to None")
+    sc4.record("success_equals_c1_mapping", not mismatched)
+    sc4.record("result_classes", {case: item.get("class") for case, item in sorted(cases.items())})
+    sc4.record("identity", identity)
+    sc17.check(counts["4979299"] == {"av123": 1, "fc2db_net": 1, "javdb": 1}, f"L1 = S: one request per source on success, got {counts['4979299']}")
+    sc17.check(all(max(value.values(), default=0) <= 3 for value in counts.values()), f"L2 bound S x H (H = 3) violated: {counts}")
+    sc17.check(all(identity.get(key) is True for key in ("context_web_client_is_host_web_client", "bridge_holds_host_web_client")), "all requests must come through the host WebClient (same object)")
+    sc17.record("requests_per_source_by_case_digits", counts)
+    sc17.record("bridge_holds_host_web_client", identity.get("bridge_holds_host_web_client"))
+    run.extras["fetch_cases"] = normalize_loopback(cases, {**base_urls, "closed": closed})  # 回环端口是每次运行随机的：不得进入可复现的证据
+    run.extras["identity"] = identity
+
+    # ---- HC-05（宿主内三项）
+    answer = host.probe({"op": "config_roundtrip", **common})
+    run.extras["config_rows"] = answer["result"]["rows"] if answer.get("ok") else None
+    if not answer.get("ok"):
+        run.extras["config_rows_error"] = answer.get("error")
+
+    # ---- HC-08（行为 oracle：配置变化 -> 新构建的 provider 行为变化；回环请求日志）
+    sc8 = run.results["HC-08"]
+    plans = {
+        "disable_fc2db": {"sources": [{"id": "fc2db_net", "enabled": False, "base_url": "@loopback"}, {"id": "javdb", "base_url": "@loopback"}, {"id": "av123", "base_url": "@loopback"}]},
+        "all_enabled_reordered": {"sources": [{"id": "av123", "base_url": "@loopback"}, {"id": "javdb", "base_url": "@loopback"}, {"id": "fc2db_net", "base_url": "@loopback"}]},
+        "only_javdb_override": {"sources": [{"id": "fc2db_net", "enabled": False, "base_url": "@loopback"}, {"id": "javdb", "base_url": "@loopback"}, {"id": "av123", "enabled": False, "base_url": "@loopback"}]},
+    }
+    observed = {}
+    for plan_id, config in plans.items():
+        loopback.reset()
+        answer = host.probe({"op": "config_behavior", **common, "plans": [[plan_id, config, "FC2-PPV-4979299"]]})
+        if not sc8.check(answer.get("ok"), f"config_behavior {plan_id}: {answer}"):
+            continue
+        observed[plan_id] = {"counts": loopback.counts_for("4979299"), "class": answer["result"]["plans"][plan_id].get("class"),
+                             "payload_sha256": canonical_hash(normalize_loopback(answer["result"]["plans"][plan_id].get("payload"), base_urls))}
+    sc8.check(observed.get("disable_fc2db", {}).get("counts") == {"av123": 1, "javdb": 1}, f"a disabled source must get no request: {observed.get('disable_fc2db')}")
+    sc8.check(observed.get("all_enabled_reordered", {}).get("counts") == {"av123": 1, "fc2db_net": 1, "javdb": 1}, f"all enabled: {observed.get('all_enabled_reordered')}")
+    sc8.check(observed.get("only_javdb_override", {}).get("counts") == {"javdb": 1}, f"base_url override reaches the loopback fixture: {observed.get('only_javdb_override')}")
+    sc8.check(len({item.get("payload_sha256") for item in observed.values()}) >= 2, "a config change must change the rebuilt provider's observable behaviour")
+    sc8.record("behaviour_by_plan", {plan: {"counts": item.get("counts"), "class": item.get("class")} for plan, item in sorted(observed.items())})
+    sc8.record("config_change_changes_behaviour", len({item.get("payload_sha256") for item in observed.values()}) >= 2)
+
+    # ---- E16 枚举
+    answer = host.probe({"op": "enumerations", **common})
+    run.extras["enumerations"] = answer["result"] if answer.get("ok") else None
+    if not answer.get("ok"):
+        run.extras["enumerations_error"] = answer.get("error")
+    enumeration = run.extras["enumerations"]
+    if sc4.check(isinstance(enumeration, dict), f"E16 enumeration unavailable: {run.extras.get('enumerations_error')}"):
+        kinds = enumeration["source_error_kinds"]
+        sc4.check(len(kinds) >= 15 and all(item["is_host_failure_reason"] for item in kinds.values()), f"every Core SourceErrorKind must map to a host FailureReason value: {kinds}")
+        bridge = enumeration["host_failure_reason_to_http_error"]
+        expected_bridge = {name: ("HttpTimeoutError" if name == "TIMEOUT" else "HttpConnectionError" if name == "NETWORK" else "HttpTransportError") for name in bridge}
+        sc4.check(bridge == expected_bridge, f"the bridge classification must be a total deterministic function of the structured reason: {bridge}")
+        sc4.record("source_error_kind_count", len(kinds))
+        sc4.record("host_failure_reason_count", len(bridge))
+        sc4.record("kind_to_reason", {name: item["reason"] for name, item in sorted(kinds.items())})
+        sc4.record("bridge_classification", dict(sorted(bridge.items())))
+
+    # ---- 副作用：受控栈的数据目录里除 sources/ 与 _ffcc_core/ 之外不得出现 adapter 写入的运行期目录
+    leftovers = []
+    stack_root = host.work_dir / "stack"
+    for plugins_dir in sorted(stack_root.glob("*/plugins")) if stack_root.exists() else []:
+        leftovers += [item.name for item in plugins_dir.iterdir() if item.name not in ("sources", "_ffcc_core")]
+    run.extras["stack_runtime_leftovers"] = sorted(set(leftovers))
+
+
+def finish_config_scenario(run: HostRun) -> None:
+    """HC-05：四个布尔（HTTP PATCH / validate_plugin_config / parse_settings / build）全真或全假；原始类型不得被强制转换后接受。"""
+    sc = run.scenario("HC-05")
+    rows, patch_ok = run.extras.get("config_rows"), run.extras.get("patch_ok")
+    if not sc.check(isinstance(rows, dict) and isinstance(patch_ok, dict), f"config round-trip data missing: {run.extras.get('config_rows_error')}"):
+        return
+    table = {}
+    for sample_id, _sample in run.oracle["config_samples"]:
+        row = rows.get(sample_id, {})
+        flags = {"patch": patch_ok.get(sample_id), "validate": row.get("validate"), "parse": row.get("parse"), "build": row.get("build")}
+        consistent = len(set(flags.values())) == 1 and None not in flags.values()
+        expected_valid = not sample_id.startswith(("invalid_", "raw_type_"))
+        sc.check(consistent, f"{sample_id}: Pydantic / runtime parser / host route disagree: {flags}")
+        sc.check(flags["patch"] is expected_valid, f"{sample_id}: expected accepted={expected_valid}, got {flags}")
+        table[sample_id] = {"accepted": flags["patch"], "all_four_agree": consistent}
+    sc.record("samples", table)
+    run.extras["config_booleans"] = {sample: item["accepted"] for sample, item in table.items()}
+
+
+# ------------------------------------------------------------------------------------------------ Group C：Core 升级（pin 变化）
+
+
+def phase_core_upgrade(run: HostRun) -> None:
+    art = run.art
+    zip_b, wheel_b = art.pin_b()
+    wheel_b_bytes = wheel_b.read_bytes()
+    sc = run.scenario("HC-16")
+    rows: list[dict] = run.extras.setdefault("admission_rows", [])  # type: ignore[assignment]
+    host = run.host("core_upgrade")
+    with host:
+        data = host.data_dir
+        place_sidecar(data, art.wheel_name, art.wheel_bytes)
+        status, _ = host.upload(art.zip_bytes)
+        sc.check(status == INSTALLED and host.plugin_ids() == [PLUGIN_ID], f"install the old pair: {status}")
+        # 误操作 1：新 plugin（pin B）+ sidecar 里已放新 wheel，但旧 Core 仍在内存 -> RESTART
+        place_sidecar(data, wheel_b.name, wheel_b_bytes)
+        state_before = host_state(host)
+        status, body = host.upload(zip_b)
+        state_after = host_state(host)
+        detail = body.get("detail") if isinstance(body, dict) else body
+        restart = art.rejection("RESTART", version="0.1.1", wheel=wheel_b.name)
+        sc.check(status == 422 and detail == restart, f"old Core in memory must give RESTART_TEMPLATE: {status} {detail!r}")
+        sc.check(host.plugin_ids() == [PLUGIN_ID], "the installed old plugin must be unchanged by the rejected upload")
+        rows.append(admission_row(run, "loaded_old_core_with_new_pin", mode="loaded", expected="FAIL", observed="FAIL" if status == 422 else "PASS", template="RESTART", before=state_before, after=state_after))
+        sc.check(rows[-1]["sys_path_unchanged_on_fail"] and rows[-1]["sys_modules_unchanged_on_fail"], "RESTART failure must leave sys.path and Core objects untouched")
+        # 正确流程：卸载 -> 重启 -> 只有旧 wheel（误操作 2）-> 放新 wheel -> 安装
+        status, _ = host.api("DELETE", f"/api/plugins/{PLUGIN_ID}")
+        sc.check(status == 204, "uninstall the old plugin")
+        host.stop()
+        host.start()
+        clear_sidecar(data)
+        place_sidecar(data, art.wheel_name, art.wheel_bytes)
+        state_before = host_state(host)
+        status, body = host.upload(zip_b)
+        state_after = host_state(host)
+        detail = body.get("detail") if isinstance(body, dict) else body
+        wrong = art.rejection("WHEEL_VERSION_MISMATCH", version="0.1.1", wheel=wheel_b.name)
+        sc.check(status == 422 and detail == wrong, f"only the old wheel in the sidecar must give WHEEL_VERSION_MISMATCH: {status} {detail!r}")
+        rows.append(admission_row(run, "sidecar_only_old_wheel_with_new_pin", mode="wheel", expected="FAIL", observed="FAIL" if status == 422 else "PASS", template="WHEEL_VERSION_MISMATCH", before=state_before, after=state_after))
+        place_sidecar(data, wheel_b.name, wheel_b_bytes)
+        status, _ = host.upload(zip_b)
+        sc.check(status == INSTALLED and host.plugin_ids() == [PLUGIN_ID], f"install the new pair after the restart: {status}")
+        modules = host.probe({"op": "modules"})
+        sc.check(modules.get("ok") and modules["result"]["core_archive_basename"] == wheel_b.name, "the new Core must be the one loaded")
+        rows.append({"id": f"{run.spec.label}:new_pair_after_restart", "mode": "wheel", "python": run.spec.python_version, "expected": "PASS", "observed": "PASS" if status == INSTALLED else "FAIL",
+                     "template": None, "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": False})
+        sc.record("misoperation_old_core_in_memory", {"http_status": 422, "template": "RESTART"})
+        sc.record("misoperation_only_old_wheel", {"http_status": 422, "template": "WHEEL_VERSION_MISMATCH"})
+        sc.record("upgrade_flow", "uninstall -> restart -> replace sidecar wheel -> install: success")
+        sc.record("new_core_loaded", bool(modules.get("ok") and modules["result"]["core_archive_basename"] == wheel_b.name))
+
+
+# ------------------------------------------------------------------------------------------------ 一台宿主的完整运行
+
+
+def hc18_scan_data_dir(run: HostRun, data_dir: Path) -> list[str]:
+    """数据目录里 ``plugins/`` 下除 ``sources/`` 与 ``_ffcc_core/`` 之外不得出现 adapter 写入的目录。"""
+    root = data_dir / "plugins"
+    return sorted(item.name for item in root.iterdir() if item.name not in ("sources", "_ffcc_core") and item.name != PLUGIN_ID) if root.exists() else []
+
+
+def run_host(spec: HostSpec, art: Artifacts, loopback, oracle: dict, work: Path, *, log=print) -> HostRun:
+    run = HostRun(spec=spec, work=work / spec.label, art=art, loopback=loopback, oracle=oracle)
+    run.work.mkdir(parents=True, exist_ok=True)
+    roots = {"repo": REPO_ROOT, "host_install": Path(spec.install_dir)}
+    before = snapshot_roots(roots, excludes=((REPO_ROOT / "docs" / "acceptance" / "evidence").as_posix(),))
+
+    def guarded(name: str, function, *args) -> None:
+        try:
+            function(*args)
+        except Exception as exc:  # noqa: BLE001 - 网关把任何阶段异常记为相关场景失败，而不是崩溃
+            log(f"{spec.label}: phase {name} raised {type(exc).__name__}: {exc}")
+            run.extras.setdefault("phase_errors", {})[name] = f"{type(exc).__name__}: {str(exc)[:300]}"  # type: ignore[index]
+
+    log(f"{spec.label}: lifecycle")
+    host = run.host("lifecycle")
+    try:
+        host.start()
+        described = host.probe({"op": "describe"})
+        if described.get("ok"):
+            spec.python_version = described["result"]["python"]
+            run.extras["frozen_flag"] = described["result"]["frozen"]
+        guarded("failures", phase_failures, run, host)
+        guarded("success", phase_success, run, host)
+        run.extras["lifecycle_plugins_leftovers"] = hc18_scan_data_dir(run, host.data_dir)
+    except GateError as exc:
+        run.extras.setdefault("phase_errors", {})["lifecycle"] = str(exc)[:400]  # type: ignore[index]
+    finally:
+        host.stop()
+    log(f"{spec.label}: controlled stack")
+    host = run.host("own_stack")
+    try:
+        host.start()
+        guarded("own_stack", phase_own_stack, run, host)
+    except GateError as exc:
+        run.extras.setdefault("phase_errors", {})["own_stack"] = str(exc)[:400]  # type: ignore[index]
+    finally:
+        host.stop()
+    finish_config_scenario(run)
+    log(f"{spec.label}: core upgrade")
+    guarded("core_upgrade", phase_core_upgrade, run)
+    if spec.form == "source":
+        log(f"{spec.label}: admission matrix")
+        guarded("admission", phase_admission, run)
+    finish_side_effects(run, before, roots)
+    finish_admission(run)
+    return run
+
+
+# ------------------------------------------------------------------------------------------------ HC-19：Core 来源准入矩阵（宿主级）
+
+
+def _in_host_module():
+    return _load_module(HOST_SCRIPTS / "in_host.py", "ffcc_gate_in_host_constants")
+
+
+def evaluate_admission_case(art: Artifacts, case: str, expected: str, template: str | None, row: dict) -> list[str]:
+    """一个宿主内准入用例的判据（E31 / HC-19）；返回违反项列表。"""
+    problems = []
+    if row.get("outcome") != expected:
+        return [f"outcome {row.get('outcome')!r} != {expected!r}: {row.get('message')}"]
+    if expected == "FAIL":
+        if row.get("message") != art.rejection(template):
+            problems.append(f"message differs from the frozen template {template}: {row.get('message')!r}")
+        for key in ("path_equals_entry", "path_same_object", "cache_unchanged", "core_objects_unchanged"):
+            if row.get(key) is not True:
+                problems.append(f"{key} is {row.get(key)!r}")
+        if row.get("installed_tree_exists") or row.get("half_install_residue"):
+            problems.append(f"half install: {row.get('half_install_residue')}")
+    else:
+        if row.get("loaded_from_exact_wheel") is not True:
+            problems.append("Core must be loaded from the exact pinned wheel via zipimporter")
+        if row.get("wheel_entries_in_path", 0) > 1:
+            problems.append("at most one wheel entry in sys.path")
+    if row.get("sentinel_exists"):
+        problems.append("a payload sentinel exists: unsupported code was executed")
+    if case == "e31l_rollback_cache_present" and row.get("cache_entry_is_original_object") is not True:
+        problems.append("the entry importer-cache object must be restored")
+    if case == "e31u_wheel_in_path_resolution_disagrees" and row.get("inert_package_never_imported") is not True:
+        problems.append("the unsupported (inert) package must never be imported")
+    return problems
+
+
+def phase_admission(run: HostRun) -> None:
+    """源码宿主：真实 ``install_plugin_zip`` + 宿主进程内夹具（in_host.op_admission），再加真实 ``PYTHONPATH`` 环境的两个用例。"""
+    art = run.art
+    module = _in_host_module()
+    rows: list[dict] = run.extras.setdefault("admission_rows", [])  # type: ignore[assignment]
+    sc = run.scenario("HC-19-host")
+    host = run.host("admission")
+    with host:
+        answer = host.probe({"op": "admission", "work": str(host.work_dir / "adm"), "zip_path": str(art.zip_path), "wheel_path": str(art.wheel_path)})
+    if not sc.check(answer.get("ok"), f"admission probe failed: {answer}"):
+        return
+    cases = answer["result"]["cases"]
+    observed_cases = {}
+    for case, (expected, template) in module.ADMISSION_EXPECT.items():
+        row = cases.get(case, {"outcome": "MISSING"})
+        problems = evaluate_admission_case(art, case, expected, template, row)
+        sc.check(not problems, f"{case}: {problems}")
+        observed_cases[case] = {"expected": expected, "observed": row.get("outcome"), "template": template if expected == "FAIL" and not problems else None}
+        rows.append({
+            "id": f"{run.spec.label}:{case}", "mode": "loaded" if case.startswith(("preloaded", "mixed")) else "directory" if case.startswith("dir_") else "shadow" if case.startswith(("shadow", "e31")) else "wheel",
+            "python": run.spec.python_version, "expected": expected, "observed": row.get("outcome") if not problems else f"MISMATCH:{row.get('outcome')}", "template": template,
+            "sys_path_unchanged_on_fail": row.get("path_equals_entry") is not False, "sys_modules_unchanged_on_fail": row.get("core_objects_unchanged") is not False,
+            "payload_executed": bool(row.get("sentinel_exists")),
+        })
+    sc.record("cases", observed_cases)
+
+    # ---- 真实 PYTHONPATH：宿主进程启动时 sys.path 就带有目录形态 Core（含 .pyc PoC）
+    poc = module._pyc_poc_dir(run.work / "pythonpath_dir", run.work / "pythonpath_sentinel")
+    sentinel = run.work / "pythonpath_sentinel"
+    host = run.host("pythonpath", extra_env={"PYTHONPATH": poc})
+    with host:
+        watch = host.probe({"op": "paths", "watch": [poc]})
+        sc.check(watch.get("ok") and watch["result"]["present"][os.path.normcase(os.path.realpath(poc))], "the PYTHONPATH directory must be on the host's sys.path (fixture is effective)")
+        state_before = host_state(host)
+        status, body = host.upload(art.zip_bytes)
+        state_after = host_state(host)
+        detail = body.get("detail") if isinstance(body, dict) else body
+        sc.check(status == 422 and detail == art.rejection("UNVERIFIABLE") and not sentinel.exists() and host.plugin_ids() == [], f"PYTHONPATH directory Core without sidecar: {status} {detail!r}")
+        rows.append(admission_row(run, "pythonpath_pyc_poc_no_sidecar", mode="directory", expected="FAIL", observed="FAIL" if status == 422 else "PASS", template="UNVERIFIABLE", before=state_before, after=state_after))
+        place_sidecar(host.data_dir, art.wheel_name, art.wheel_bytes)
+        status, _ = host.upload(art.zip_bytes)
+        modules = host.probe({"op": "modules"})
+        sc.check(status == INSTALLED and modules.get("ok") and modules["result"]["core_archive_basename"] == art.wheel_name and not sentinel.exists(), "with a valid sidecar the wheel (not the PYTHONPATH directory) must be loaded; the payload must not run")
+        rows.append({"id": f"{run.spec.label}:pythonpath_pyc_poc_with_sidecar", "mode": "directory", "python": run.spec.python_version, "expected": "PASS", "observed": "PASS" if status == INSTALLED else "FAIL",
+                     "template": None, "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": sentinel.exists()})
+        sc.record("pythonpath_no_sidecar", {"http_status": 422, "template": "UNVERIFIABLE", "payload_executed": sentinel.exists()})
+        sc.record("pythonpath_with_sidecar", {"http_status": 200, "loaded_from_exact_wheel": bool(modules.get("ok") and modules["result"]["core_archive_basename"] == art.wheel_name)})
+
+
+def finish_side_effects(run: HostRun, before: dict, roots: dict[str, Path]) -> None:
+    sc = run.scenario("HC-18")
+    after = snapshot_roots(roots, excludes=((REPO_ROOT / "docs" / "acceptance" / "evidence").as_posix(),))
+    difference = snapshot_diff(before, after)
+    sc.check(not difference, f"files outside the temporary data directory changed: {difference}")
+    sc.check(not run.extras.get("lifecycle_plugins_leftovers"), f"the adapter left runtime directories under plugins/: {run.extras.get('lifecycle_plugins_leftovers')}")
+    sc.check(not run.extras.get("stack_runtime_leftovers"), f"the controlled stack left runtime directories: {run.extras.get('stack_runtime_leftovers')}")
+    sc.record("changes_outside_data_dir", sorted(difference))
+    sc.record("runtime_dirs_left_by_adapter", sorted(set(run.extras.get("lifecycle_plugins_leftovers") or []) | set(run.extras.get("stack_runtime_leftovers") or [])))
+    sc.record("plugin_tree_written_only_by_the_host_under_sources", True)
+
+
+def finish_admission(run: HostRun) -> None:
+    sc = run.scenario("HC-19")
+    for dependency in ("HC-10", "HC-11", "HC-16"):
+        sc.check(dependency in run.results and not run.results[dependency].failures, f"{dependency} (sidecar branches) must pass")
+    sc.check("HC-01" in run.results and not run.results["HC-01"].failures, "the exact pinned wheel must install (PASS branch)")
+    if run.spec.form == "source":
+        host_part = run.results.get("HC-19-host")
+        sc.check(host_part is not None and not host_part.failures, f"in-host admission matrix: {host_part.failures if host_part else 'not run'}")
+        sc.record("scope", "sidecar branches over HTTP + in-host E31 matrix (real install_plugin_zip) + real PYTHONPATH cases")
+        sc.record("in_host_cases", sorted((host_part.observations.get("cases") or {}).keys()) if host_part else [])
+    else:
+        sc.record("scope", "sidecar branches over HTTP only (frozen hosts cannot stage sys.path fixtures in the host process; E31-u / E31-v are covered by the source hosts and the unit matrix)")
+    run.results.pop("HC-19-host", None)
+    rows = run.extras.get("admission_rows", [])
+    sc.record("sidecar_cases", sorted(run.extras.get("hc11_sidecar_cases", {})))
+    sc.check(all(row["observed"] == row["expected"] for row in rows), f"admission rows mismatch: {[row['id'] for row in rows if row['observed'] != row['expected']]}")
+    sc.record("admission_row_count", len(rows))
+
+
+# ------------------------------------------------------------------------------------------------ 跨版本等价（E15 / E16）与 MATRIX Part A 装配
+
+
+def parity_payload(run: HostRun) -> dict:
+    enumerations = run.extras.get("enumerations") or {}
+    return {
+        "fetch_cases": run.extras.get("fetch_cases"),
+        "source_error_kind_mapping": enumerations.get("source_error_kinds"),
+        "config_booleans": run.extras.get("config_booleans"),
+        "descriptor_subset": run.extras.get("descriptor"),
+        "config_schema_sha256": run.extras.get("config_schema_sha256"),
+        "hc13_wrong_id_behaviour": run.extras.get("hc13"),
+        "identity": {key: value for key, value in (run.extras.get("identity") or {}).items() if key != "provider_class"},
+    }
+
+
+def build_parity(runs: dict[str, HostRun]) -> dict:
+    pairs = []
+    for left, right in (("a-src", "b-src"), ("a-win", "b-win"), ("a-src", "a-win"), ("b-src", "b-win")):
+        if left not in runs or right not in runs:
+            continue
+        one, two = parity_payload(runs[left]), parity_payload(runs[right])
+        sha_a, sha_b = canonical_hash(one), canonical_hash(two)
+        complete = all(value is not None for value in (*one.values(), *two.values()))  # 缺失的字段不得被当作“相等”
+        if not complete:
+            sha_b = canonical_hash({"incomplete_parity_payload": True, "right": two})
+        pairs.append({"a": left, "b": right, "fields": sorted(one), "equal": complete and sha_a == sha_b, "sha256_a": sha_a, "sha256_b": sha_b})
+    members = {label: tuple((run.extras.get("enumerations") or {}).get("host_failure_reason_members") or ()) for label, run in runs.items()}
+    observed = ["DIFF-01"]
+    if len(set(members.values())) > 1:
+        observed.append("DIFF-05")
+    if len({run.spec.form for run in runs.values()}) > 1:
+        observed.append("DIFF-07")
+    return {"required_pairs": pairs, "allowed_diffs_observed": sorted(observed)}
+
+
+def host_row(run: HostRun) -> dict:
+    spec = run.spec
+    scenarios = []
+    for scenario_id in SCENARIO_IDS:
+        scenario = run.results.get(scenario_id)
+        if scenario is None:
+            scenarios.append({"id": scenario_id, "passed": False, "observations_sha256": canonical_hash({"missing": scenario_id})})
+        else:
+            scenarios.append({"id": scenario_id, "passed": not scenario.failures, "observations_sha256": canonical_hash(scenario.observations)})
+    return {
+        "label": spec.label, "coordinate_id": spec.coordinate_id, "role": coordinate(spec.coordinate_id)["role"], "form": spec.form,
+        "tag": spec.tag, "tag_object": spec.tag_object, "peeled_commit": spec.peeled_commit, "release_version": spec.release_version,
+        "requires_python": spec.requires_python, "plugin_api_version": spec.plugin_api_version, "python_version": spec.python_version,
+        "platform": spec.platform, "api_fingerprint_sha256": spec.api_fingerprint_sha256,
+        "adapter_used_subset_fingerprint_sha256": spec.adapter_used_subset_fingerprint_sha256, "deps_lock_sha256": spec.deps_lock_sha256,
+        "identical_to_stable": False, "scenarios": scenarios,
+    }
+
+
+def build_part_a(runs: dict[str, HostRun], stage1: dict, *, main_commit: str, stable_commit: str, stable_spec: HostSpec | None) -> dict:
+    hosts = [host_row(run) for run in runs.values()]
+    parity = build_parity(runs)
+    if stable_spec is not None:
+        main_row = {
+            "label": "main", "coordinate_id": "SC-05", "role": "informational", "form": "source", "tag": "main", "tag_object": None,
+            "peeled_commit": main_commit, "release_version": stable_spec.release_version, "requires_python": stable_spec.requires_python,
+            "plugin_api_version": stable_spec.plugin_api_version, "python_version": stable_spec.python_version, "platform": PLATFORM_WINDOWS,
+            "api_fingerprint_sha256": stable_spec.api_fingerprint_sha256, "adapter_used_subset_fingerprint_sha256": stable_spec.adapter_used_subset_fingerprint_sha256,
+            "deps_lock_sha256": None, "identical_to_stable": main_commit == stable_commit, "scenarios": [],
+        }
+        if main_commit == stable_commit:
+            hosts.append(main_row)
+    parity_equal = bool(parity["required_pairs"]) and all(pair["equal"] for pair in parity["required_pairs"])
+    status = [derive_status(item["id"], hosts, parity_equal=parity_equal, stable_peeled_commit=stable_commit) for item in SUPPORT_COORDINATES]
+    rows = [row for run in runs.values() for row in run.extras.get("admission_rows", [])]
+    gate_hash = sha256_hex(Path(__file__).read_bytes().replace(b"\r\n", b"\n"))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "tool": {"name": "run_amane_compat_gate", "sha256": gate_hash},
+        "policy": {
+            "minimum": "v0.15.0", "main_role": "informational",
+            "stable_definition": "latest non-draft non-prerelease GitHub Release whose tag is v<semver>; app-* and main do not qualify",
+            "support_coordinates": [dict(item) for item in SUPPORT_COORDINATES],
+        },
+        "hosts": hosts,
+        "artifacts": dict(stage1["artifacts"]),
+        "parity": parity,
+        "status": status,
+        "platforms_unverified": list(PLATFORMS_UNVERIFIED),
+        "core_admission": {"core_wheel_sha256": stage1["artifacts"]["core_wheel_sha256"], "cases": sorted(rows, key=lambda item: item["id"])},
+    }
+
+
+# ------------------------------------------------------------------------------------------------ 命令行
+
+
+def build_oracle() -> dict:
+    """C1 冻结记录（P5_C1_HOST_WITNESS.json）作为 HC-03 / HC-04 的 oracle。"""
+    witness = json.loads((REPO_ROOT / "docs" / "acceptance" / "evidence" / "P5_C1_HOST_WITNESS.json").read_text(encoding="utf-8"))
+    by_id = {item["id"]: item["observations"] for item in witness["scenarios"]}
+    descriptor = {key: by_id["H-02"]["zip"]["descriptor"][key] for key in DESCRIPTOR_KEYS}
+    return {
+        "descriptor": descriptor_subset(descriptor),
+        "schema_fields": by_id["H-02"]["zip"]["schema_fields"],
+        "h07_metadata": by_id["H-07"]["metadata"],
+        "config_samples": [list(item) for item in _in_host_module().CONFIG_SAMPLES],
+    }
+
+
+def _git(repo: Path, *args: str) -> str:
+    completed = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", check=False)
+    if completed.returncode != 0:
+        raise GateError(f"git {' '.join(args)} failed: {completed.stderr[-300:]}")
+    return completed.stdout.strip()
+
+
+def load_specs(hosts_json: Path, amane_repo: Path | None) -> tuple[dict[str, HostSpec], str, str]:
+    import tomllib
+
+    prepared = json.loads(hosts_json.read_text(encoding="utf-8"))
+    compare = _tool("compare_amane_api.py")
+    adapter_tree = REPO_ROOT / "adapters" / "amane" / "fc2_amane_adapter"
+    specs: dict[str, HostSpec] = {}
+    for label, tag, form, coordinate_id in (("a-src", "v0.15.0", "source", "SC-03"), ("b-src", "v0.18.0", "source", "SC-04"), ("a-win", "v0.15.0", "frozen-desktop", "SC-01"), ("b-win", "v0.18.0", "frozen-desktop", "SC-02")):
+        entry = prepared.get(tag)
+        if entry is None:
+            continue
+        source = Path(entry["source_dir"])
+        project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        manifest = json.loads((REPO_ROOT / "adapters" / "amane" / "api_manifest" / f"amane_{tag}_api_manifest.json").read_text(encoding="utf-8"))
+        if manifest["amane"]["commit"] != entry["peeled_commit"]:
+            raise GateError(f"{tag}: committed API manifest commit differs from the prepared checkout")
+        subset = compare.compare({tag: manifest}, adapter_tree)["adapter_used_subset_fingerprints"][tag]
+        specs[label] = HostSpec(
+            label=label, coordinate_id=coordinate_id, form=form, tag=tag, tag_object=entry["tag_object"], peeled_commit=entry["peeled_commit"],
+            release_version=str(project["version"]), requires_python=str(project["requires-python"]), plugin_api_version=str(manifest["constants"]["PLUGIN_API_VERSION"]),
+            python_version=entry.get("python_version", "unknown") if form == "source" else "3.14.7",
+            executable=entry["venv_python"] if form == "source" else entry["frozen_exe"],
+            install_dir=entry["source_dir"] if form == "source" else entry["frozen_dir"],
+            deps_lock_sha256=entry.get("deps_lock_sha256") if form == "source" else None,
+            api_fingerprint_sha256=compare.full_fingerprint(manifest), adapter_used_subset_fingerprint_sha256=subset,
+        )
+    stable_commit = prepared["v0.18.0"]["peeled_commit"] if "v0.18.0" in prepared else ""
+    main_commit = _git(amane_repo, "rev-parse", "origin/main") if amane_repo is not None else ""
+    return specs, stable_commit, main_commit
+
+
+def cmd_run(options) -> int:
+    release = _tool("build_amane_release.py")
+    wheel = options.core_wheel.resolve()
+    stage1 = release.build_stage1(REPO_ROOT, wheel)
+    for name, data in stage1["files"].items():
+        if (options.stage1_dir / name).read_bytes() != data:
+            raise GateError(f"{name}: the stage1 directory differs from a fresh rebuild; refusing to validate non-accepted bytes")
+    work = options.work.resolve()
+    if REPO_ROOT in work.parents:
+        raise GateError("--work must be outside the repository")
+    work.mkdir(parents=True, exist_ok=True)
+    specs, stable_commit, main_commit = load_specs(options.hosts_json, options.amane_repo)
+    wanted = [label for label in ("a-src", "b-src", "a-win", "b-win") if (not options.labels or label in options.labels) and label in specs]
+    loopback_module = _load_module(HOST_SCRIPTS / "loopback_fixture.py", "ffcc_gate_loopback")
+    oracle = build_oracle()
+    art = Artifacts(wheel, options.stage1_dir.resolve(), work / "artifacts")
+    (work / "artifacts").mkdir(parents=True, exist_ok=True)
+    runs: dict[str, HostRun] = {}
+    with loopback_module.LoopbackFixture(REPO_ROOT / "tests" / "fixtures" / "sources") as loopback:
+        for label in wanted:
+            started = time.time()
+            runs[label] = run_host(specs[label], art, loopback, oracle, work, log=lambda message: print(message, file=sys.stderr, flush=True))
+            failed = [(item.id, item.failures) for item in runs[label].results.values() if item.failures]
+            print(f"{label}: {sum(1 for item in runs[label].results.values() if not item.failures)}/{len(runs[label].results)} scenarios passed in {time.time() - started:.0f}s", file=sys.stderr, flush=True)
+            for scenario_id, failures in failed:
+                print(f"  {label} {scenario_id} FAILED: {failures[:3]}", file=sys.stderr, flush=True)
+            for phase, error in (runs[label].extras.get("phase_errors") or {}).items():  # type: ignore[union-attr]
+                print(f"  {label} phase {phase}: {error}", file=sys.stderr, flush=True)
+    stable_spec = next((spec for spec in specs.values() if spec.tag == "v0.18.0" and spec.form == "source"), None)
+    part_a = build_part_a(runs, stage1, main_commit=main_commit, stable_commit=stable_commit, stable_spec=stable_spec)
+    problems = validate_matrix(part_a)
+    for problem in problems:
+        print(f"matrix problem: {problem}", file=sys.stderr)
+    if options.details is not None:
+        details = {label: {scenario.id: {"observations": scenario.observations, "failures": scenario.failures} for scenario in run.results.values()} for label, run in runs.items()}
+        extras = {label: {key: value for key, value in run.extras.items() if key in ("phase_errors", "fetch_cases", "enumerations", "enumerations_error", "config_rows_error", "config_booleans", "identity", "admission_rows")} for label, run in runs.items()}
+        options.details.parent.mkdir(parents=True, exist_ok=True)
+        options.details.write_text(json.dumps({"scenarios": details, "extras": extras}, indent=1, sort_keys=True, ensure_ascii=False, default=repr), encoding="utf-8")
+    options.out.parent.mkdir(parents=True, exist_ok=True)
+    options.out.write_text(render(part_a), encoding="utf-8", newline="\n")
+    all_passed = all(not item.failures for run in runs.values() for item in run.results.values())
+    print(f"matrix Part A written; sha256={sha256_hex(render(part_a).encode('utf-8'))}; all_scenarios_passed={all_passed}; problems={len(problems)}", file=sys.stderr)
+    return 0 if all_passed and not problems else 1
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "run":
+        parser = argparse.ArgumentParser(prog="run_amane_compat_gate.py run")
+        parser.add_argument("--hosts-json", required=True, type=Path, help="tools/prepare_amane_hosts.py 的输出")
+        parser.add_argument("--core-wheel", required=True, type=Path)
+        parser.add_argument("--stage1-dir", required=True, type=Path)
+        parser.add_argument("--work", required=True, type=Path, help="临时工作目录（必须在仓库之外）")
+        parser.add_argument("--amane-repo", type=Path, help="本地 upstream 克隆（用于判定 main 是否 == 稳定版）")
+        parser.add_argument("--labels", nargs="*", default=[])
+        parser.add_argument("--out", required=True, type=Path)
+        parser.add_argument("--details", type=Path, help="（诊断，不入库）每个场景的完整观测与失败原因")
+        return cmd_run(parser.parse_args(argv[1:]))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--validate", type=Path, help="校验一份 MATRIX JSON 的 schema 与自洽规则")
     options = parser.parse_args(argv)

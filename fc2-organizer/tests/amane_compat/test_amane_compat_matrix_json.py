@@ -168,3 +168,76 @@ def test_e24_compatibility_json_uses_the_same_coordinate_table_and_forbidden_wor
     for banned in (r"v0\.1[58]\.0 (SUPPORTED|CONDITIONALLY)", r"支持\s*v0\.1[58]", r"支持\s*(Docker|macOS|Linux)"):
         assert not re.search(banned, rendered)
     assert [row["status"] for row in projection["status"] if row["coordinate_id"] in gate.UNVERIFIED_COORDINATES] == ["UNVERIFIED"] * 3
+
+
+# ------------------------------------------------------------------ 已提交的真实 MATRIX 与仓库树的一致性（E23 / E24 / E29）
+
+MATRIX_PATH = REPO / "docs" / "acceptance" / "evidence" / "P5_C2_COMPATIBILITY_MATRIX.json"
+
+
+def _committed_matrix():
+    return json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
+
+
+def test_committed_matrix_passes_the_validator_and_is_deterministically_rendered(gate):
+    document = _committed_matrix()
+    assert gate.validate_matrix(document) == []
+    assert MATRIX_PATH.read_bytes().replace(b"\r\n", b"\n") == gate.render(document).encode("utf-8")
+
+
+def test_committed_matrix_records_all_four_required_coordinates_as_supported_and_the_rest_unverified(gate):
+    document = _committed_matrix()
+    status = {row["coordinate_id"]: row["status"] for row in document["status"]}
+    assert [status[key] for key in ("SC-01", "SC-02", "SC-03", "SC-04")] == ["SUPPORTED"] * 4
+    assert status["SC-05"] == "IDENTICAL_TO_STABLE" and {status[key] for key in ("SC-07", "SC-08", "SC-09")} == {"UNVERIFIED"}
+    required_hosts = {host["label"]: host for host in document["hosts"] if host["role"] == "required"}
+    assert set(required_hosts) == {"a-src", "b-src", "a-win", "b-win"}
+    for host in required_hosts.values():
+        assert [item["id"] for item in host["scenarios"]] == list(gate.SCENARIO_IDS) and all(item["passed"] for item in host["scenarios"])
+        assert host["python_version"].startswith("3.14") and host["requires_python"] == ">=3.14" and host["plugin_api_version"] == "1"
+    main = next(host for host in document["hosts"] if host["label"] == "main")
+    assert main["identical_to_stable"] is True and main["scenarios"] == []
+    assert {host["peeled_commit"] for host in required_hosts.values()} == {"45dff2159369883e028a296d775a4598836c1ddd", "0a8a731d7746bde5e8828d1eb74c7bd9752b42e4"}
+
+
+def test_committed_matrix_parity_is_complete_equal_and_whitelisted(gate):
+    parity = _committed_matrix()["parity"]
+    assert [(pair["a"], pair["b"]) for pair in parity["required_pairs"]] == [("a-src", "b-src"), ("a-win", "b-win"), ("a-src", "a-win"), ("b-src", "b-win")]
+    assert all(pair["equal"] and pair["sha256_a"] == pair["sha256_b"] for pair in parity["required_pairs"])
+    assert {"fetch_cases", "source_error_kind_mapping", "config_booleans", "descriptor_subset", "config_schema_sha256", "identity"} <= set(parity["required_pairs"][0]["fields"])
+    assert set(parity["allowed_diffs_observed"]) <= set(gate.DIFF_WHITELIST)
+
+
+def test_committed_matrix_core_admission_covers_the_e31_branches_on_every_required_host():
+    admission = _committed_matrix()["core_admission"]
+    cases = admission["cases"]
+    assert all(case["observed"] == case["expected"] and case["payload_executed"] is False for case in cases)
+    assert all(case["sys_path_unchanged_on_fail"] and case["sys_modules_unchanged_on_fail"] for case in cases if case["expected"] == "FAIL")
+    for label in ("a-src", "b-src"):
+        names = {case["id"].split(":", 1)[1] for case in cases if case["id"].startswith(label + ":")}
+        assert {"e31u_wheel_in_path_resolution_disagrees", "e31v_subclass_loader_in_final_resolution", "dir_pyc_poc_no_sidecar", "dir_pyc_poc_with_sidecar", "preloaded_directory",
+                "e31l_rollback_cache_absent", "e31l_rollback_cache_present", "shadow_meta_path_finder", "pythonpath_pyc_poc_no_sidecar"} <= names, label
+    for label in ("a-win", "b-win"):
+        names = {case["id"].split(":", 1)[1] for case in cases if case["id"].startswith(label + ":")}
+        assert {"sidecar_tampered_same_name_one_byte", "sidecar_only_other_version_wheel", "sidecar_oversize_over_16_mib", "sidecar_same_name_directory", "loaded_old_core_with_new_pin"} <= names, label
+
+
+def test_committed_matrix_artifacts_equal_a_fresh_rebuild_from_the_tree(gate, tmp_path):
+    """E29：Part A 的 Level-0 / Level-1 哈希必须等于由当前仓库树重新构建的字节；工具哈希必须等于当前网关文件。"""
+    document = _committed_matrix()
+    builder = load_tool("build_core_wheel.py")
+    release = load_tool("build_amane_release.py")
+    name, payload, tree_hash = builder.build_wheel_bytes(REPO / "src" / "fc2_metadata_core", REPO / "pyproject.toml")
+    wheel = tmp_path / name
+    wheel.write_bytes(payload)
+    stage1 = release.build_stage1(REPO, wheel)
+    assert document["artifacts"] == stage1["artifacts"]
+    assert document["core_admission"]["core_wheel_sha256"] == stage1["artifacts"]["core_wheel_sha256"]
+    assert document["tool"]["sha256"] == gate.sha256_hex((REPO / "tools" / "run_amane_compat_gate.py").read_bytes().replace(b"\r\n", b"\n"))
+    witness = json.loads((REPO / "docs" / "acceptance" / "evidence" / "P5_C1_HOST_WITNESS.json").read_text(encoding="utf-8"))
+    assert document["artifacts"]["adapter_tree_sha256"] == witness["adapter_tree_sha256"] and document["artifacts"]["core_tree_sha256"] == witness["core_tree_sha256"] == tree_hash
+
+
+def test_committed_matrix_contains_no_volatile_or_local_data():
+    text = MATRIX_PATH.read_text(encoding="utf-8")
+    assert not re.search(r"[A-Za-z]:\\|/Users/|127\.0\.0\.1:\d+|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", text)
