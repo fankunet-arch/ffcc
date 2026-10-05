@@ -176,9 +176,19 @@ P5_C2_COMPATIBILITY_MATRIX.json（Part A + Part B）文件 sha256 = 24e43af50dae
 
 验证（`final_pipeline`，不入库的编排脚本）：L0 / L1 在重新生成后与被验收候选的哈希**逐字节相同**（若不同即为越权，脚本会停止）；`pin` 中的 wheel 哈希 == 实际 wheel 哈希；L2 -> L3 -> L4 在同一 Part A 上两次独立构建逐字节相同；Part B 的取值不影响 L2–L4（E29 测试）。`core_admission` 共 70 行（旧 66 行 + 4 个必需宿主各 1 行符号链接子项，其中 4 行 = `ENVIRONMENTALLY_UNAVAILABLE`）。
 
-### 5.1 干净检出验证
+### 5.1 干净检出验证（对提交 `f579db3` 实际执行；本文随后只追加了本节与 §6 的数字，未改动任何被哈希的输入）
 
-（待记录）
+```text
+git worktree add --detach <dir> f579db3   -> git status 干净（0 个条目；检出为 CRLF 文本，即 autocrlf 的 Windows 检出）
+在该检出里：build_core_wheel -> build_amane_release stage1 -> run_amane_compat_gate run（第二次独立的真实宿主运行，4 个必需宿主 × 19 个场景）-> build_amane_release finalize -> Part B
+L0 / L1 哈希 == 被验收候选 4358b3d 的值（0b3db80c… / 2181a12a…）          : True
+Part A 与最终运行的 Part A 逐字节相同（sha256 5f2b5971…）                 : True
+L2 / L3 / L4（COMPATIBILITY.json / SHA256SUMS / bundle）逐字节相同         : True
+Part B 与已提交 MATRIX 相同（LF 规范化后整文件相同，sha256 24e43af5…）    : True
+在该检出里运行 scope_gate / install_doc / matrix_json / artifact_dag / release_layout / evidence_reconciliation 测试 : 149 passed
+```
+
+如实记录：该检出上的**第一次**完整运行，`b-win` 在控制栈阶段遇到一次 Windows `PermissionError [WinError 5]`（宿主自己把 `.ffcc.fc2-metadata.new` 暂存目录重命名为正式目录时被拒绝；Windows 文件被临时占用的瞬时现象，与仓库内容无关；其余三个宿主 19/19、L0 / L1 哈希正确）。该运行因此判失败并被丢弃（网关的退出码为非零，校验器也报出 E16 的 3 条问题）；**未改任何文件**，在同一干净检出上完整重跑，四个必需宿主均 19/19，上表全部来自这次重跑。至此 `b-win`（冻结 v0.18.0）共出现过两次互不相同的瞬时宿主错误（§9 运行记录），均未复现；Reviewer 重跑遇到时请先单独重跑该宿主。
 
 ## 6. 测试数字（E25 / E26 / E27 / E28）
 
@@ -186,9 +196,9 @@ P5_C2_COMPATIBILITY_MATRIX.json（Part A + Part B）文件 sha256 = 24e43af50dae
 基线（P5-C2 S1 起始 / 被验收候选 4358b3d；3.12.10 项目 venv）: 8738 passed / 40 skipped / 0 failed
 本轮新增 targeted 测试 : +71 = tests/amane_compat 290 -> 361
                           （test_amane_compat_matrix_json 32 -> 57：+25；新增 test_amane_compat_evidence_reconciliation：+46；其余文件数量不变；没有删除任何测试）
-tests/amane_compat      : @@COMPAT@@
-tests/amane_adapter     : @@ADAPTER@@
-tests/amane_compat + amane_adapter : @@BOTH@@
+tests/amane_compat      : **361 passed**（290 -> 361；全部 0 skipped；含本轮 8 个 HANDOFF 措辞守卫）
+tests/amane_adapter     : **539 passed**（零 diff）
+tests/amane_compat + amane_adapter : **900 passed / 0 skipped / 0 failed**（361 + 539）
 python -m pytest tests -q（3.12） : **8801 passed + 8 deselected = 8809 collected，0 failed，40 skipped**（716 s）。8 个 deselected 恰为本文的措辞守卫测试（`-k "not r5_handoff"`，因为跑这一轮时本文尚未改写）；它们在本文落地后单独运行并通过（见上方 targeted 行）
 新增 skip               : 0（`-rs` 清单与基线逐条比较：基线 `b8480e7` 同一命令的 `-rs` 输出：22 组 / 40 个，nodeid / 原因 / 数量逐条相同；`tests/amane_compat` 内 0 个 skip）
 ```
@@ -266,7 +276,7 @@ python -m pytest tests -q（3.12） : **8801 passed + 8 deselected = 8809 collec
 5. **E16-B 的惰性引擎桩**：只替代上游 `MultiSourceEngine.aggregate` 的执行；生产 `map_aggregation` 与生产 provider 转换不被替代，并以计数包装器证明（见 §4 E16）。
 6. **HC-11(c)**（冻结包无法布置目录形态夹具）按 Authority Review 的裁定“无需修改”；本轮未触及。
 
-**运行记录（如实）**：对账的第一次完整 4 宿主运行中，冻结 v0.18.0 宿主（`b-win`）的控制栈阶段在**最后一个探针**（`enumerations`，E16-B 已成功之后）处出现一次宿主瞬时无响应（探针 reload 请求超时返回空，约 500 s），该阶段被中断；HC-04 当时没有失败记录，仅 HC-18 间接失败，网关退出码非零。这暴露了一个网关缺陷：阶段异常本不应让该阶段内未执行的检查保持“绿色”。已修复（任何阶段异常 = 运行失败，并有机检测试），随后 `b-win` 单独重跑 19/19、在修复后的最终树上**完整重跑四个必需宿主均为 19/19**，Part A / L2–L4 全部来自这次最终运行。该瞬时无响应未复现、未定位根因，视为宿主进程偶发；若 Reviewer 重跑时遇到，请先单独重跑该宿主确认。
+**运行记录（如实）**：对账的第一次完整 4 宿主运行中，冻结 v0.18.0 宿主（`b-win`）的控制栈阶段在**最后一个探针**（`enumerations`，E16-B 已成功之后）处出现一次宿主瞬时无响应（探针 reload 请求超时返回空，约 500 s），该阶段被中断；HC-04 当时没有失败记录，仅 HC-18 间接失败，网关退出码非零。这暴露了一个网关缺陷：阶段异常本不应让该阶段内未执行的检查保持“绿色”。已修复（任何阶段异常 = 运行失败，并有机检测试），随后 `b-win` 单独重跑 19/19、在修复后的最终树上**完整重跑四个必需宿主均为 19/19**，Part A / L2–L4 全部来自这次最终运行。该瞬时无响应未复现、未定位根因，视为宿主进程偶发。此外，在干净检出上的第一次复现运行中，同一个 `b-win` 又出现过一次 Windows `PermissionError [WinError 5]`（宿主重命名自己的暂存目录被拒绝；见 §5.1），同样未复现。若 Reviewer 重跑时遇到，请先单独重跑该宿主确认。
 
 Evidence Gaps（如实）：
 * **E16-A**：端到端只观测到 7 个 kind（`K_A`），其余 9 个**未被端到端观测到**；它们由 E16-B（宿主进程内、生产映射与生产 provider 转换、全部 16 个成员 × 4 个必需宿主）覆盖——E16-B 不是传输层证据（L-C2-16）。
