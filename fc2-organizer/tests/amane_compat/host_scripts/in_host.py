@@ -62,25 +62,31 @@ CONFIG_SAMPLES = (
 )
 
 #: 合同第 13.2 节：跨版本等价请求集（case id, 号码, 额外设置）。
+#: E16-A（A1-4）：用例名只描述**刺激**（stimulus），**不得**声称产生了某个 ``SourceErrorKind``；实际观测到的 kind 由网关从结果的
+#: ``detail`` 词汇里读出并逐用例记录（``actual_source_error_kind``）。旧的 ``kind_<x>`` 标签曾虚称未被观测到的 kind，已被替换。
 FETCH_CASES = (
     ("success_all_sources", "FC2-PPV-4979299", {}),
     ("partial_one_source_missing", "FC2-PPV-4825061", {}),
     ("not_found_everywhere", "FC2-PPV-4824605", {}),
-    ("kind_blocked_403", "FC2-PPV-90000001", {}),
-    ("kind_rate_limited_429", "FC2-PPV-90000002", {}),
-    ("kind_timeout_source_deadline", "FC2-PPV-90000003", {"deadline": 1.0}),
-    ("kind_connection_error_closed_port", "FC2-PPV-4979299", {"closed_port": True}),
-    ("kind_http_server_error_503", "FC2-PPV-90000005", {}),
-    ("kind_parse_error", "FC2-PPV-90000006", {}),
-    ("kind_response_too_large", "FC2-PPV-90000007", {}),
-    ("kind_decode_error_bad_charset", "FC2-PPV-90000008", {}),
-    ("kind_redirect_error_loop", "FC2-PPV-90000009", {}),
-    ("kind_cloudflare_challenge_403", "FC2-PPV-90000010", {}),
+    ("stimulus_http_403", "FC2-PPV-90000001", {}),
+    ("stimulus_http_429", "FC2-PPV-90000002", {}),
+    ("stimulus_hang_with_1s_source_deadline", "FC2-PPV-90000003", {"deadline": 1.0}),
+    ("stimulus_closed_port", "FC2-PPV-4979299", {"closed_port": True}),
+    ("stimulus_http_503", "FC2-PPV-90000005", {}),
+    ("stimulus_no_usable_markup", "FC2-PPV-90000006", {}),
+    ("stimulus_oversize_body_3mib", "FC2-PPV-90000007", {}),
+    ("stimulus_unknown_charset", "FC2-PPV-90000008", {}),
+    ("stimulus_redirect_loop", "FC2-PPV-90000009", {}),
+    ("stimulus_cloudflare_challenge_403", "FC2-PPV-90000010", {}),
     ("invalid_query_number_not_a_string", 12345, {}),
     ("invalid_query_foreign_object", "FOREIGN", {}),
     ("not_fc2_content_type", "FC2-PPV-4979299", {"content_type": "censored"}),
     ("cancellation_mid_flight", "FC2-PPV-90000004", {"cancel_after": 0.5}),
 )
+
+#: E16-B（A1-4）：每个 Core ``SourceErrorKind`` 在宿主进程内经**生产**映射与**生产** provider 转换；输入数字号（canonical 与查询形式）。
+E16B_QUERY_NUMBER = "FC2-PPV-4979299"
+E16B_CANONICAL = "FC2-4979299"
 
 
 # ------------------------------------------------------------------------------------------------ 通用
@@ -405,29 +411,134 @@ def op_config_behavior(payload):
 
 
 def op_enumerations(payload):
-    """E16：对 Core ``SourceErrorKind`` 全部成员与宿主 ``FailureReason`` 全部成员，桥 / 映射是全函数且确定。"""
+    """E16（保持不变的部分）：宿主 ``FailureReason`` **全部**成员经桥分类是全函数且确定（v0.15.0：16 个；v0.18.0：17 个）。
+
+    注意：这里**不**覆盖 ``SourceErrorKind``；那是 E16-B（``op_e16b``，经生产映射路径）。旧版本在这里只调用叶子函数
+    ``reason_for_kind``——那不满足 A1-4 的 E16-B，已删除，避免空洞证据被误读。
+    """
     work = Path(payload["work"]) / "enumerations"
 
     def scenario():
         stack = Stack(work, payload["zip_path"], payload["wheel_path"])
         try:
-            outcome = sys.modules[EXT + "._impl._outcome"]
             plugin_module = sys.modules[EXT + "._impl.plugin"]
             FailureReason, RequestError = _host("amane.plugin", "FailureReason", "RequestError")
-
-            kinds = {}
-            for kind in outcome.SourceErrorKind:
-                reason = outcome.reason_for_kind(kind)
-                kinds[kind.name] = {"reason": reason, "is_host_failure_reason": reason in {member.value for member in FailureReason}}
             bridge_type = plugin_module._HostAmaneHttpBridge
             reasons = {}
             for member in FailureReason:
                 exc = RequestError("http://127.0.0.1/enumeration")  # 真实宿主异常对象；``reason`` 是其公共属性（SourceError.reason）
                 exc.reason = member
                 reasons[member.name] = type(bridge_type._map_request_error(exc)).__name__
-            return {"source_error_kinds": kinds, "host_failure_reason_to_http_error": reasons,
-                    "host_failure_reason_members": sorted(member.value for member in FailureReason)}
+            return {"host_failure_reason_to_http_error": reasons, "host_failure_reason_members": sorted(member.value for member in FailureReason)}
         finally:
+            stack.close()
+
+    return _in_thread(scenario)
+
+
+class _InertEngine:
+    """E16-B 的惰性引擎桩：只返回预置的 Core ``AggregationResult``；不发请求、不执行任何上游引擎代码。
+
+    它**只**替代 ``MultiSourceEngine.aggregate``（上游引擎的执行）；``AggregationResult -> 中立结果`` 的映射（``map_aggregation``）与
+    ``中立结果 -> 宿主 SourceError`` 的 provider 转换（``_Fc2MetadataProvider.fetch``）都是**生产代码**，不被替代。
+    """
+
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    async def aggregate(self, canonical):
+        self.calls.append(canonical)
+        return self.result
+
+
+def _e16b_results(kind, SourceResult, SourceStatus, SourceErrorKind, status_for_error_kind):
+    """用 Core 的**公共构造器**构造一个 kind 的 ``SourceResult`` 元组（配置顺序 = ``SOURCES``）。
+
+    运行性 kind：第一个来源 = 该 kind，其余来源 = ``NOT_FOUND``（混合失败；``detail`` 因此同时覆盖“含 NOT_FOUND 的来源”）。
+    ``NOT_FOUND``：全部来源 = ``NOT_FOUND``（非运行性 -> 中立 no-match）。
+    """
+    not_found = [SourceResult(source, SourceStatus.NOT_FOUND, None, 1.0, SourceErrorKind.NOT_FOUND, "controlled not found") for source in SOURCES]
+    if kind is SourceErrorKind.NOT_FOUND:
+        return tuple(not_found)
+    failing = SourceResult(SOURCES[0], status_for_error_kind(kind), None, 1.0, kind, "controlled failure")
+    return (failing, *not_found[1:])
+
+
+def op_e16b(payload):
+    """E16-B（合同第 13.2 节 A1-4）：**每个** ``SourceErrorKind`` 成员，经 Core 公共构造器 -> **生产** ``map_aggregation`` -> **生产**
+    ``_Fc2MetadataProvider.fetch`` 的转换，得到宿主结果类别 / ``FailureReason`` 值 / ``detail`` 全文。
+
+    * 输入对象：``SourceResult`` / ``AggregationResult``（Core 公共构造器；不是手写字典）。
+    * 生产映射路径：``AdapterRuntime.lookup_with_cause`` -> ``map_aggregation``（用计数包装器**证明**每个 kind 都实际经过它）。
+    * 生产 provider 转换：``provider.fetch`` 把中立失败转为 ``SourceError(FailureReason(reason), detail=...)``；``NOT_FOUND`` -> 宿主 ``None``。
+    * 惰性引擎桩只替代上游引擎的执行（见 ``_InertEngine``）。
+    """
+    work = Path(payload["work"]) / "e16b"
+
+    def scenario():
+        stack = Stack(work, payload["zip_path"], payload["wheel_path"])
+        runtime_module, original_map = None, None
+        try:
+            runtime_module = sys.modules[EXT + "._impl._runtime"]
+            original_map = runtime_module.map_aggregation
+            models = importlib.import_module("fc2_metadata_core.models")
+            source_result_module = importlib.import_module("fc2_metadata_core.models.source_result")
+            aggregation = importlib.import_module("fc2_metadata_core.aggregation")
+            SourceErrorKind, SourceResult, SourceStatus = models.SourceErrorKind, models.SourceResult, models.SourceStatus
+            AggregateStatus, AggregationResult = aggregation.AggregateStatus, aggregation.AggregationResult
+            FailureReason, SourceError, ContentType, SearchQuery = _host("amane.plugin", "FailureReason", "SourceError", "ContentType", "SearchQuery")
+
+            mapped = []
+
+            def counting_map(result, canonical):
+                value = original_map(result, canonical)
+                mapped.append((result, canonical, type(value).__name__))
+                return value
+
+            async def drive():
+                provider = await stack.provider()
+                inner = getattr(provider, "_provider", provider)
+                runtime = inner._runtime
+                original_engine = runtime._engine
+                runtime_module.map_aggregation = counting_map
+                kinds, path = {}, {}
+                try:
+                    for kind in SourceErrorKind:
+                        results = _e16b_results(kind, SourceResult, SourceStatus, SourceErrorKind, source_result_module.status_for_error_kind)
+                        aggregate = AggregationResult(number=E16B_CANONICAL, status=AggregateStatus.FAILED, metadata=None, source_results=results)
+                        engine = _InertEngine(aggregate)
+                        runtime._engine = engine
+                        before = len(mapped)
+                        query = SearchQuery(number=E16B_QUERY_NUMBER, content_type=ContentType("fc2"))
+                        reason_is_host_member = None
+                        try:
+                            value = await provider.fetch(query)
+                            row = {"result_category": "None" if value is None else type(value).__name__, "failure_reason": None, "detail": None}
+                        except SourceError as exc:
+                            reason = getattr(exc, "reason", None)
+                            reason_is_host_member = isinstance(reason, FailureReason)
+                            row = {"result_category": "SourceError", "failure_reason": getattr(reason, "value", None), "detail": getattr(exc, "detail", None)}
+                        kinds[kind.name] = row
+                        seen = mapped[before:]
+                        path[kind.name] = {
+                            "core_objects_built_with_public_constructors": isinstance(aggregate, AggregationResult) and all(type(item) is SourceResult for item in results),
+                            "engine_calls": len(engine.calls),
+                            "engine_called_with_canonical": engine.calls == [E16B_CANONICAL],
+                            "map_aggregation_calls": len(seen),
+                            "map_aggregation_input_is_the_core_object": len(seen) == 1 and seen[0][0] is aggregate,
+                            "neutral_result_type": seen[0][2] if len(seen) == 1 else None,
+                            "reason_is_host_failure_reason": reason_is_host_member,
+                            "provider_class": type(inner).__name__,
+                        }
+                finally:
+                    runtime._engine = original_engine
+                return {"kinds": kinds, "production_path": path}
+
+            return asyncio.run(drive())
+        finally:
+            if runtime_module is not None and original_map is not None:
+                runtime_module.map_aggregation = original_map
             stack.close()
 
     return _in_thread(scenario)
@@ -714,6 +825,7 @@ OPS = {
     "config_roundtrip": op_config_roundtrip,
     "config_behavior": op_config_behavior,
     "enumerations": op_enumerations,
+    "e16b": op_e16b,
     "admission": op_admission,
 }
 

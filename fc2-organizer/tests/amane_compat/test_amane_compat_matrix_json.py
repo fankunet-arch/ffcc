@@ -54,6 +54,10 @@ def test_status_rows_are_keyed_by_coordinate_never_by_version_alone(gate, matrix
         "supported_without_full_scenarios", "parity_flag_disagrees", "observed_differs_from_expected", "payload_executed",
         "volatile_local_path", "platform_list_changed", "support_table_changed", "final_artifact_bad_hash", "duplicate_status_row",
         "failure_left_path_changed", "wrong_core_hash", "non_whitelisted_diff",
+        "e16_missing", "e16b_missing_kind", "e16b_extra_kind", "e16b_not_found_wrong_category", "e16b_not_found_as_source_error", "e16b_wrong_reason", "e16b_detail_dropped",
+        "e16b_missing_required_host", "e16b_hosts_disagree", "e16b_path_not_verified_on_a_host", "e16a_old_false_label", "e16a_kind_set_changed", "e16a_missing_required_host",
+        "symlink_unavailable_without_privilege_false", "symlink_unavailable_with_privilege_true", "unavailable_on_a_non_symlink_case", "unavailable_row_with_payload_executed",
+        "symlink_row_missing_for_a_host", "symlink_row_duplicated", "symlink_privilege_on_a_non_symlink_case", "required_host_missing",
     ],
 )
 def test_m2_16_every_self_consistency_violation_is_rejected(gate, matrix, mutation):
@@ -88,9 +92,88 @@ def test_m2_16_every_self_consistency_violation_is_rejected(gate, matrix, mutati
         matrix["core_admission"]["cases"][1]["sys_path_unchanged_on_fail"] = False
     elif mutation == "wrong_core_hash":
         matrix["core_admission"]["core_wheel_sha256"] = "00" * 32
-    else:
+    elif mutation == "non_whitelisted_diff":
         matrix["parity"]["allowed_diffs_observed"] = ["DIFF-99"]
+    else:
+        _apply_evidence_mutation(matrix, mutation)
     assert gate.validate_matrix(matrix) != [], mutation
+
+
+def _symlink_rows(document):
+    return [row for row in document["core_admission"]["cases"] if row["id"].endswith(":sidecar_symlink_to_the_exact_wheel")]
+
+
+def _apply_evidence_mutation(matrix, mutation):
+    """A1：E16-A / E16-B / 符号链接 ``ENVIRONMENTALLY_UNAVAILABLE`` 的每一种违例；每个都必须被校验器拒绝。"""
+    e16 = matrix["parity"]["e16"]
+    outcomes = e16["e16_b"]["outcomes"]
+    if mutation == "e16_missing":
+        del matrix["parity"]["e16"]
+    elif mutation == "e16b_missing_kind":
+        del outcomes["CIRCUIT_OPEN"]
+    elif mutation == "e16b_extra_kind":
+        outcomes["BRAND_NEW_KIND"] = dict(outcomes["BLOCKED"])
+    elif mutation == "e16b_not_found_wrong_category":
+        outcomes["NOT_FOUND"]["result_category"] = "SourceError"
+    elif mutation == "e16b_not_found_as_source_error":
+        outcomes["NOT_FOUND"] = {"result_category": "SourceError", "failure_reason": "unexpected", "detail": "internal adapter error: X"}
+    elif mutation == "e16b_wrong_reason":
+        outcomes["TIMEOUT"]["failure_reason"] = "network"
+    elif mutation == "e16b_detail_dropped":
+        outcomes["BLOCKED"]["detail"] = None
+    elif mutation == "e16b_missing_required_host":
+        del e16["e16_b"]["per_host_sha256"]["b-win"]
+    elif mutation == "e16b_hosts_disagree":
+        e16["e16_b"]["per_host_sha256"]["a-src"] = "00" * 32
+    elif mutation == "e16b_path_not_verified_on_a_host":
+        e16["e16_b"]["production_path_verified_on_hosts"] = ["a-src", "a-win", "b-src"]
+    elif mutation == "e16a_old_false_label":
+        e16["e16_a"]["cases"]["kind_response_too_large"] = {"result_class": "SourceError", "failure_reason": "parse_error", "actual_source_error_kind": ["invalid_response", "parse_error"]}
+        for label in e16["e16_a"]["per_host_sha256"]:
+            e16["e16_a"]["per_host_sha256"][label] = load_tool("run_amane_compat_gate.py").canonical_hash(e16["e16_a"]["cases"])
+    elif mutation == "e16a_kind_set_changed":
+        e16["e16_a"]["observed_kinds"] = sorted([*e16["e16_a"]["observed_kinds"], "decode_error"])
+    elif mutation == "e16a_missing_required_host":
+        del e16["e16_a"]["per_host_sha256"]["a-win"]
+    elif mutation == "symlink_unavailable_without_privilege_false":
+        row = _symlink_rows(matrix)[0]
+        del row["symlink_privilege"]
+    elif mutation == "symlink_unavailable_with_privilege_true":
+        _symlink_rows(matrix)[0]["symlink_privilege"] = True
+    elif mutation == "unavailable_on_a_non_symlink_case":
+        matrix["core_admission"]["cases"][1]["observed"] = "ENVIRONMENTALLY_UNAVAILABLE"
+        matrix["core_admission"]["cases"][1]["symlink_privilege"] = False
+    elif mutation == "unavailable_row_with_payload_executed":
+        _symlink_rows(matrix)[0]["payload_executed"] = True
+    elif mutation == "symlink_row_missing_for_a_host":
+        matrix["core_admission"]["cases"].remove(_symlink_rows(matrix)[0])
+    elif mutation == "symlink_row_duplicated":
+        matrix["core_admission"]["cases"].append(copy.deepcopy(_symlink_rows(matrix)[0]))
+    elif mutation == "symlink_privilege_on_a_non_symlink_case":
+        matrix["core_admission"]["cases"][0]["symlink_privilege"] = False
+    elif mutation == "required_host_missing":
+        matrix["hosts"] = [host for host in matrix["hosts"] if host["label"] != "b-win"]
+    else:
+        raise AssertionError(mutation)
+
+
+def test_the_only_legal_unavailable_row_is_the_symlink_sub_case_with_symlink_privilege_false(gate, matrix):
+    rows = _symlink_rows(matrix)
+    assert sorted(row["id"].split(":")[0] for row in rows) == sorted(gate.REQUIRED_LABELS)
+    assert all(row["observed"] == "ENVIRONMENTALLY_UNAVAILABLE" and row["symlink_privilege"] is False and row["expected"] == "FAIL" for row in rows)
+    assert gate.validate_matrix(matrix) == []
+    executed = copy.deepcopy(matrix)
+    for row in _symlink_rows(executed):  # 有权限的环境：真实执行 -> FAIL == expected，symlink_privilege = true
+        row.update({"observed": "FAIL", "symlink_privilege": True})
+    assert gate.validate_matrix(executed) == []
+
+
+def test_every_e16_b_kind_and_every_required_host_is_expressed_mechanically(gate, matrix):
+    e16 = matrix["parity"]["e16"]
+    assert sorted(e16["e16_b"]["outcomes"]) == sorted(name for name in gate.E16B_EXPECTED_REASON) and e16["e16_b"]["kind_count"] == 16
+    assert e16["e16_b"]["outcomes"]["NOT_FOUND"] == {"result_category": "None", "failure_reason": None, "detail": None}
+    assert set(e16["e16_b"]["per_host_sha256"]) == set(e16["e16_a"]["per_host_sha256"]) == set(gate.REQUIRED_LABELS)
+    assert e16["e16_a"]["observed_kinds"] == sorted(gate.E16A_OBSERVED_KINDS) and len(gate.E16A_OBSERVED_KINDS) == 7
 
 
 def test_blocked_when_a_required_witness_fails_or_is_missing(gate, matrix):
@@ -204,13 +287,37 @@ def test_committed_matrix_parity_is_complete_equal_and_whitelisted(gate):
     parity = _committed_matrix()["parity"]
     assert [(pair["a"], pair["b"]) for pair in parity["required_pairs"]] == [("a-src", "b-src"), ("a-win", "b-win"), ("a-src", "a-win"), ("b-src", "b-win")]
     assert all(pair["equal"] and pair["sha256_a"] == pair["sha256_b"] for pair in parity["required_pairs"])
-    assert {"fetch_cases", "source_error_kind_mapping", "config_booleans", "descriptor_subset", "config_schema_sha256", "identity"} <= set(parity["required_pairs"][0]["fields"])
+    assert {"fetch_cases", "e16a_actual_source_error_kind", "e16b_kind_outcomes", "hc12_variant_statuses", "config_booleans", "descriptor_subset", "config_schema_sha256", "identity"} <= set(parity["required_pairs"][0]["fields"])
+    assert "source_error_kind_mapping" not in parity["required_pairs"][0]["fields"]  # 旧的叶子函数映射（reason_for_kind）不是 E16-B
     assert set(parity["allowed_diffs_observed"]) <= set(gate.DIFF_WHITELIST)
+
+
+def test_committed_matrix_records_e16_a_actual_kinds_and_e16_b_all_16_kinds_on_four_hosts(gate):
+    e16 = _committed_matrix()["parity"]["e16"]
+    assert e16["e16_b"]["kind_count"] == 16 and e16["e16_b"]["equal"] is True and set(e16["e16_b"]["per_host_sha256"]) == set(gate.REQUIRED_LABELS)
+    assert len(set(e16["e16_b"]["per_host_sha256"].values())) == 1 and len(set(e16["e16_a"]["per_host_sha256"].values())) == 1
+    assert e16["e16_b"]["production_path_verified_on_hosts"] == sorted(gate.REQUIRED_LABELS)
+    assert e16["e16_b"]["outcomes"]["NOT_FOUND"] == {"result_category": "None", "failure_reason": None, "detail": None}
+    assert e16["e16_a"]["observed_kinds"] == sorted(gate.E16A_OBSERVED_KINDS)
+    assert not [case for case in e16["e16_a"]["cases"] if case.startswith("kind_")]
+    old_labels = {"kind_decode_error_bad_charset", "kind_redirect_error_loop", "kind_response_too_large"}
+    assert not old_labels & set(e16["e16_a"]["cases"])
+    assert e16["e16_a"]["cases"]["stimulus_redirect_loop"]["actual_source_error_kind"] == ["connection_error"]
+    assert e16["e16_a"]["cases"]["stimulus_oversize_body_3mib"]["actual_source_error_kind"] == ["invalid_response", "parse_error"]
+    assert e16["e16_a"]["cases"]["stimulus_unknown_charset"]["actual_source_error_kind"] == ["invalid_response", "parse_error"]
+
+
+def test_committed_matrix_symlink_sub_case_is_environmentally_unavailable_on_every_required_host(gate):
+    cases = _committed_matrix()["core_admission"]["cases"]
+    rows = [case for case in cases if case["id"].endswith(":sidecar_symlink_to_the_exact_wheel")]
+    assert sorted(row["id"].split(":")[0] for row in rows) == sorted(gate.REQUIRED_LABELS)
+    assert all(row["observed"] == "ENVIRONMENTALLY_UNAVAILABLE" and row["symlink_privilege"] is False for row in rows)
+    assert [case["id"] for case in cases if case["observed"] == "ENVIRONMENTALLY_UNAVAILABLE"] == [row["id"] for row in rows]
 
 
 def test_committed_matrix_core_admission_covers_the_e31_branches_on_every_required_host():
     admission = _committed_matrix()["core_admission"]
-    cases = admission["cases"]
+    cases = [case for case in admission["cases"] if case["observed"] != "ENVIRONMENTALLY_UNAVAILABLE"]  # 唯一的例外 = 符号链接真实宿主子项（见上一个测试）
     assert all(case["observed"] == case["expected"] and case["payload_executed"] is False for case in cases)
     assert all(case["sys_path_unchanged_on_fail"] and case["sys_modules_unchanged_on_fail"] for case in cases if case["expected"] == "FAIL")
     for label in ("a-src", "b-src"):

@@ -226,6 +226,26 @@ def synthetic_matrix(artifacts: dict[str, str], *, identical_main: bool = True) 
     ]
     stable = "0a" * 20
     status = [gate.derive_status(spec["id"], hosts, parity_equal=True, stable_peeled_commit=stable) for spec in gate.SUPPORT_COORDINATES]
+    outcomes = {name: gate.e16b_expected_row(name) for name in gate.E16B_EXPECTED_REASON}
+    stimuli = {
+        "stimulus_http_403": ("http_error", ["blocked"]), "stimulus_http_429": ("rate_limited", ["rate_limited"]),
+        "stimulus_hang_with_1s_source_deadline": ("timeout", ["source_deadline"]), "stimulus_closed_port": ("network", ["connection_error"]),
+        "stimulus_http_503": ("server_error", ["http_server_error"]), "stimulus_no_usable_markup": ("parse_error", ["parse_error"]),
+        "stimulus_unknown_charset": ("parse_error", ["invalid_response", "parse_error"]),
+    }
+    e16a_cases = {name: {"result_class": "SourceError", "failure_reason": reason, "actual_source_error_kind": kinds} for name, (reason, kinds) in stimuli.items()}
+    e16a_cases["success_all_sources"] = {"result_class": "MediaMetadata", "failure_reason": None, "actual_source_error_kind": []}
+    labels = list(gate.REQUIRED_LABELS)
+    e16 = {
+        "e16_a": {"observed_kinds": sorted(gate.E16A_OBSERVED_KINDS), "cases": e16a_cases, "per_host_sha256": {label: gate.canonical_hash(e16a_cases) for label in labels}, "equal": True},
+        "e16_b": {"kind_count": 16, "outcomes": outcomes, "per_host_sha256": {label: gate.canonical_hash(outcomes) for label in labels}, "equal": True,
+                  "production_path_verified_on_hosts": sorted(labels)},
+    }
+    symlink_rows = [
+        {"id": f"{label}:{gate.SYMLINK_CASE}", "mode": "wheel", "python": "3.14.7", "expected": "FAIL", "observed": gate.ENV_UNAVAILABLE, "template": "WHEEL_HASH_MISMATCH",
+         "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": False, "symlink_privilege": False}
+        for label in labels
+    ]
     return {
         "schema_version": 1,
         "tool": {"name": "run_amane_compat_gate", "sha256": digest},
@@ -236,7 +256,7 @@ def synthetic_matrix(artifacts: dict[str, str], *, identical_main: bool = True) 
         },
         "hosts": hosts,
         "artifacts": dict(artifacts),
-        "parity": {"required_pairs": [{"a": "a-src", "b": "b-src", "fields": ["result"], "equal": True, "sha256_a": digest, "sha256_b": digest}], "allowed_diffs_observed": ["DIFF-01"]},
+        "parity": {"required_pairs": [{"a": "a-src", "b": "b-src", "fields": ["result"], "equal": True, "sha256_a": digest, "sha256_b": digest}], "allowed_diffs_observed": ["DIFF-01"], "e16": e16},
         "status": status,
         "platforms_unverified": ["macos", "linux", "docker"],
         "core_admission": {
@@ -244,6 +264,7 @@ def synthetic_matrix(artifacts: dict[str, str], *, identical_main: bool = True) 
             "cases": [
                 {"id": "E31-a", "mode": "loaded", "python": "3.14.7", "expected": "PASS", "observed": "PASS", "template": None, "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": False},
                 {"id": "E31-u", "mode": "wheel", "python": "3.14.7", "expected": "FAIL", "observed": "FAIL", "template": "UNVERIFIABLE", "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": False},
+                *symlink_rows,
             ],
         },
     }

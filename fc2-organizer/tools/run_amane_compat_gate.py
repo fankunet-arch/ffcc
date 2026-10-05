@@ -112,6 +112,176 @@ def _walk_strings(value: object):
             yield from _walk_strings(item)
 
 
+# ------------------------------------------------------------------------------------------------ 证据规则（A1：E16 双轨 / 符号链接 / HC-12）
+# 以下全是**纯逻辑**：期望值是对 P5-C1 冻结表 F / 表 G / 合同第 17.3 节与 P5-C2 合同 A1 的**独立转录**，不读取、不调用被测实现。
+
+ENV_UNAVAILABLE = "ENVIRONMENTALLY_UNAVAILABLE"
+#: ``core_admission.cases[].observed`` 的**唯一**额外取值只能用于这个子项，并且必须与 ``symlink_privilege == false`` 同时出现（A1-3）。
+SYMLINK_CASE = "sidecar_symlink_to_the_exact_wheel"
+REQUIRED_LABELS = ("a-src", "b-src", "a-win", "b-win")
+
+#: P5-C1 表 G：每个 Core ``SourceErrorKind`` 成员 -> ``FailureReason`` 字符串；``None`` = 非运行性（``NOT_FOUND`` -> 中立 no-match -> 宿主 ``None``）。
+#: 键 = 枚举成员名（16 个；缺一 = E16-B FAIL）。
+E16B_EXPECTED_REASON = {
+    "NOT_FOUND": None,
+    "BLOCKED": "http_error",
+    "RATE_LIMITED": "rate_limited",
+    "NETWORK_ERROR": "network",
+    "PARSE_ERROR": "parse_error",
+    "INVALID_RESPONSE": "parse_error",
+    "TIMEOUT": "timeout",
+    "CONNECTION_ERROR": "network",
+    "DECODE_ERROR": "network",
+    "REDIRECT_ERROR": "network",
+    "SOURCE_DEADLINE": "timeout",
+    "CIRCUIT_OPEN": "network",
+    "HTTP_SERVER_ERROR": "server_error",
+    "RESPONSE_TOO_LARGE": "parse_error",
+    "ADAPTER_EXCEPTION": "unexpected",
+    "RESULT_CONTRACT_MISMATCH": "unexpected",
+}
+E16B_SOURCES = ("fc2db_net", "javdb", "av123")
+#: E16-A（A1-4）：4358b3d 的受控传输栈**端到端实际观测**到的 kind 集合 ``K_A``（7 个）；其余 9 个未被观测到（不是“不可诱发”的证明）。
+E16A_OBSERVED_KINDS = ("blocked", "connection_error", "http_server_error", "invalid_response", "parse_error", "rate_limited", "source_deadline")
+E16A_FORBIDDEN_LABEL_PREFIX = "kind_"  # 旧标签（kind_xxx）会虚称一个未必被观测到的 kind；E16-A 用例名只描述刺激
+_DETAIL_PAIR = re.compile(r"(?:^|; )[A-Za-z0-9_]+=([a-z_]+)")
+
+
+def e16b_expected_row(name: str) -> dict:
+    """一个 kind 的期望 {result_category, failure_reason, detail}（detail 格式 = P5-C1 合同第 17.3 节；混合失败夹具：首个来源 = 该 kind，其余 = not_found）。"""
+    reason = E16B_EXPECTED_REASON[name]
+    if reason is None:
+        return {"result_category": "None", "failure_reason": None, "detail": None}
+    pairs = [f"{E16B_SOURCES[0]}={name.lower()}", *(f"{source}=not_found" for source in E16B_SOURCES[1:])]
+    return {"result_category": "SourceError", "failure_reason": reason, "detail": "FC2 lookup failed: " + "; ".join(pairs)}
+
+
+def kinds_from_detail(detail: object) -> list[str]:
+    """从 ``FC2 lookup failed: <source_id>=<kind>; ...`` 读出**实际观测**的 kind 词汇（排序、去重；排除“来源回答了没有这部影片”的 ``not_found``）。"""
+    if not isinstance(detail, str) or not detail.startswith("FC2 lookup failed: "):
+        return []
+    body = detail[len("FC2 lookup failed: "):]
+    return sorted({kind for kind in _DETAIL_PAIR.findall(body) if kind != "not_found"})
+
+
+def e16a_table(cases: dict) -> dict:
+    """E16-A：每个用例记录 ``actual_source_error_kind``（实际观测到的 kind；非 SourceError 的结果 = 空列表）。"""
+    table = {}
+    for case_id, item in sorted(cases.items()):
+        is_error = item.get("class") == "SourceError"
+        table[case_id] = {
+            "result_class": item.get("class"), "failure_reason": item.get("reason") if is_error else None,
+            "actual_source_error_kind": kinds_from_detail(item.get("detail")) if is_error else [],
+        }
+    return table
+
+
+def evaluate_e16a(table: object) -> list[str]:
+    if not isinstance(table, dict) or not table:
+        return ["E16-A: no per-case table"]
+    problems = []
+    observed: set[str] = set()
+    for case_id, row in table.items():
+        kinds = row.get("actual_source_error_kind") if isinstance(row, dict) else None
+        if not isinstance(kinds, list):
+            problems.append(f"E16-A {case_id}: actual_source_error_kind must be recorded")
+            continue
+        if case_id.startswith(E16A_FORBIDDEN_LABEL_PREFIX):
+            problems.append(f"E16-A {case_id}: case labels must describe the stimulus and never claim a SourceErrorKind")
+        observed |= set(kinds)
+    if sorted(observed) != sorted(E16A_OBSERVED_KINDS):
+        problems.append(f"E16-A observed kinds {sorted(observed)} differ from the frozen K_A {sorted(E16A_OBSERVED_KINDS)}")
+    return problems
+
+
+def evaluate_e16b(result: object) -> list[str]:
+    """E16-B 单宿主判据：16 个成员齐全；每个成员的 {结果类别, FailureReason, detail} == 期望；每个成员都**实际**经过生产映射与生产 provider 转换。"""
+    if not isinstance(result, dict) or not isinstance(result.get("kinds"), dict) or not isinstance(result.get("production_path"), dict):
+        return ["E16-B: no result"]
+    problems = []
+    kinds, path = result["kinds"], result["production_path"]
+    for name in sorted(set(E16B_EXPECTED_REASON) - set(kinds)):
+        problems.append(f"E16-B: SourceErrorKind.{name} is missing")
+    for name in sorted(set(kinds) - set(E16B_EXPECTED_REASON)):
+        problems.append(f"E16-B: unexpected member {name}")
+    for name in sorted(set(E16B_EXPECTED_REASON) & set(kinds)):
+        if kinds[name] != e16b_expected_row(name):
+            problems.append(f"E16-B {name}: observed {kinds[name]!r}, expected {e16b_expected_row(name)!r}")
+        row = path.get(name) or {}
+        operational = E16B_EXPECTED_REASON[name] is not None
+        expected_path = {
+            "core_objects_built_with_public_constructors": True, "engine_calls": 1, "engine_called_with_canonical": True,
+            "map_aggregation_calls": 1, "map_aggregation_input_is_the_core_object": True,
+            "neutral_result_type": "AdapterFailure" if operational else "AdapterNoMatch",
+            "reason_is_host_failure_reason": True if operational else None, "provider_class": "_Fc2MetadataProvider",
+        }
+        if row != expected_path:
+            problems.append(f"E16-B {name}: the production mapping / provider path was not exercised as required: {row!r}")
+    return problems
+
+
+def validate_e16(e16: object, required_labels: set[str]) -> list[str]:
+    """Matrix Part A ``parity.e16`` 的 schema 与自洽规则（缺 kind / 缺必需宿主 / NOT_FOUND 类别错误 / 旧标签虚称均被拒绝）。"""
+    if not isinstance(e16, dict) or set(e16) != {"e16_a", "e16_b"}:
+        return ["parity.e16 must hold exactly e16_a and e16_b"]
+    problems = []
+    part_b, part_a = e16["e16_b"], e16["e16_a"]
+    if not isinstance(part_b, dict) or set(part_b) != {"kind_count", "outcomes", "per_host_sha256", "equal", "production_path_verified_on_hosts"}:
+        problems.append("parity.e16.e16_b has the wrong keys")
+    else:
+        outcomes = part_b["outcomes"]
+        if not isinstance(outcomes, dict):
+            problems.append("parity.e16.e16_b.outcomes must be an object")
+        else:
+            problems += [f"parity.e16.e16_b: SourceErrorKind.{name} is missing" for name in sorted(set(E16B_EXPECTED_REASON) - set(outcomes))]
+            problems += [f"parity.e16.e16_b: unexpected member {name}" for name in sorted(set(outcomes) - set(E16B_EXPECTED_REASON))]
+            for name in sorted(set(E16B_EXPECTED_REASON) & set(outcomes)):
+                if outcomes[name] != e16b_expected_row(name):
+                    problems.append(f"parity.e16.e16_b {name}: {outcomes[name]!r} differs from the frozen P5-C1 mapping {e16b_expected_row(name)!r}")
+            if part_b["kind_count"] != len(E16B_EXPECTED_REASON) or len(outcomes) != len(E16B_EXPECTED_REASON):
+                problems.append("parity.e16.e16_b must cover all 16 SourceErrorKind members")
+            hosts = part_b["per_host_sha256"]
+            if not isinstance(hosts, dict) or set(hosts) != required_labels:
+                problems.append("parity.e16.e16_b must cover every required host (a-src, b-src, a-win, b-win)")
+            elif part_b["equal"] is not True or any(value != canonical_hash(outcomes) for value in hosts.values()):
+                problems.append("parity.e16.e16_b: the four required hosts must produce identical normalized outcomes")
+            if part_b["production_path_verified_on_hosts"] != sorted(required_labels):
+                problems.append("parity.e16.e16_b: the production mapping / provider path must be verified on every required host")
+    if not isinstance(part_a, dict) or set(part_a) != {"observed_kinds", "cases", "per_host_sha256", "equal"}:
+        problems.append("parity.e16.e16_a has the wrong keys")
+    else:
+        problems += [f"parity.e16.e16_a: {item}" for item in evaluate_e16a(part_a["cases"])]
+        if part_a["observed_kinds"] != sorted(E16A_OBSERVED_KINDS):
+            problems.append("parity.e16.e16_a.observed_kinds must be exactly the frozen K_A")
+        hosts = part_a["per_host_sha256"]
+        if not isinstance(hosts, dict) or set(hosts) != required_labels:
+            problems.append("parity.e16.e16_a must cover every required host (a-src, b-src, a-win, b-win)")
+        elif part_a["equal"] is not True or any(value != canonical_hash(part_a["cases"]) for value in hosts.values()):
+            problems.append("parity.e16.e16_a: the four required hosts must produce identical normalized results")
+    return problems
+
+
+def validate_symlink_rows(cases: list[dict], required_labels: set[str]) -> list[str]:
+    """A1-3：``ENVIRONMENTALLY_UNAVAILABLE`` 只对符号链接子项合法，并且必须与 ``symlink_privilege == false`` 同时出现；每个必需宿主恰有一行。"""
+    problems = []
+    seen: dict[str, int] = {}
+    for item in cases:
+        label, _, name = item["id"].partition(":")
+        is_symlink = name == SYMLINK_CASE
+        if item["observed"] == ENV_UNAVAILABLE:
+            if not is_symlink or item.get("symlink_privilege") is not False or item["expected"] != "FAIL":
+                problems.append(f"core_admission {item['id']}: {ENV_UNAVAILABLE} is legal only for the symlink sub-case and only together with symlink_privilege=false")
+        elif is_symlink and item.get("symlink_privilege") is not True:
+            problems.append(f"core_admission {item['id']}: an executed symlink row must record symlink_privilege=true (otherwise it is {ENV_UNAVAILABLE})")
+        elif not is_symlink and "symlink_privilege" in item:
+            problems.append(f"core_admission {item['id']}: symlink_privilege belongs to the symlink sub-case only")
+        if is_symlink:
+            seen[label] = seen.get(label, 0) + 1
+    if set(seen) != required_labels or any(count != 1 for count in seen.values()):
+        problems.append("core_admission must hold exactly one symlink sub-case row for every required host")
+    return problems
+
+
 def validate_matrix(document: dict) -> list[str]:
     """schema + 自洽规则（E23 / E24 / M2-16）。返回问题列表（空 = 合格）。"""
     problems: list[str] = []
@@ -165,6 +335,10 @@ def validate_matrix(document: dict) -> list[str]:
             problems.append(f"parity pair {pair['a']}/{pair['b']}: equal flag disagrees with the hashes")
     if not set(document["parity"]["allowed_diffs_observed"]) <= set(DIFF_WHITELIST):
         problems.append("parity.allowed_diffs_observed contains a non-whitelisted difference")
+    required_labels = {host["label"] for host in hosts if host.get("role") == "required"}
+    if required_labels != set(REQUIRED_LABELS):
+        problems.append("the four required hosts a-src / b-src / a-win / b-win must all be present")
+    problems += validate_e16(document["parity"].get("e16"), required_labels)
 
     rows = document["status"]
     status_keys = {"coordinate_id", "amane_version", "host_form", "platform", "status", "reason"}
@@ -198,7 +372,12 @@ def validate_matrix(document: dict) -> list[str]:
     admission = document["core_admission"]
     if not _is_hash(admission["core_wheel_sha256"]) or admission["core_wheel_sha256"] != artifacts["core_wheel_sha256"]:
         problems.append("core_admission.core_wheel_sha256 must equal artifacts.core_wheel_sha256")
+    problems += validate_symlink_rows(admission["cases"], required_labels)
     for item in admission["cases"]:
+        if item["observed"] == ENV_UNAVAILABLE:
+            if item["expected"] != "FAIL" or item["payload_executed"]:
+                problems.append(f"core_admission {item['id']}: bad {ENV_UNAVAILABLE} row")
+            continue  # 该子项没有被真实执行：不套用 observed == expected；替代证据由单元层 + M2-14 提供（A1-3）
         if item["expected"] not in ("PASS", "FAIL") or item["observed"] != item["expected"]:
             problems.append(f"core_admission {item['id']}: observed differs from expected")
         if item["expected"] == "FAIL" and not (item["sys_path_unchanged_on_fail"] and item["sys_modules_unchanged_on_fail"]) :
@@ -708,11 +887,25 @@ def phase_failures(run: HostRun, host: HostProcess) -> None:
     target.write_bytes(art.wheel_bytes)
     try:
         os.symlink(target, directory / art.wheel_name)
-        symlink_executed = True
-        expect("symlink_to_the_exact_wheel", "WHEEL_HASH_MISMATCH")
+        symlink_privilege = True
     except (OSError, NotImplementedError):
-        symlink_executed = False
-    cases["symlink_executed"] = {"executed": symlink_executed, "note": "" if symlink_executed else "no symlink privilege on this account; the lstat-stub variant runs in the unit matrix (E31-i)"}
+        symlink_privilege = False
+    if symlink_privilege:
+        expect("symlink_to_the_exact_wheel", "WHEEL_HASH_MISMATCH")
+        rows[-1]["symlink_privilege"] = True
+        cases["symlink_to_the_exact_wheel"]["symlink_privilege"] = True
+    else:
+        # A1-3：本账户没有创建 file symlink 的 OS 权限（我们不改变系统安全设置）-> 真实宿主子项记为 ENVIRONMENTALLY_UNAVAILABLE：
+        # 既不是 PASS，也不是 FAIL，更不是“当作通过的 skip”。必需的替代证据在单元层：E31-i（3.12 与 3.14；``os.lstat`` 替身只改写 st_mode）+ M2-14 killer。
+        rows.append({
+            "id": f"{run.spec.label}:{SYMLINK_CASE}", "mode": "wheel", "python": run.spec.python_version, "expected": "FAIL", "observed": ENV_UNAVAILABLE,
+            "template": "WHEEL_HASH_MISMATCH", "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": False,
+            "symlink_privilege": False,
+        })
+        cases["symlink_to_the_exact_wheel"] = {
+            "observed": ENV_UNAVAILABLE, "symlink_privilege": False, "real_host_executed": False,
+            "substitute_evidence": "unit E31-i on Python 3.12 and 3.14 (lstat stand-in changes only st_mode) + M2-14 symlink-acceptance mutant KILLED",
+        }
     clear_sidecar(data)
     target.unlink(missing_ok=True)
     sc.record("cases", cases)
@@ -731,22 +924,31 @@ def phase_failures(run: HostRun, host: HostProcess) -> None:
     with zipfile.ZipFile(multi, "w") as archive:
         archive.writestr("a/plugin.py", "x = 1\n")
         archive.writestr("b/plugin.py", "x = 1\n")
-    variants = {
-        "not_a_zip": b"this is not a zip archive",
-        "path_traversal": forged.getvalue(),
-        "no_plugin_py": no_entry.getvalue(),
-        "multiple_top_level_folders": multi.getvalue(),
-        "oversize_over_20_mib": b"0" * (20 * 1024 * 1024 + 1),
-    }
+    # A1-2：HC-12 = 12a..12e，判据逐个冻结。12a = ``.zip`` 文件名 + 非 ZIP 字节：宿主路由只捕获 (ValueError, TypeError, OSError)，
+    # ``zipfile.BadZipFile`` 不是它们的子类 -> 未被捕获 -> HTTP 500（pinned v0.15.0 / v0.18.0 逐字节相同的**已知宿主路由缺陷**；
+    # 在解压 / 导入之前；与本插件 / shim / Core 无关）。12b..12e 仍为 422。**不**把 500 泛化成任何其它安装失败的允许值。
+    variants = (
+        ("12a_not_a_zip", b"this is not a zip archive", 500),
+        ("12b_path_traversal", forged.getvalue(), 422),
+        ("12c_no_plugin_py", no_entry.getvalue(), 422),
+        ("12d_multiple_top_level_folders", multi.getvalue(), 422),
+        ("12e_oversize_over_20_mib", b"0" * (20 * 1024 * 1024 + 1), 422),
+    )
     rows_http = {}
-    for label, payload in variants.items():
+    for label, payload, expected_status in variants:
         status, _body = host.upload(payload)
-        rows_http[label] = {"http_status": status, "sources_entries": sources_entries(data)}
-        # 宿主自身的路由只捕获 (ValueError, TypeError, OSError)：非 zip 会抛出未捕获的 BadZipFile -> HTTP 500（两个版本相同；宿主缺陷，
-        # 与本插件无关）。判据保持“被拒绝且无半装”；该偏差在 HANDOFF 如实记录，不为迁就而伪造 422。
-        allowed = (422, 500) if label == "not_a_zip" else (422,)
-        sc.check(status in allowed and sources_entries(data) == [] and host.plugin_ids() == [], f"{label}: expected {allowed} without residue, got {status} {sources_entries(data)}")
+        residue, registered = sources_entries(data), host.plugin_ids()
+        rows_http[label] = {"http_status": status, "expected_http_status": expected_status, "rejected": status == expected_status and residue == [] and registered == [],
+                            "sources_entries": residue, "registered_plugins": registered}
+        sc.check(status == expected_status and residue == [] and registered == [], f"{label}: expected exactly HTTP {expected_status} with no residue and no registration, got {status} {residue} {registered}")
+    modules = host.probe({"op": "modules"})
+    imported = modules["result"]["ext_names"] if modules.get("ok") else None
+    sc.check(imported == [], f"a rejected upload must never import / execute plugin code: {imported}")
+    for item in rows_http.values():
+        item["plugin_code_executed"] = imported != []
     sc.record("variants", rows_http)
+    sc.record("hc12a_known_pinned_host_route_defect", {"http_status": rows_http["12a_not_a_zip"]["http_status"], "cause": "uncaught zipfile.BadZipFile in the host route (not a plugin / artifact defect)"})
+    run.extras["hc12"] = {label: item["http_status"] for label, item in sorted(rows_http.items())}
     clear_sidecar(data)
 
 
@@ -814,7 +1016,7 @@ def phase_success(run: HostRun, host: HostProcess) -> None:
     patch_ok: dict[str, bool] = {}
     for sample_id, sample in run.oracle["config_samples"]:
         status, _body = host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": sample})
-        patch_ok[sample_id] = status is not None and 200 <= status < 300
+        patch_ok[sample_id] = status == 200  # PATCH 成功 = 精确 200（A1-1：不放宽为状态码区间）
         if patch_ok[sample_id]:
             host.api("PATCH", f"/api/plugins/{PLUGIN_ID}", json_body={"config": BASELINE_CONFIG})
     run.extras["patch_ok"] = patch_ok
@@ -1037,21 +1239,38 @@ def phase_own_stack(run: HostRun, host: HostProcess) -> None:
     sc8.record("behaviour_by_plan", {plan: {"counts": item.get("counts"), "class": item.get("class")} for plan, item in sorted(observed.items())})
     sc8.record("config_change_changes_behaviour", len({item.get("payload_sha256") for item in observed.values()}) >= 2)
 
-    # ---- E16 枚举
+    # ---- E16-A（A1-4）：传输可诱发的 kind，端到端；逐用例记录**实际观测**的 kind（来自 detail 词汇），标签不虚称
+    e16a = e16a_table(run.extras["fetch_cases"])  # type: ignore[arg-type]
+    run.extras["e16a"] = e16a
+    for problem in evaluate_e16a(e16a):
+        sc4.check(False, problem)
+    sc4.record("e16a_actual_source_error_kind_by_case", {case: row["actual_source_error_kind"] for case, row in e16a.items()})
+    sc4.record("e16a_observed_kinds", sorted({kind for row in e16a.values() for kind in row["actual_source_error_kind"]}))
+
+    # ---- E16-B（A1-4）：全部 16 个 SourceErrorKind，在宿主进程内经生产 map_aggregation + 生产 provider 转换
+    answer = host.probe({"op": "e16b", **common})
+    run.extras["e16b"] = answer["result"] if answer.get("ok") else None
+    if not answer.get("ok"):
+        run.extras["e16b_error"] = answer.get("error")
+    problems = evaluate_e16b(run.extras["e16b"])
+    sc4.check(not problems, f"E16-B: {problems[:3]}{' ...' if len(problems) > 3 else ''} {run.extras.get('e16b_error')}")
+    if not problems:
+        outcomes = run.extras["e16b"]["kinds"]  # type: ignore[index]
+        sc4.record("e16b_kind_count", len(outcomes))
+        sc4.record("e16b_outcomes", dict(sorted(outcomes.items())))
+        sc4.record("e16b_every_kind_went_through_the_production_mapping_and_provider_conversion", True)
+
+    # ---- E16（原有要求，保持）：宿主 FailureReason 全部成员经桥分类是全函数且确定
     answer = host.probe({"op": "enumerations", **common})
     run.extras["enumerations"] = answer["result"] if answer.get("ok") else None
     if not answer.get("ok"):
         run.extras["enumerations_error"] = answer.get("error")
     enumeration = run.extras["enumerations"]
     if sc4.check(isinstance(enumeration, dict), f"E16 enumeration unavailable: {run.extras.get('enumerations_error')}"):
-        kinds = enumeration["source_error_kinds"]
-        sc4.check(len(kinds) >= 15 and all(item["is_host_failure_reason"] for item in kinds.values()), f"every Core SourceErrorKind must map to a host FailureReason value: {kinds}")
         bridge = enumeration["host_failure_reason_to_http_error"]
         expected_bridge = {name: ("HttpTimeoutError" if name == "TIMEOUT" else "HttpConnectionError" if name == "NETWORK" else "HttpTransportError") for name in bridge}
         sc4.check(bridge == expected_bridge, f"the bridge classification must be a total deterministic function of the structured reason: {bridge}")
-        sc4.record("source_error_kind_count", len(kinds))
         sc4.record("host_failure_reason_count", len(bridge))
-        sc4.record("kind_to_reason", {name: item["reason"] for name, item in sorted(kinds.items())})
         sc4.record("bridge_classification", dict(sorted(bridge.items())))
 
     # ---- 副作用：宿主的 CrawlerFactory 会为 PluginContext.data_dir 创建 plugins/<id>/（宿主行为）；adapter 不得往里写任何文件
@@ -1293,7 +1512,7 @@ def phase_admission(run: HostRun) -> None:
         rows.append({"id": f"{run.spec.label}:pythonpath_pyc_poc_with_sidecar", "mode": "directory", "python": run.spec.python_version, "expected": "PASS", "observed": "PASS" if status == INSTALLED else "FAIL",
                      "template": None, "sys_path_unchanged_on_fail": True, "sys_modules_unchanged_on_fail": True, "payload_executed": sentinel.exists()})
         sc.record("pythonpath_no_sidecar", {"http_status": 422, "template": "UNVERIFIABLE", "payload_executed": sentinel.exists()})
-        sc.record("pythonpath_with_sidecar", {"http_status": 200, "loaded_from_exact_wheel": bool(modules.get("ok") and modules["result"]["core_archive_basename"] == art.wheel_name)})
+        sc.record("pythonpath_with_sidecar", {"http_status": INSTALLED, "loaded_from_exact_wheel": bool(modules.get("ok") and modules["result"]["core_archive_basename"] == art.wheel_name)})
 
 
 def finish_side_effects(run: HostRun, before: dict, roots: dict[str, Path]) -> None:
@@ -1324,7 +1543,15 @@ def finish_admission(run: HostRun) -> None:
     run.results.pop("HC-19-host", None)
     rows = run.extras.get("admission_rows", [])
     sc.record("sidecar_cases", sorted(run.extras.get("hc11_sidecar_cases", {})))
-    sc.check(all(row["observed"] == row["expected"] for row in rows), f"admission rows mismatch: {[row['id'] for row in rows if row['observed'] != row['expected']]}")
+    def legal_unavailable(row: dict) -> bool:
+        return row["observed"] == ENV_UNAVAILABLE and row["id"].endswith(":" + SYMLINK_CASE) and row.get("symlink_privilege") is False
+    sc.check(all(row["observed"] == row["expected"] or legal_unavailable(row) for row in rows), f"admission rows mismatch: {[row['id'] for row in rows if row['observed'] != row['expected'] and not legal_unavailable(row)]}")
+    symlink_rows = [row for row in rows if row["id"].endswith(":" + SYMLINK_CASE)]
+    sc.check(len(symlink_rows) == 1, f"exactly one symlink sub-case row per host: {len(symlink_rows)}")
+    if symlink_rows:
+        # A1-3：不得把未执行的真实宿主子项表述为 PASS
+        sc.record("real_host_symlink_subcase", symlink_rows[0]["observed"])
+        sc.record("symlink_privilege", symlink_rows[0].get("symlink_privilege"))
     sc.record("admission_row_count", len(rows))
 
 
@@ -1332,10 +1559,12 @@ def finish_admission(run: HostRun) -> None:
 
 
 def parity_payload(run: HostRun) -> dict:
-    enumerations = run.extras.get("enumerations") or {}
+    e16b = run.extras.get("e16b") or {}
     return {
         "fetch_cases": run.extras.get("fetch_cases"),
-        "source_error_kind_mapping": enumerations.get("source_error_kinds"),
+        "e16a_actual_source_error_kind": run.extras.get("e16a"),
+        "e16b_kind_outcomes": e16b.get("kinds"),
+        "hc12_variant_statuses": run.extras.get("hc12"),
         "config_booleans": run.extras.get("config_booleans"),
         "descriptor_subset": run.extras.get("descriptor"),
         "config_schema_sha256": run.extras.get("config_schema_sha256"),
@@ -1361,7 +1590,30 @@ def build_parity(runs: dict[str, HostRun]) -> dict:
         observed.append("DIFF-05")
     if len({run.spec.form for run in runs.values()}) > 1:
         observed.append("DIFF-07")
-    return {"required_pairs": pairs, "allowed_diffs_observed": sorted(observed)}
+    return {"required_pairs": pairs, "allowed_diffs_observed": sorted(observed), "e16": build_e16(runs)}
+
+
+def build_e16(runs: dict[str, "HostRun"]) -> dict:
+    """Matrix Part A ``parity.e16``：E16-A 实际观测 kind + E16-B 全部 16 个 kind，逐必需宿主取哈希；四宿主必须相等。"""
+    labels = [label for label in REQUIRED_LABELS if label in runs]
+    a_tables = {label: runs[label].extras.get("e16a") for label in labels}
+    b_results = {label: runs[label].extras.get("e16b") for label in labels}
+    reference = labels[0] if labels else None
+    a_ref = a_tables.get(reference) or {}
+    b_ref = (b_results.get(reference) or {}).get("kinds") or {}
+    a_hash = {label: canonical_hash(a_tables[label]) for label in labels}
+    b_hash = {label: canonical_hash((b_results[label] or {}).get("kinds")) for label in labels}
+    return {
+        "e16_a": {
+            "observed_kinds": sorted({kind for row in a_ref.values() for kind in row["actual_source_error_kind"]}), "cases": a_ref,
+            "per_host_sha256": a_hash, "equal": bool(labels) and len(set(a_hash.values())) == 1 and all(a_tables.values()),
+        },
+        "e16_b": {
+            "kind_count": len(b_ref), "outcomes": b_ref, "per_host_sha256": b_hash,
+            "equal": bool(labels) and len(set(b_hash.values())) == 1 and all(b_results.values()),
+            "production_path_verified_on_hosts": sorted(label for label in labels if not evaluate_e16b(b_results[label])),
+        },
+    }
 
 
 def host_row(run: HostRun) -> dict:
@@ -1506,7 +1758,7 @@ def cmd_run(options) -> int:
         print(f"matrix problem: {problem}", file=sys.stderr)
     if options.details is not None:
         details = {label: {scenario.id: {"observations": scenario.observations, "failures": scenario.failures} for scenario in run.results.values()} for label, run in runs.items()}
-        extras = {label: {key: value for key, value in run.extras.items() if key in ("phase_errors", "fetch_cases", "enumerations", "enumerations_error", "config_rows_error", "config_booleans", "identity", "admission_rows")} for label, run in runs.items()}
+        extras = {label: {key: value for key, value in run.extras.items() if key in ("phase_errors", "fetch_cases", "e16a", "e16b", "e16b_error", "hc12", "enumerations", "enumerations_error", "config_rows_error", "config_booleans", "identity", "admission_rows")} for label, run in runs.items()}
         options.details.parent.mkdir(parents=True, exist_ok=True)
         options.details.write_text(json.dumps({"scenarios": details, "extras": extras}, indent=1, sort_keys=True, ensure_ascii=False, default=repr), encoding="utf-8")
     options.out.parent.mkdir(parents=True, exist_ok=True)

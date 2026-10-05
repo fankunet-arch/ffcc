@@ -195,9 +195,12 @@ def test_fetch_cases_cover_the_contract_13_2_request_set(in_host):
     cases = {case_id for case_id, _number, _extra in in_host.FETCH_CASES}
     assert {
         "success_all_sources", "partial_one_source_missing", "not_found_everywhere", "invalid_query_number_not_a_string",
-        "invalid_query_foreign_object", "cancellation_mid_flight", "kind_blocked_403", "kind_rate_limited_429", "kind_timeout_source_deadline",
-        "kind_connection_error_closed_port", "kind_http_server_error_503", "kind_parse_error", "kind_response_too_large", "kind_redirect_error_loop",
+        "invalid_query_foreign_object", "cancellation_mid_flight", "stimulus_http_403", "stimulus_http_429", "stimulus_hang_with_1s_source_deadline",
+        "stimulus_closed_port", "stimulus_http_503", "stimulus_no_usable_markup", "stimulus_oversize_body_3mib", "stimulus_redirect_loop",
+        "stimulus_unknown_charset", "stimulus_cloudflare_challenge_403",
     } <= cases
+    # A1-4：用例名只描述刺激，不得再用 ``kind_<x>`` 标签虚称一个未被观测到的 SourceErrorKind
+    assert not [case for case in cases if case.startswith("kind_")]
 
 
 def test_admission_expectations_cover_the_contract_hc_19_source_host_matrix(in_host):
@@ -279,7 +282,8 @@ def test_parity_is_never_vacuous_when_a_host_payload_is_incomplete(gate):
 
     class FakeRun:
         def __init__(self, cases):
-            self.extras = {"fetch_cases": cases, "enumerations": {"source_error_kinds": {"X": 1}, "host_failure_reason_members": ["a"]}, "config_booleans": {"s": True},
+            self.extras = {"fetch_cases": cases, "e16a": {"c": {"actual_source_error_kind": []}}, "e16b": {"kinds": {"X": 1}}, "hc12": {"12a_not_a_zip": 500},
+                           "enumerations": {"host_failure_reason_members": ["a"]}, "config_booleans": {"s": True},
                            "descriptor": {"id": "x"}, "config_schema_sha256": "ab" * 32, "hc13": {"status": 201}, "identity": {"bridge_holds_host_web_client": True}}
 
             class Spec:
@@ -304,10 +308,11 @@ def test_loopback_normalization_removes_the_random_port_from_evidence(gate):
     assert "127.0.0.1" not in json.dumps(normalized)
 
 
-def test_hc_12_non_zip_deviation_is_recorded_not_hidden():
-    """宿主路由对非 zip 返回 500（两版本相同，宿主缺陷）：网关只对该变体放宽状态码，并在源码里写明原因。"""
+def test_hc_12_variants_are_frozen_individually_by_the_a1_amendment():
+    """A1-2：HC-12 = 12a..12e，状态码逐个冻结（12a = 宿主实测 500；12b..e = 422）；不再有“某变体允许 (422, 500)”的集合判据。"""
     text = (REPO / "tools" / "run_amane_compat_gate.py").read_text(encoding="utf-8")
-    assert '(422, 500) if label == "not_a_zip"' in text and "BadZipFile" in text
+    assert "(422, 500)" not in text and "status in allowed" not in text
+    assert "status == expected_status" in text and "BadZipFile" in text
 
 
 def test_matrix_snapshot_helpers_detect_added_removed_and_changed_files(gate, tmp_path):
