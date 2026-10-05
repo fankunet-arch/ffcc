@@ -276,6 +276,18 @@
       },
       {
         "expected": "FAIL",
+        "id": "a-src:sidecar_symlink_to_the_exact_wheel",
+        "mode": "wheel",
+        "observed": "ENVIRONMENTALLY_UNAVAILABLE",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "symlink_privilege": false,
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
         "id": "a-src:sidecar_tampered_same_name_one_byte",
         "mode": "wheel",
         "observed": "FAIL",
@@ -358,6 +370,18 @@
         "observed": "FAIL",
         "payload_executed": false,
         "python": "3.14.7",
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
+        "id": "a-win:sidecar_symlink_to_the_exact_wheel",
+        "mode": "wheel",
+        "observed": "ENVIRONMENTALLY_UNAVAILABLE",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "symlink_privilege": false,
         "sys_modules_unchanged_on_fail": true,
         "sys_path_unchanged_on_fail": true,
         "template": "WHEEL_HASH_MISMATCH"
@@ -639,6 +663,18 @@
       },
       {
         "expected": "FAIL",
+        "id": "b-src:sidecar_symlink_to_the_exact_wheel",
+        "mode": "wheel",
+        "observed": "ENVIRONMENTALLY_UNAVAILABLE",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "symlink_privilege": false,
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
         "id": "b-src:sidecar_tampered_same_name_one_byte",
         "mode": "wheel",
         "observed": "FAIL",
@@ -727,6 +763,18 @@
       },
       {
         "expected": "FAIL",
+        "id": "b-win:sidecar_symlink_to_the_exact_wheel",
+        "mode": "wheel",
+        "observed": "ENVIRONMENTALLY_UNAVAILABLE",
+        "payload_executed": false,
+        "python": "3.14.7",
+        "symlink_privilege": false,
+        "sys_modules_unchanged_on_fail": true,
+        "sys_path_unchanged_on_fail": true,
+        "template": "WHEEL_HASH_MISMATCH"
+      },
+      {
+        "expected": "FAIL",
         "id": "b-win:sidecar_tampered_same_name_one_byte",
         "mode": "wheel",
         "observed": "FAIL",
@@ -740,9 +788,9 @@
     "core_wheel_sha256": "0b3db80c9ab9160d9c925b0066ae9b3af72bf22cb4bf2e5278c43c9f47f4b42d"
   },
   "final_artifacts": {
-    "compatibility_json_sha256": "9af6eae22c727bcbb110dfa18e29bdae1a0bfd027d0b6d8d680668c53b121d06",
-    "release_bundle_sha256": "8297037faf900a2ac45635cfbd2751acff51274f8cba40782a60e4c63de1e010",
-    "sha256sums_sha256": "7900b8401e057f480b5e1ed9bb47f139565588a1a69d0a48d84867b0ec3a0c70"
+    "compatibility_json_sha256": "fc7c7caf945f0dd4cb0a6b623422dc13149396035e4b5ade515b63d672740476",
+    "release_bundle_sha256": "86c1ded8f1013dc8b60dda3cd0873c387ba95eda578cc5d78d963365435bb52c",
+    "sha256sums_sha256": "1d1bf436b1d992af47cf585f7e64e21f19682b85f087e8c76fa634ab9e28f525"
   },
   "hosts": [
     {
@@ -778,7 +826,7 @@
         },
         {
           "id": "HC-04",
-          "observations_sha256": "eeaf1e07a9133536fb4580a94819c3e5ef1f1ec220d318a0250d286deedf6a09",
+          "observations_sha256": "9f4e6ff95f40fdba7d8f678228ba446afb8ba6e114b24d568dd06b7555079c1b",
           "passed": true
         },
         {
@@ -813,12 +861,12 @@
         },
         {
           "id": "HC-11",
-          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "observations_sha256": "1fcff69cbcd91e97f75955477b8c6e685df4702d0ee6b77a203aa691a5d61684",
           "passed": true
         },
         {
           "id": "HC-12",
-          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "observations_sha256": "d9e933e98cef88733e8d6c860edc687b0c960563fa985d63827b2386d82e0d3a",
           "passed": true
         },
         {
@@ -853,7 +901,7 @@
         },
         {
           "id": "HC-19",
-          "observations_sha256": "95019cd7d1d960745b6c0dbfa53aa8ffba486a7a778b129a00e581702c764690",
+          "observations_sha256": "acf051e07e7a963616feae56540a5609af7d8ffd841b08ae9e1333e8f91fa73c",
           "passed": true
         }
       ],
@@ -893,7 +941,7 @@
         },
         {
           "id": "HC-04",
-          "observations_sha256": "ec9c647b2d23d02cb875f36e87c2596cd900083d1de4e618d0ca58ffe775e2e9",
+          "observations_sha256": "dc1310f74590719a52bab587a1e255f5138631c1f3b74e9ec5ddbf2f63d08aea",
           "passed": true
         },
         {
@@ -928,12 +976,12 @@
         },
         {
           "id": "HC-11",
-          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "observations_sha256": "1fcff69cbcd91e97f75955477b8c6e685df4702d0ee6b77a203aa691a5d61684",
           "passed": true
         },
         {
           "id": "HC-12",
-          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "observations_sha256": "d9e933e98cef88733e8d6c860edc687b0c960563fa985d63827b2386d82e0d3a",
           "passed": true
         },
         {
@@ -968,7 +1016,7 @@
         },
         {
           "id": "HC-19",
-          "observations_sha256": "95019cd7d1d960745b6c0dbfa53aa8ffba486a7a778b129a00e581702c764690",
+          "observations_sha256": "acf051e07e7a963616feae56540a5609af7d8ffd841b08ae9e1333e8f91fa73c",
           "passed": true
         }
       ],
@@ -1008,7 +1056,7 @@
         },
         {
           "id": "HC-04",
-          "observations_sha256": "eeaf1e07a9133536fb4580a94819c3e5ef1f1ec220d318a0250d286deedf6a09",
+          "observations_sha256": "9f4e6ff95f40fdba7d8f678228ba446afb8ba6e114b24d568dd06b7555079c1b",
           "passed": true
         },
         {
@@ -1043,12 +1091,12 @@
         },
         {
           "id": "HC-11",
-          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "observations_sha256": "1fcff69cbcd91e97f75955477b8c6e685df4702d0ee6b77a203aa691a5d61684",
           "passed": true
         },
         {
           "id": "HC-12",
-          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "observations_sha256": "d9e933e98cef88733e8d6c860edc687b0c960563fa985d63827b2386d82e0d3a",
           "passed": true
         },
         {
@@ -1083,7 +1131,7 @@
         },
         {
           "id": "HC-19",
-          "observations_sha256": "32bbf6a5943c770d172e1f9045a63b37d98a3a11ade3b46adbc02b1cd48badee",
+          "observations_sha256": "8b4ece586e1fe1fe62e70e39036470a849888ff0bae39716da1f42c219b276ed",
           "passed": true
         }
       ],
@@ -1123,7 +1171,7 @@
         },
         {
           "id": "HC-04",
-          "observations_sha256": "ec9c647b2d23d02cb875f36e87c2596cd900083d1de4e618d0ca58ffe775e2e9",
+          "observations_sha256": "dc1310f74590719a52bab587a1e255f5138631c1f3b74e9ec5ddbf2f63d08aea",
           "passed": true
         },
         {
@@ -1158,12 +1206,12 @@
         },
         {
           "id": "HC-11",
-          "observations_sha256": "95439ac467185469ea6cf5cb301e717c11f63e54bd5f08bee9be9f0d0299b285",
+          "observations_sha256": "1fcff69cbcd91e97f75955477b8c6e685df4702d0ee6b77a203aa691a5d61684",
           "passed": true
         },
         {
           "id": "HC-12",
-          "observations_sha256": "9151cfbffdcfafc4956c2f109de156c6c96f19d0d8ed8199cd503e435555a019",
+          "observations_sha256": "d9e933e98cef88733e8d6c860edc687b0c960563fa985d63827b2386d82e0d3a",
           "passed": true
         },
         {
@@ -1198,7 +1246,7 @@
         },
         {
           "id": "HC-19",
-          "observations_sha256": "32bbf6a5943c770d172e1f9045a63b37d98a3a11ade3b46adbc02b1cd48badee",
+          "observations_sha256": "8b4ece586e1fe1fe62e70e39036470a849888ff0bae39716da1f42c219b276ed",
           "passed": true
         }
       ],
@@ -1231,6 +1279,234 @@
       "DIFF-05",
       "DIFF-07"
     ],
+    "e16": {
+      "e16_a": {
+        "cases": {
+          "cancellation_mid_flight": {
+            "actual_source_error_kind": [],
+            "failure_reason": null,
+            "result_class": "CancelledError"
+          },
+          "invalid_query_foreign_object": {
+            "actual_source_error_kind": [],
+            "failure_reason": "unexpected",
+            "result_class": "SourceError"
+          },
+          "invalid_query_number_not_a_string": {
+            "actual_source_error_kind": [],
+            "failure_reason": "unexpected",
+            "result_class": "SourceError"
+          },
+          "not_fc2_content_type": {
+            "actual_source_error_kind": [],
+            "failure_reason": null,
+            "result_class": "None"
+          },
+          "not_found_everywhere": {
+            "actual_source_error_kind": [],
+            "failure_reason": null,
+            "result_class": "None"
+          },
+          "partial_one_source_missing": {
+            "actual_source_error_kind": [],
+            "failure_reason": null,
+            "result_class": "MediaMetadata"
+          },
+          "stimulus_closed_port": {
+            "actual_source_error_kind": [
+              "connection_error"
+            ],
+            "failure_reason": "network",
+            "result_class": "SourceError"
+          },
+          "stimulus_cloudflare_challenge_403": {
+            "actual_source_error_kind": [
+              "blocked"
+            ],
+            "failure_reason": "http_error",
+            "result_class": "SourceError"
+          },
+          "stimulus_hang_with_1s_source_deadline": {
+            "actual_source_error_kind": [
+              "source_deadline"
+            ],
+            "failure_reason": "timeout",
+            "result_class": "SourceError"
+          },
+          "stimulus_http_403": {
+            "actual_source_error_kind": [
+              "blocked"
+            ],
+            "failure_reason": "http_error",
+            "result_class": "SourceError"
+          },
+          "stimulus_http_429": {
+            "actual_source_error_kind": [
+              "rate_limited"
+            ],
+            "failure_reason": "rate_limited",
+            "result_class": "SourceError"
+          },
+          "stimulus_http_503": {
+            "actual_source_error_kind": [
+              "http_server_error"
+            ],
+            "failure_reason": "server_error",
+            "result_class": "SourceError"
+          },
+          "stimulus_no_usable_markup": {
+            "actual_source_error_kind": [
+              "invalid_response",
+              "parse_error"
+            ],
+            "failure_reason": "parse_error",
+            "result_class": "SourceError"
+          },
+          "stimulus_oversize_body_3mib": {
+            "actual_source_error_kind": [
+              "invalid_response",
+              "parse_error"
+            ],
+            "failure_reason": "parse_error",
+            "result_class": "SourceError"
+          },
+          "stimulus_redirect_loop": {
+            "actual_source_error_kind": [
+              "connection_error"
+            ],
+            "failure_reason": "network",
+            "result_class": "SourceError"
+          },
+          "stimulus_unknown_charset": {
+            "actual_source_error_kind": [
+              "invalid_response",
+              "parse_error"
+            ],
+            "failure_reason": "parse_error",
+            "result_class": "SourceError"
+          },
+          "success_all_sources": {
+            "actual_source_error_kind": [],
+            "failure_reason": null,
+            "result_class": "MediaMetadata"
+          }
+        },
+        "equal": true,
+        "observed_kinds": [
+          "blocked",
+          "connection_error",
+          "http_server_error",
+          "invalid_response",
+          "parse_error",
+          "rate_limited",
+          "source_deadline"
+        ],
+        "per_host_sha256": {
+          "a-src": "1f1b5e945eb56d2662891ea83dcb7da4b524ef843f9b7f4cca5782ad30959de5",
+          "a-win": "1f1b5e945eb56d2662891ea83dcb7da4b524ef843f9b7f4cca5782ad30959de5",
+          "b-src": "1f1b5e945eb56d2662891ea83dcb7da4b524ef843f9b7f4cca5782ad30959de5",
+          "b-win": "1f1b5e945eb56d2662891ea83dcb7da4b524ef843f9b7f4cca5782ad30959de5"
+        }
+      },
+      "e16_b": {
+        "equal": true,
+        "kind_count": 16,
+        "outcomes": {
+          "ADAPTER_EXCEPTION": {
+            "detail": "FC2 lookup failed: fc2db_net=adapter_exception; javdb=not_found; av123=not_found",
+            "failure_reason": "unexpected",
+            "result_category": "SourceError"
+          },
+          "BLOCKED": {
+            "detail": "FC2 lookup failed: fc2db_net=blocked; javdb=not_found; av123=not_found",
+            "failure_reason": "http_error",
+            "result_category": "SourceError"
+          },
+          "CIRCUIT_OPEN": {
+            "detail": "FC2 lookup failed: fc2db_net=circuit_open; javdb=not_found; av123=not_found",
+            "failure_reason": "network",
+            "result_category": "SourceError"
+          },
+          "CONNECTION_ERROR": {
+            "detail": "FC2 lookup failed: fc2db_net=connection_error; javdb=not_found; av123=not_found",
+            "failure_reason": "network",
+            "result_category": "SourceError"
+          },
+          "DECODE_ERROR": {
+            "detail": "FC2 lookup failed: fc2db_net=decode_error; javdb=not_found; av123=not_found",
+            "failure_reason": "network",
+            "result_category": "SourceError"
+          },
+          "HTTP_SERVER_ERROR": {
+            "detail": "FC2 lookup failed: fc2db_net=http_server_error; javdb=not_found; av123=not_found",
+            "failure_reason": "server_error",
+            "result_category": "SourceError"
+          },
+          "INVALID_RESPONSE": {
+            "detail": "FC2 lookup failed: fc2db_net=invalid_response; javdb=not_found; av123=not_found",
+            "failure_reason": "parse_error",
+            "result_category": "SourceError"
+          },
+          "NETWORK_ERROR": {
+            "detail": "FC2 lookup failed: fc2db_net=network_error; javdb=not_found; av123=not_found",
+            "failure_reason": "network",
+            "result_category": "SourceError"
+          },
+          "NOT_FOUND": {
+            "detail": null,
+            "failure_reason": null,
+            "result_category": "None"
+          },
+          "PARSE_ERROR": {
+            "detail": "FC2 lookup failed: fc2db_net=parse_error; javdb=not_found; av123=not_found",
+            "failure_reason": "parse_error",
+            "result_category": "SourceError"
+          },
+          "RATE_LIMITED": {
+            "detail": "FC2 lookup failed: fc2db_net=rate_limited; javdb=not_found; av123=not_found",
+            "failure_reason": "rate_limited",
+            "result_category": "SourceError"
+          },
+          "REDIRECT_ERROR": {
+            "detail": "FC2 lookup failed: fc2db_net=redirect_error; javdb=not_found; av123=not_found",
+            "failure_reason": "network",
+            "result_category": "SourceError"
+          },
+          "RESPONSE_TOO_LARGE": {
+            "detail": "FC2 lookup failed: fc2db_net=response_too_large; javdb=not_found; av123=not_found",
+            "failure_reason": "parse_error",
+            "result_category": "SourceError"
+          },
+          "RESULT_CONTRACT_MISMATCH": {
+            "detail": "FC2 lookup failed: fc2db_net=result_contract_mismatch; javdb=not_found; av123=not_found",
+            "failure_reason": "unexpected",
+            "result_category": "SourceError"
+          },
+          "SOURCE_DEADLINE": {
+            "detail": "FC2 lookup failed: fc2db_net=source_deadline; javdb=not_found; av123=not_found",
+            "failure_reason": "timeout",
+            "result_category": "SourceError"
+          },
+          "TIMEOUT": {
+            "detail": "FC2 lookup failed: fc2db_net=timeout; javdb=not_found; av123=not_found",
+            "failure_reason": "timeout",
+            "result_category": "SourceError"
+          }
+        },
+        "per_host_sha256": {
+          "a-src": "9c36bf2738e8f02c2358621a2dde8036de42aee8811267ec796f7faf35486d23",
+          "a-win": "9c36bf2738e8f02c2358621a2dde8036de42aee8811267ec796f7faf35486d23",
+          "b-src": "9c36bf2738e8f02c2358621a2dde8036de42aee8811267ec796f7faf35486d23",
+          "b-win": "9c36bf2738e8f02c2358621a2dde8036de42aee8811267ec796f7faf35486d23"
+        },
+        "production_path_verified_on_hosts": [
+          "a-src",
+          "a-win",
+          "b-src",
+          "b-win"
+        ]
+      }
+    },
     "required_pairs": [
       {
         "a": "a-src",
@@ -1240,13 +1516,15 @@
           "config_booleans",
           "config_schema_sha256",
           "descriptor_subset",
+          "e16a_actual_source_error_kind",
+          "e16b_kind_outcomes",
           "fetch_cases",
+          "hc12_variant_statuses",
           "hc13_wrong_id_behaviour",
-          "identity",
-          "source_error_kind_mapping"
+          "identity"
         ],
-        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
-        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+        "sha256_a": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688",
+        "sha256_b": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688"
       },
       {
         "a": "a-win",
@@ -1256,13 +1534,15 @@
           "config_booleans",
           "config_schema_sha256",
           "descriptor_subset",
+          "e16a_actual_source_error_kind",
+          "e16b_kind_outcomes",
           "fetch_cases",
+          "hc12_variant_statuses",
           "hc13_wrong_id_behaviour",
-          "identity",
-          "source_error_kind_mapping"
+          "identity"
         ],
-        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
-        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+        "sha256_a": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688",
+        "sha256_b": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688"
       },
       {
         "a": "a-src",
@@ -1272,13 +1552,15 @@
           "config_booleans",
           "config_schema_sha256",
           "descriptor_subset",
+          "e16a_actual_source_error_kind",
+          "e16b_kind_outcomes",
           "fetch_cases",
+          "hc12_variant_statuses",
           "hc13_wrong_id_behaviour",
-          "identity",
-          "source_error_kind_mapping"
+          "identity"
         ],
-        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
-        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+        "sha256_a": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688",
+        "sha256_b": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688"
       },
       {
         "a": "b-src",
@@ -1288,13 +1570,15 @@
           "config_booleans",
           "config_schema_sha256",
           "descriptor_subset",
+          "e16a_actual_source_error_kind",
+          "e16b_kind_outcomes",
           "fetch_cases",
+          "hc12_variant_statuses",
           "hc13_wrong_id_behaviour",
-          "identity",
-          "source_error_kind_mapping"
+          "identity"
         ],
-        "sha256_a": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b",
-        "sha256_b": "14207e5e243b26d2cb6140990537c2f6541b8089cf144562446466f66f248c1b"
+        "sha256_a": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688",
+        "sha256_b": "04e3fae701b463c7f7ef5be8c5ad83ec669ee8f8bba0187ab7146cc8d85ce688"
       }
     ]
   },
@@ -1459,6 +1743,6 @@
   ],
   "tool": {
     "name": "run_amane_compat_gate",
-    "sha256": "84bd627e06afa31de6e15c9542f946724ec2376931c4a8408d932e1850f558bf"
+    "sha256": "b48b3ad27898f130ac1281243e293eb013ca6c06035e70e5f9817233bc557bba"
   }
 }
