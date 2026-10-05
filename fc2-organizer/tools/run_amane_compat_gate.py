@@ -694,10 +694,24 @@ class Artifacts:
 
 
 class Scenario:
+    """一个 HC 场景的结果。**初始不是 PASS**：只有它所依赖的阶段全部正常执行完（``complete_scenarios``）且没有失败记录，才是 PASS。
+
+    “没有失败记录”不等于“通过”：阶段中途被中断时，尚未执行的检查没有任何失败记录——这样的场景必须保持 false。
+    """
+
     def __init__(self, scenario_id: str):
         self.id = scenario_id
         self.failures: list[str] = []
         self.observations: dict[str, object] = {}
+        self.completed = False
+
+    @property
+    def passed(self) -> bool:
+        return self.completed and not self.failures
+
+    def complete(self) -> None:
+        """只由 ``complete_scenarios`` 调用：该场景依赖的所有阶段都已正常执行完。"""
+        self.completed = True
 
     def check(self, condition: object, message: str) -> bool:
         if not condition:
@@ -708,7 +722,7 @@ class Scenario:
         self.observations[key] = value
 
     def result(self) -> dict:
-        return {"id": self.id, "passed": not self.failures, "observations": self.observations, "failures": self.failures}
+        return {"id": self.id, "passed": self.passed, "completed": self.completed, "observations": self.observations, "failures": self.failures}
 
 
 def canonical_hash(value: object) -> str:
@@ -797,6 +811,7 @@ class HostRun:
     oracle: dict
     results: dict[str, Scenario] = field(default_factory=dict)
     extras: dict[str, object] = field(default_factory=dict)
+    completed_phases: set[str] = field(default_factory=set)
 
     def scenario(self, scenario_id: str) -> Scenario:
         self.results[scenario_id] = Scenario(scenario_id)
@@ -808,6 +823,40 @@ class HostRun:
         (base / "logs").mkdir(parents=True, exist_ok=True)
         (base / "cwd").mkdir(parents=True, exist_ok=True)
         return HostProcess(self.spec, base / "data", base / "logs", base / "cwd", extra_env=extra_env)
+
+
+# ------------------------------------------------------------------------------------------------ 场景完成规则（阶段中断 -> 未完成场景保持 false）
+
+#: 每个场景成为 PASS 所必须**完整、正常执行完**的阶段（阶段名 = ``run_host`` 里 ``guarded`` 的名字）。
+#: 阶段抛出异常 / 被中断 -> 依赖它的场景保持 ``completed = False`` -> ``passed = False``。
+SCENARIO_PHASES = {
+    "HC-01": ("success",), "HC-02": ("success",), "HC-03": ("success",), "HC-04": ("own_stack",), "HC-05": ("success", "own_stack"),
+    "HC-06": ("success",), "HC-07": ("success",), "HC-08": ("success", "own_stack"), "HC-09": ("success",), "HC-10": ("failures",),
+    "HC-11": ("failures",), "HC-12": ("failures",), "HC-13": ("success",), "HC-14": ("success",), "HC-15": ("success",),
+    "HC-16": ("core_upgrade",), "HC-17": ("own_stack",), "HC-18": ("failures", "success", "own_stack", "core_upgrade"),
+    "HC-19": ("failures", "success", "core_upgrade"),
+}
+KNOWN_PHASES = frozenset({"failures", "success", "own_stack", "core_upgrade", "admission"})
+
+
+def required_phases(scenario_id: str, form: str) -> frozenset[str]:
+    phases = set(SCENARIO_PHASES[scenario_id])
+    if form == "source" and scenario_id in ("HC-18", "HC-19"):
+        phases.add("admission")  # 源码宿主另有宿主内准入矩阵；HC-18 的快照要覆盖它；冻结包没有这一阶段
+    return frozenset(phases)
+
+
+def scenario_passes(run, scenario_id: str) -> bool:
+    """场景是否已经“真实完成且没有失败”（供依赖它的其它场景使用；与最终 ``Scenario.passed`` 同一判据）。"""
+    item = run.results.get(scenario_id)
+    return item is not None and not item.failures and required_phases(scenario_id, run.spec.form) <= run.completed_phases
+
+
+def complete_scenarios(run) -> None:
+    """把依赖阶段**全部**正常完成的场景标记为 completed；其余保持 false。只在完整运行末尾调用一次。"""
+    for scenario_id, item in run.results.items():
+        if scenario_id in SCENARIO_PHASES and required_phases(scenario_id, run.spec.form) <= run.completed_phases:
+            item.complete()
 
 
 # ------------------------------------------------------------------------------------------------ Group A：失败分支（Core 尚未被加载时）
@@ -1187,7 +1236,7 @@ def phase_own_stack(run: HostRun, host: HostProcess) -> None:
     sc4, sc17 = run.scenario("HC-04"), run.scenario("HC-17")
     if not sc4.check(answer.get("ok"), f"fetch_matrix probe failed: {answer}"):
         sc17.check(False, "fetch_matrix unavailable")
-        return
+        raise GateError("own_stack aborted: the fetch_matrix probe failed")  # 阶段中断：不能当作“正常结束”
     result = answer["result"]
     cases, identity = result["cases"], result["identity"]
     success = cases.get("success_all_sources", {})
@@ -1389,6 +1438,8 @@ def run_host(spec: HostSpec, art: Artifacts, loopback, oracle: dict, work: Path,
         except Exception as exc:  # noqa: BLE001 - 网关把任何阶段异常记为相关场景失败，而不是崩溃
             log(f"{spec.label}: phase {name} raised {type(exc).__name__}: {exc}")
             run.extras.setdefault("phase_errors", {})[name] = f"{type(exc).__name__}: {str(exc)[:300]}"  # type: ignore[index]
+        else:
+            run.completed_phases.add(name)  # 只有正常返回才算该阶段完成
 
     if wanted("failures") or wanted("success"):
         log(f"{spec.label}: lifecycle")
@@ -1429,6 +1480,7 @@ def run_host(spec: HostSpec, art: Artifacts, loopback, oracle: dict, work: Path,
     if only_phases is None:
         finish_side_effects(run, before, roots)
         finish_admission(run)
+        complete_scenarios(run)  # 最后一步：依赖阶段全部正常完成的场景才被标记完成；其余保持 false
     return run
 
 
@@ -1476,7 +1528,7 @@ def phase_admission(run: HostRun) -> None:
     with host:
         answer = host.probe({"op": "admission", "work": str(host.work_dir / "adm"), "zip_path": str(art.zip_path), "wheel_path": str(art.wheel_path)})
     if not sc.check(answer.get("ok"), f"admission probe failed: {answer}"):
-        return
+        raise GateError("admission aborted: the admission probe failed")
     cases = answer["result"]["cases"]
     observed_cases = {}
     for case, (expected, template) in module.ADMISSION_EXPECT.items():
@@ -1531,8 +1583,8 @@ def finish_side_effects(run: HostRun, before: dict, roots: dict[str, Path]) -> N
 def finish_admission(run: HostRun) -> None:
     sc = run.scenario("HC-19")
     for dependency in ("HC-10", "HC-11", "HC-16"):
-        sc.check(dependency in run.results and not run.results[dependency].failures, f"{dependency} (sidecar branches) must pass")
-    sc.check("HC-01" in run.results and not run.results["HC-01"].failures, "the exact pinned wheel must install (PASS branch)")
+        sc.check(scenario_passes(run, dependency), f"{dependency} (sidecar branches) must pass")
+    sc.check(scenario_passes(run, "HC-01"), "the exact pinned wheel must install (PASS branch)")
     if run.spec.form == "source":
         host_part = run.results.get("HC-19-host")
         sc.check(host_part is not None and not host_part.failures, f"in-host admission matrix: {host_part.failures if host_part else 'not run'}")
@@ -1624,7 +1676,7 @@ def host_row(run: HostRun) -> dict:
         if scenario is None:
             scenarios.append({"id": scenario_id, "passed": False, "observations_sha256": canonical_hash({"missing": scenario_id})})
         else:
-            scenarios.append({"id": scenario_id, "passed": not scenario.failures, "observations_sha256": canonical_hash(scenario.observations)})
+            scenarios.append({"id": scenario_id, "passed": scenario.passed, "observations_sha256": canonical_hash(scenario.observations)})
     return {
         "label": spec.label, "coordinate_id": spec.coordinate_id, "role": coordinate(spec.coordinate_id)["role"], "form": spec.form,
         "tag": spec.tag, "tag_object": spec.tag_object, "peeled_commit": spec.peeled_commit, "release_version": spec.release_version,
@@ -1745,10 +1797,13 @@ def cmd_run(options) -> int:
         for label in wanted:
             started = time.time()
             runs[label] = run_host(specs[label], art, loopback, oracle, work, log=lambda message: print(message, file=sys.stderr, flush=True))
-            failed = [(item.id, item.failures) for item in runs[label].results.values() if item.failures]
-            print(f"{label}: {sum(1 for item in runs[label].results.values() if not item.failures)}/{len(runs[label].results)} scenarios passed in {time.time() - started:.0f}s", file=sys.stderr, flush=True)
-            for scenario_id, failures in failed:
-                print(f"  {label} {scenario_id} FAILED: {failures[:3]}", file=sys.stderr, flush=True)
+            failed = [(item.id, item.failures, item.completed) for item in runs[label].results.values() if not item.passed]
+            print(f"{label}: {sum(1 for scenario_id in SCENARIO_IDS if scenario_id in runs[label].results and runs[label].results[scenario_id].passed)}/{len(SCENARIO_IDS)} scenarios passed in {time.time() - started:.0f}s", file=sys.stderr, flush=True)
+            for scenario_id in SCENARIO_IDS:
+                if scenario_id not in runs[label].results:
+                    print(f"  {label} {scenario_id} NOT RUN (its phase aborted before it started)", file=sys.stderr, flush=True)
+            for scenario_id, failures, completed in failed:
+                print(f"  {label} {scenario_id} {'FAILED' if completed or failures else 'INCOMPLETE'}: {failures[:3]}", file=sys.stderr, flush=True)
             for phase, error in (runs[label].extras.get("phase_errors") or {}).items():  # type: ignore[union-attr]
                 print(f"  {label} phase {phase}: {error}", file=sys.stderr, flush=True)
     stable_spec = next((spec for spec in specs.values() if spec.tag == "v0.18.0" and spec.form == "source"), None)
@@ -1757,20 +1812,91 @@ def cmd_run(options) -> int:
     for problem in problems:
         print(f"matrix problem: {problem}", file=sys.stderr)
     if options.details is not None:
-        details = {label: {scenario.id: {"observations": scenario.observations, "failures": scenario.failures} for scenario in run.results.values()} for label, run in runs.items()}
+        details = {label: {scenario.id: {"observations": scenario.observations, "failures": scenario.failures, "completed": scenario.completed} for scenario in run.results.values()} for label, run in runs.items()}
         extras = {label: {key: value for key, value in run.extras.items() if key in ("phase_errors", "fetch_cases", "e16a", "e16b", "e16b_error", "hc12", "enumerations", "enumerations_error", "config_rows_error", "config_booleans", "identity", "admission_rows")} for label, run in runs.items()}
         options.details.parent.mkdir(parents=True, exist_ok=True)
         options.details.write_text(json.dumps({"scenarios": details, "extras": extras}, indent=1, sort_keys=True, ensure_ascii=False, default=repr), encoding="utf-8")
     options.out.parent.mkdir(parents=True, exist_ok=True)
     options.out.write_text(render(part_a), encoding="utf-8", newline="\n")
     # 任一阶段异常（宿主探针中断等）也使运行失败：阶段中断后，该阶段里尚未执行的检查不能因为“没有失败记录”而被当作通过
-    all_passed = all(not item.failures for run in runs.values() for item in run.results.values()) and not any(run.extras.get("phase_errors") for run in runs.values())
+    all_passed = all(run.results.get(scenario_id) is not None and run.results[scenario_id].passed for run in runs.values() for scenario_id in SCENARIO_IDS) and not any(run.extras.get("phase_errors") for run in runs.values())
     print(f"matrix Part A written; sha256={sha256_hex(render(part_a).encode('utf-8'))}; all_scenarios_passed={all_passed}; problems={len(problems)}", file=sys.stderr)
     return 0 if all_passed and not problems else 1
 
 
+def finalize_problems(document: dict) -> list[str]:
+    """Part A 能否进入 finalize（L2 -> L3 -> L4 -> Part B）：自洽（``validate_matrix``）**并且**完整——四个必需宿主各有 HC-01..HC-19 全部 passed、
+    四个必需坐标都是 SUPPORTED / CONDITIONALLY_SUPPORTED、全部 parity 对相等。阶段中断留下的 false / 缺失场景在这里被拒绝。"""
+    problems = list(validate_matrix(document))
+    hosts = {host["label"]: host for host in document.get("hosts", []) if host.get("role") == "required"}
+    for label in REQUIRED_LABELS:
+        host = hosts.get(label)
+        if host is None:
+            problems.append(f"finalize: required host {label} is missing")
+            continue
+        ids = [item["id"] for item in host["scenarios"]]
+        if ids != list(SCENARIO_IDS):
+            problems.append(f"finalize: {label} does not hold exactly HC-01..HC-19 (found {len(ids)} scenarios)")
+        not_passed = [item["id"] for item in host["scenarios"] if item.get("passed") is not True]
+        if not_passed:
+            problems.append(f"finalize: {label} has scenarios that are not PASS: {not_passed}")
+    status = {row["coordinate_id"]: row["status"] for row in document.get("status", [])}
+    for coordinate_id in REQUIRED_COORDINATES:
+        if status.get(coordinate_id) not in ("SUPPORTED", "CONDITIONALLY_SUPPORTED"):
+            problems.append(f"finalize: required coordinate {coordinate_id} is {status.get(coordinate_id)!r}, not SUPPORTED")
+    pairs = document.get("parity", {}).get("required_pairs", [])
+    if not pairs or not all(pair.get("equal") is True for pair in pairs):
+        problems.append("finalize: cross-version parity is not established")
+    if "final_artifacts" in document:
+        problems.append("finalize: the input must be Part A only")
+    return problems
+
+
+def cmd_finalize(options) -> int:
+    """L2 -> L3 -> L4 -> Part B。输入必须是**完整且全绿**的 Part A；否则拒绝，不写任何产物。"""
+    document = json.loads(options.matrix.read_text(encoding="utf-8"))
+    problems = finalize_problems(document)
+    if problems:
+        for problem in problems:
+            print(f"finalize refused: {problem}", file=sys.stderr)
+        return 1
+    release = _tool("build_amane_release.py")
+    wheel = options.core_wheel.resolve()
+    stage1 = release.build_stage1(REPO_ROOT, wheel)
+    for name, data in stage1["files"].items():
+        if (options.stage1_dir / name).read_bytes() != data:
+            print(f"finalize refused: {name}: the stage1 directory differs from a fresh rebuild", file=sys.stderr)
+            return 1
+    if document["artifacts"] != stage1["artifacts"]:
+        print("finalize refused: Part A artifacts differ from the rebuilt Level-0 / Level-1 artifacts", file=sys.stderr)
+        return 1
+    produced = release.build_finalize(stage1, wheel.name, wheel.read_bytes(), document)
+    outer = {"compatibility_json_sha256": sha256_hex(produced["COMPATIBILITY.json"]), "sha256sums_sha256": sha256_hex(produced["SHA256SUMS"]),
+             "release_bundle_sha256": sha256_hex(next(data for name, data in produced.items() if name.endswith(".zip")))}
+    final = {**document, "final_artifacts": outer}
+    problems = validate_matrix(final)
+    if problems:
+        for problem in problems:
+            print(f"finalize refused: {problem}", file=sys.stderr)
+        return 1
+    options.out.mkdir(parents=True, exist_ok=True)
+    for name, data in produced.items():
+        (options.out / name).write_bytes(data)
+    (options.out / "P5_C2_COMPATIBILITY_MATRIX.json").write_text(render(final), encoding="utf-8", newline="\n")
+    for name, value in outer.items():
+        print(f"{name}={value}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "finalize":
+        parser = argparse.ArgumentParser(prog="run_amane_compat_gate.py finalize")
+        parser.add_argument("--core-wheel", required=True, type=Path)
+        parser.add_argument("--stage1-dir", required=True, type=Path)
+        parser.add_argument("--matrix", required=True, type=Path, help="完整且全绿的 Part A（``run`` 的输出）")
+        parser.add_argument("--out", required=True, type=Path)
+        return cmd_finalize(parser.parse_args(argv[1:]))
     if argv and argv[0] == "run":
         parser = argparse.ArgumentParser(prog="run_amane_compat_gate.py run")
         parser.add_argument("--hosts-json", required=True, type=Path, help="tools/prepare_amane_hosts.py 的输出")

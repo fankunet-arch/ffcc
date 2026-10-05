@@ -470,3 +470,209 @@ def test_the_reconciliation_diff_is_limited_to_the_authorised_evidence_surface()
 def test_the_reconciliation_leaves_product_builders_authority_and_governance_files_at_zero_diff():
     touched = [name for name in _changed_since_authority() if any(re.fullmatch(pattern, name) for pattern in RECONCILIATION_ZERO_DIFF)]
     assert touched == [], f"frozen files changed: {touched}"
+
+
+# ================================================================== 场景完成语义：阶段中断 -> 未完成场景 false -> 不能 SUPPORTED -> validator 拒绝 -> finalize 拒绝
+
+
+class _FakeHostRun:
+    """``complete_scenarios`` / ``scenario_passes`` / ``host_row`` 只读取这些属性。"""
+
+    def __init__(self, gate, form="source", phases=()):
+        import types
+
+        self.results = {scenario_id: gate.Scenario(scenario_id) for scenario_id in gate.SCENARIO_IDS}
+        self.completed_phases = set(phases)
+        self.extras = {}
+        self.spec = types.SimpleNamespace(
+            label="a-src", coordinate_id="SC-03", form=form, tag="v0.15.0", tag_object="cd" * 20, peeled_commit="45" * 20, release_version="0.15.0",
+            requires_python=">=3.14", plugin_api_version="1", python_version="3.14.7", platform="windows-x64", api_fingerprint_sha256="ab" * 32,
+            adapter_used_subset_fingerprint_sha256="ab" * 32, deps_lock_sha256="ab" * 32,
+        )
+
+
+def test_a_scenario_is_not_pass_at_creation_and_only_pass_after_it_is_really_completed(gate):
+    scenario = gate.Scenario("HC-04")
+    assert scenario.failures == [] and scenario.completed is False and scenario.passed is False  # “没有失败记录”不是通过
+    scenario.complete()
+    assert scenario.passed is True and scenario.result()["passed"] is True
+    failing = gate.Scenario("HC-04")
+    failing.check(False, "x")
+    failing.complete()
+    assert failing.passed is False
+
+
+def test_the_scenario_phase_table_covers_hc_01_to_hc_19_and_only_known_phases(gate):
+    assert set(gate.SCENARIO_PHASES) == set(gate.SCENARIO_IDS)
+    assert all(set(phases) <= gate.KNOWN_PHASES and phases for phases in gate.SCENARIO_PHASES.values())
+    run_host = _function(GATE.read_text(encoding="utf-8"), "run_host")
+    guarded_names = {node.args[0].value for node in ast.walk(run_host) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "guarded"}
+    assert guarded_names == set(gate.KNOWN_PHASES)  # 表里的阶段名必须就是 run_host 真正执行并登记的阶段名
+    assert gate.required_phases("HC-19", "source") == gate.required_phases("HC-19", "frozen-desktop") | {"admission"}
+    assert "admission" not in gate.required_phases("HC-18", "frozen-desktop")
+
+
+def test_an_aborted_phase_leaves_every_scenario_that_depends_on_it_false_even_without_a_recorded_failure(gate):
+    run = _FakeHostRun(gate, phases={"failures", "success", "core_upgrade", "admission"})  # own_stack 被中断
+    gate.complete_scenarios(run)
+    assert all(not run.results[scenario_id].failures for scenario_id in gate.SCENARIO_IDS)  # 没有任何失败记录（这正是原先被误判为 PASS 的情形）
+    incomplete = {scenario_id for scenario_id in gate.SCENARIO_IDS if not run.results[scenario_id].passed}
+    assert incomplete == {"HC-04", "HC-05", "HC-08", "HC-17", "HC-18"}
+    assert run.results["HC-01"].passed and run.results["HC-10"].passed and run.results["HC-19"].passed
+    assert gate.scenario_passes(run, "HC-01") is True and gate.scenario_passes(run, "HC-04") is False
+
+
+@pytest.mark.parametrize("missing", ["failures", "success", "core_upgrade", "admission"])
+def test_every_single_aborted_phase_is_detected(gate, missing):
+    run = _FakeHostRun(gate, phases=gate.KNOWN_PHASES - {missing})
+    gate.complete_scenarios(run)
+    assert [scenario_id for scenario_id in gate.SCENARIO_IDS if not run.results[scenario_id].passed] != []
+    frozen = _FakeHostRun(gate, form="frozen-desktop", phases=gate.KNOWN_PHASES - {missing})
+    gate.complete_scenarios(frozen)
+    assert (missing == "admission") == all(frozen.results[scenario_id].passed for scenario_id in gate.SCENARIO_IDS)  # 冻结包没有 admission 阶段
+
+
+def test_a_fully_completed_run_passes_all_nineteen_scenarios(gate):
+    run = _FakeHostRun(gate, phases=gate.KNOWN_PHASES)
+    gate.complete_scenarios(run)
+    assert all(run.results[scenario_id].passed for scenario_id in gate.SCENARIO_IDS)
+
+
+def test_the_host_row_reports_false_for_incomplete_and_never_started_scenarios(gate):
+    run = _FakeHostRun(gate, phases={"failures", "success", "core_upgrade", "admission"})
+    del run.results["HC-17"]  # 阶段在该场景创建之前就中断
+    gate.complete_scenarios(run)
+    row = gate.host_row(run)
+    passed = {item["id"]: item["passed"] for item in row["scenarios"]}
+    assert [scenario_id for scenario_id, value in passed.items() if not value] == ["HC-04", "HC-05", "HC-08", "HC-17", "HC-18"]
+    assert len(row["scenarios"]) == 19
+
+
+def test_phase_functions_abort_by_raising_and_never_return_early():
+    tree = ast.parse(GATE.read_text(encoding="utf-8"))
+    for function in (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("phase_")):
+        direct_returns = []
+
+        class Visitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):  # noqa: N802 - 不进入嵌套函数
+                if node is function:
+                    self.generic_visit(node)
+
+            def visit_Return(self, node):  # noqa: N802
+                direct_returns.append(node.lineno)
+
+        Visitor().visit(function)
+        assert direct_returns == [], f"{function.name} returns early at {direct_returns}: an aborted phase must raise, never look like a normal end"
+
+
+def test_a_phase_counts_as_completed_only_when_it_returned_normally_and_only_complete_scenarios_marks_a_scenario():
+    tree = ast.parse(GATE.read_text(encoding="utf-8"))
+    guarded = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "guarded")
+    attempt = next(node for node in ast.walk(guarded) if isinstance(node, ast.Try))
+    assert any("completed_phases" in ast.dump(item) for item in attempt.orelse), "the phase must be registered in the try's else branch (normal return only)"
+    assert not any("completed_phases" in ast.dump(handler) for handler in attempt.handlers)
+    marks = [(function.name, node) for function in ast.walk(tree) if isinstance(function, ast.FunctionDef)
+             for node in ast.walk(function) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "complete"]
+    assert {name for name, _node in marks} == {"complete_scenarios"}, "Scenario.complete() may only be called by complete_scenarios"
+
+
+# ---- scenario false -> coordinate not SUPPORTED -> validator rejects -> finalize rejects
+
+
+def _interrupt(matrix, how):
+    """用 synthetic MATRIX 模拟“必需宿主 a-src 的某个场景因阶段中断而没有 PASS”。"""
+    host = next(item for item in matrix["hosts"] if item["label"] == "a-src")
+    if how == "scenario_false":
+        host["scenarios"][3]["passed"] = False
+    elif how == "scenarios_missing":
+        host["scenarios"] = host["scenarios"][:3]
+    else:
+        raise AssertionError(how)
+
+
+def _rederive(matrix, gate):
+    matrix["status"] = [gate.derive_status(spec["id"], matrix["hosts"], parity_equal=True, stable_peeled_commit="0a" * 20) for spec in gate.SUPPORT_COORDINATES]
+
+
+@pytest.mark.parametrize("how", ["scenario_false", "scenarios_missing"])
+def test_the_chain_incomplete_scenario_blocks_the_coordinate_the_validator_and_finalize(gate, how):
+    matrix = synthetic_matrix(ARTIFACTS)
+    assert gate.finalize_problems(matrix) == []
+    _interrupt(matrix, how)
+    # 1) 该坐标不可能是 SUPPORTED（SC-03 = a-src）
+    assert gate.derive_status("SC-03", matrix["hosts"], parity_equal=True, stable_peeled_commit="0a" * 20)["status"] == "BLOCKED"
+    # 2) 声称它 SUPPORTED 的 MATRIX 被校验器拒绝；finalize 同样拒绝
+    assert any("SUPPORTED is not backed" in problem for problem in gate.validate_matrix(matrix))
+    assert gate.finalize_problems(matrix) != []
+    # 3) 诚实地标成 BLOCKED 的 MATRIX 自洽，但 finalize 仍然拒绝
+    _rederive(matrix, gate)
+    assert [row["status"] for row in matrix["status"] if row["coordinate_id"] == "SC-03"] == ["BLOCKED"]
+    assert gate.validate_matrix(matrix) == []
+    problems = gate.finalize_problems(matrix)
+    assert problems and any("SC-03" in problem for problem in problems) and any("a-src" in problem for problem in problems)
+
+
+def test_finalize_refuses_a_matrix_without_all_four_required_hosts_or_without_parity(gate):
+    matrix = synthetic_matrix(ARTIFACTS)
+    matrix["hosts"] = [host for host in matrix["hosts"] if host["label"] != "b-win"]
+    _rederive(matrix, gate)
+    assert any("b-win" in problem for problem in gate.finalize_problems(matrix))
+    matrix = synthetic_matrix(ARTIFACTS)
+    matrix["parity"]["required_pairs"][0].update({"equal": False, "sha256_b": "cd" * 32})
+    assert any("parity" in problem for problem in gate.finalize_problems(matrix))
+    matrix = synthetic_matrix(ARTIFACTS)
+    matrix["final_artifacts"] = {"compatibility_json_sha256": "11" * 32, "sha256sums_sha256": "22" * 32, "release_bundle_sha256": "33" * 32}
+    assert any("Part A only" in problem for problem in gate.finalize_problems(matrix))
+
+
+def _stage1(tmp_path, core_wheel):
+    release = load_tool("build_amane_release.py")
+    stage1 = release.build_stage1(REPO, core_wheel)
+    directory = tmp_path / "l1"
+    directory.mkdir()
+    for name, data in stage1["files"].items():
+        (directory / name).write_bytes(data)
+    return stage1, directory
+
+
+def _finalize(gate, tmp_path, core_wheel, matrix, directory):
+    import json
+
+    part_a = tmp_path / "partA.json"
+    part_a.write_text(json.dumps(matrix), encoding="utf-8")
+    out = tmp_path / "out"
+    code = gate.main(["finalize", "--core-wheel", str(core_wheel), "--stage1-dir", str(directory), "--matrix", str(part_a), "--out", str(out)])
+    return code, out
+
+
+def test_finalize_cli_writes_l2_l3_l4_and_part_b_for_a_complete_green_part_a(gate, core_wheel, tmp_path):
+    import json
+
+    stage1, directory = _stage1(tmp_path, core_wheel)
+    code, out = _finalize(gate, tmp_path, core_wheel, synthetic_matrix(stage1["artifacts"]), directory)
+    assert code == 0
+    assert sorted(path.name for path in out.iterdir()) == ["COMPATIBILITY.json", "P5_C2_COMPATIBILITY_MATRIX.json", "SHA256SUMS", "ffcc-amane-release-0.1.0.zip"]
+    final = json.loads((out / "P5_C2_COMPATIBILITY_MATRIX.json").read_text(encoding="utf-8"))
+    assert gate.validate_matrix(final) == []
+    assert final["final_artifacts"]["compatibility_json_sha256"] == gate.sha256_hex((out / "COMPATIBILITY.json").read_bytes())
+    assert final["final_artifacts"]["release_bundle_sha256"] == gate.sha256_hex((out / "ffcc-amane-release-0.1.0.zip").read_bytes())
+
+
+@pytest.mark.parametrize("how", ["scenario_false", "scenarios_missing"])
+def test_finalize_cli_refuses_an_interrupted_part_a_and_writes_nothing(gate, core_wheel, tmp_path, how):
+    stage1, directory = _stage1(tmp_path, core_wheel)
+    matrix = synthetic_matrix(stage1["artifacts"])
+    _interrupt(matrix, how)
+    code, out = _finalize(gate, tmp_path, core_wheel, matrix, directory)  # 声称 SUPPORTED 但场景未通过
+    assert code == 1 and not out.exists()
+    _rederive(matrix, gate)  # 诚实的 BLOCKED 也不能 finalize
+    code, out = _finalize(gate, tmp_path, core_wheel, matrix, directory)
+    assert code == 1 and not out.exists()
+
+
+def test_finalize_cli_refuses_part_a_whose_artifacts_are_not_the_rebuilt_ones(gate, core_wheel, tmp_path):
+    stage1, directory = _stage1(tmp_path, core_wheel)
+    matrix = synthetic_matrix(stage1["artifacts"])
+    matrix["artifacts"]["plugin_zip_sha256"] = "00" * 32
+    code, out = _finalize(gate, tmp_path, core_wheel, matrix, directory)
+    assert code == 1 and not out.exists()
