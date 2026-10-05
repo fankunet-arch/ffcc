@@ -232,6 +232,16 @@ class Stack:
             data_dir=self.data_dir,
         )
 
+    def rebuild(self, config):
+        """宿主的 ``apply_rebuild``：同一个 PluginManager（模块不重载），新 CrawlerFactory + 新 PluginConfig。"""
+        CrawlerFactory = _host("amane.crawlers.factory", "CrawlerFactory")
+        self.factory = CrawlerFactory(
+            self.http_client,
+            plugin_manager=self.manager,
+            plugin_configs={PLUGIN_ID: self.plugin_config_type(config=config)},
+            data_dir=self.data_dir,
+        )
+
     def close(self):
         self._host_http.asyncio = self._original_asyncio
 
@@ -364,21 +374,34 @@ def op_config_behavior(payload):
     work = Path(payload["work"]) / "config_behavior"
     base_urls = payload["base_urls"]
     plans = payload["plans"]
-    out = {}
-    for plan_id, config, number in plans:
-        def scenario(plan_id=plan_id, config=config, number=number):
-            rendered = json.loads(json.dumps(config))
-            for entry in rendered.get("sources", []) or []:
-                if entry.get("base_url") == "@loopback":
-                    entry["base_url"] = base_urls[entry["id"]]
-            stack = Stack(work / plan_id, payload["zip_path"], payload["wheel_path"], config=rendered)
-            try:
-                return asyncio.run(_fetch_one(stack, number, {}))
-            finally:
-                stack.close()
+    origin = base_urls["javdb"].rsplit("/", 1)[0]
 
-        out[plan_id] = _in_thread(scenario)
-    return {"plans": out}
+    def render(config):
+        rendered = json.loads(json.dumps(config))
+        for entry in rendered.get("sources", []) or []:
+            if entry.get("base_url") == "@loopback":
+                entry["base_url"] = base_urls[entry["id"]]
+        return rendered
+
+    def scenario():
+        import urllib.request
+
+        stack = Stack(work, payload["zip_path"], payload["wheel_path"], config=render(plans[0][1]))
+        results = {}
+        try:
+            async def run_all():
+                for index, (plan_id, config, number) in enumerate(plans):
+                    if index:
+                        stack.rebuild(render(config))  # 与宿主 PATCH 后的 apply_rebuild 同法：模块常驻，provider 重建
+                    urllib.request.urlopen(f"{origin}/__mark/{plan_id}", timeout=10).read()
+                    results[plan_id] = await _fetch_one(stack, number, {})
+
+            asyncio.run(run_all())
+            return results
+        finally:
+            stack.close()
+
+    return {"plans": _in_thread(scenario)}
 
 
 def op_enumerations(payload):

@@ -436,7 +436,8 @@ def _tool(name: str):
 class Artifacts:
     """被验收的 L0 / L1 确切字节 + 由它们派生的测试变体（临时副本；绝不修改被验收的字节）。"""
 
-    def __init__(self, wheel_path: Path, stage1_dir: Path, work: Path):
+    def __init__(self, wheel_path: Path, stage1_dir: Path, work: Path, *, repo_root: Path | None = None):
+        self.repo_root = Path(repo_root) if repo_root is not None else REPO_ROOT  # mutation 运行时 = 被篡改的仓库副本
         self.release = _tool("build_amane_release.py")
         self.wheel_path = wheel_path
         self.wheel_name = wheel_path.name
@@ -490,7 +491,7 @@ class Artifacts:
             return self._pin_b
         copy = self.work / "pin_b_repo"
         for relative in ("pyproject.toml", "src/fc2_metadata_core", "adapters/amane/fc2_amane_adapter", "adapters/amane/shim", "adapters/amane/release", "docs/acceptance/evidence/P5_C1_HOST_WITNESS.json"):
-            source = REPO_ROOT / relative
+            source = self.repo_root / relative
             if source.is_file():
                 (copy / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, copy / relative)
@@ -785,6 +786,15 @@ def phase_success(run: HostRun, host: HostProcess) -> None:
     sc.record("failures", (body or {}).get("failures") if isinstance(body, dict) else None)
     sc.record("installed_files_equal_zip_files", disk == art.file_set())
     sc.record("file_count", len(disk))
+    # INSTALL 第 3 节第 4 步：把插件加入 FC2 内容类型的来源列表（宿主的内容路由；真实 PATCH /api/config）
+    _cs, config = host.api("GET", "/api/config")
+    original_route = list(((config or {}).get("scraping", {}).get("content_routes", {}) or {}).get("fc2", [])) if _cs == 200 else []
+    patch_status, _ = host.api("PATCH", "/api/config", json_body={"scraping": {"content_routes": {"fc2": [PLUGIN_ID, *original_route]}}})
+    _cs, config = host.api("GET", "/api/config")
+    route_after = list(((config or {}).get("scraping", {}).get("content_routes", {}) or {}).get("fc2", [])) if _cs == 200 else []
+    sc.check(patch_status == 200 and route_after[:1] == [PLUGIN_ID], f"INSTALL step 4 (add the plugin to the FC2 route) must work: {patch_status} {route_after[:3]}")
+    host.api("PATCH", "/api/config", json_body={"scraping": {"content_routes": {"fc2": original_route}}})
+    sc.record("fc2_content_route_accepts_the_plugin", patch_status == 200 and route_after[:1] == [PLUGIN_ID])
 
     # ---- HC-03：descriptor / capabilities / schema
     sc = run.scenario("HC-03")
@@ -1005,20 +1015,21 @@ def phase_own_stack(run: HostRun, host: HostProcess) -> None:
         run.extras["config_rows_error"] = answer.get("error")
 
     # ---- HC-08（行为 oracle：配置变化 -> 新构建的 provider 行为变化；回环请求日志）
-    sc8 = run.results["HC-08"]
+    sc8 = run.results.get("HC-08") or run.scenario("HC-08")
     plans = {
         "disable_fc2db": {"sources": [{"id": "fc2db_net", "enabled": False, "base_url": "@loopback"}, {"id": "javdb", "base_url": "@loopback"}, {"id": "av123", "base_url": "@loopback"}]},
         "all_enabled_reordered": {"sources": [{"id": "av123", "base_url": "@loopback"}, {"id": "javdb", "base_url": "@loopback"}, {"id": "fc2db_net", "base_url": "@loopback"}]},
         "only_javdb_override": {"sources": [{"id": "fc2db_net", "enabled": False, "base_url": "@loopback"}, {"id": "javdb", "base_url": "@loopback"}, {"id": "av123", "enabled": False, "base_url": "@loopback"}]},
     }
     observed = {}
-    for plan_id, config in plans.items():
-        loopback.reset()
-        answer = host.probe({"op": "config_behavior", **common, "plans": [[plan_id, config, "FC2-PPV-4979299"]]})
-        if not sc8.check(answer.get("ok"), f"config_behavior {plan_id}: {answer}"):
-            continue
-        observed[plan_id] = {"counts": loopback.counts_for("4979299"), "class": answer["result"]["plans"][plan_id].get("class"),
-                             "payload_sha256": canonical_hash(normalize_loopback(answer["result"]["plans"][plan_id].get("payload"), base_urls))}
+    loopback.reset()
+    answer = host.probe({"op": "config_behavior", **common, "plans": [[plan_id, config, "FC2-PPV-4979299"] for plan_id, config in plans.items()]})
+    if sc8.check(answer.get("ok"), f"config_behavior: {answer}"):
+        segments = loopback.segments()
+        for plan_id in plans:
+            item = answer["result"]["plans"].get(plan_id, {})
+            observed[plan_id] = {"counts": segments.get(plan_id, {}), "class": item.get("class"),
+                                 "payload_sha256": canonical_hash(normalize_loopback(item.get("payload"), base_urls))}
     sc8.check(observed.get("disable_fc2db", {}).get("counts") == {"av123": 1, "javdb": 1}, f"a disabled source must get no request: {observed.get('disable_fc2db')}")
     sc8.check(observed.get("all_enabled_reordered", {}).get("counts") == {"av123": 1, "fc2db_net": 1, "javdb": 1}, f"all enabled: {observed.get('all_enabled_reordered')}")
     sc8.check(observed.get("only_javdb_override", {}).get("counts") == {"javdb": 1}, f"base_url override reaches the loopback fixture: {observed.get('only_javdb_override')}")
@@ -1043,12 +1054,8 @@ def phase_own_stack(run: HostRun, host: HostProcess) -> None:
         sc4.record("kind_to_reason", {name: item["reason"] for name, item in sorted(kinds.items())})
         sc4.record("bridge_classification", dict(sorted(bridge.items())))
 
-    # ---- 副作用：受控栈的数据目录里除 sources/ 与 _ffcc_core/ 之外不得出现 adapter 写入的运行期目录
-    leftovers = []
-    stack_root = host.work_dir / "stack"
-    for plugins_dir in sorted(stack_root.glob("*/plugins")) if stack_root.exists() else []:
-        leftovers += [item.name for item in plugins_dir.iterdir() if item.name not in ("sources", "_ffcc_core")]
-    run.extras["stack_runtime_leftovers"] = sorted(set(leftovers))
+    # ---- 副作用：宿主的 CrawlerFactory 会为 PluginContext.data_dir 创建 plugins/<id>/（宿主行为）；adapter 不得往里写任何文件
+    run.extras["stack_runtime_leftovers"] = adapter_written_files(host.work_dir / "stack")
 
 
 def finish_config_scenario(run: HostRun) -> None:
@@ -1126,13 +1133,32 @@ def phase_core_upgrade(run: HostRun) -> None:
 # ------------------------------------------------------------------------------------------------ 一台宿主的完整运行
 
 
+def adapter_written_files(root: Path) -> list[str]:
+    """``root`` 之下任意深度的 ``plugins/<id>/``（宿主为 ``PluginContext.data_dir`` 创建）里的文件，以及 ``plugins/`` 下除
+    ``sources/`` / ``_ffcc_core/`` / ``<id>/`` 之外的任何条目。adapter 从不使用 ``context.data_dir``，所以结果必须为空（HC-18 / E19）。"""
+    found: list[str] = []
+    if not root.exists():
+        return found
+    for plugins_dir in sorted(path for path in root.rglob("plugins") if path.is_dir()):
+        for item in plugins_dir.iterdir():
+            if item.name in ("sources", "_ffcc_core"):
+                continue
+            if item.name == PLUGIN_ID and item.is_dir():
+                found += [f"{PLUGIN_ID}/{child.relative_to(item).as_posix()}" for child in item.rglob("*") if child.is_file()]
+            else:
+                found.append(item.name)
+    return sorted(found)
+
+
 def hc18_scan_data_dir(run: HostRun, data_dir: Path) -> list[str]:
-    """数据目录里 ``plugins/`` 下除 ``sources/`` 与 ``_ffcc_core/`` 之外不得出现 adapter 写入的目录。"""
-    root = data_dir / "plugins"
-    return sorted(item.name for item in root.iterdir() if item.name not in ("sources", "_ffcc_core") and item.name != PLUGIN_ID) if root.exists() else []
+    return adapter_written_files(data_dir)
 
 
-def run_host(spec: HostSpec, art: Artifacts, loopback, oracle: dict, work: Path, *, log=print) -> HostRun:
+def run_host(spec: HostSpec, art: Artifacts, loopback, oracle: dict, work: Path, *, log=print, only_phases: set[str] | None = None) -> HostRun:
+    """``only_phases``（mutation 的真实宿主杀手使用）：只执行指定阶段；``None`` = 完整运行（验收）。"""
+    def wanted(name: str) -> bool:
+        return only_phases is None or name in only_phases
+
     run = HostRun(spec=spec, work=work / spec.label, art=art, loopback=loopback, oracle=oracle)
     run.work.mkdir(parents=True, exist_ok=True)
     roots = {"repo": REPO_ROOT, "host_install": Path(spec.install_dir)}
@@ -1145,38 +1171,45 @@ def run_host(spec: HostSpec, art: Artifacts, loopback, oracle: dict, work: Path,
             log(f"{spec.label}: phase {name} raised {type(exc).__name__}: {exc}")
             run.extras.setdefault("phase_errors", {})[name] = f"{type(exc).__name__}: {str(exc)[:300]}"  # type: ignore[index]
 
-    log(f"{spec.label}: lifecycle")
-    host = run.host("lifecycle")
-    try:
-        host.start()
-        described = host.probe({"op": "describe"})
-        if described.get("ok"):
-            spec.python_version = described["result"]["python"]
-            run.extras["frozen_flag"] = described["result"]["frozen"]
-        guarded("failures", phase_failures, run, host)
-        guarded("success", phase_success, run, host)
-        run.extras["lifecycle_plugins_leftovers"] = hc18_scan_data_dir(run, host.data_dir)
-    except GateError as exc:
-        run.extras.setdefault("phase_errors", {})["lifecycle"] = str(exc)[:400]  # type: ignore[index]
-    finally:
-        host.stop()
-    log(f"{spec.label}: controlled stack")
-    host = run.host("own_stack")
-    try:
-        host.start()
-        guarded("own_stack", phase_own_stack, run, host)
-    except GateError as exc:
-        run.extras.setdefault("phase_errors", {})["own_stack"] = str(exc)[:400]  # type: ignore[index]
-    finally:
-        host.stop()
-    finish_config_scenario(run)
-    log(f"{spec.label}: core upgrade")
-    guarded("core_upgrade", phase_core_upgrade, run)
-    if spec.form == "source":
+    if wanted("failures") or wanted("success"):
+        log(f"{spec.label}: lifecycle")
+        host = run.host("lifecycle")
+        try:
+            host.start()
+            described = host.probe({"op": "describe"})
+            if described.get("ok"):
+                spec.python_version = described["result"]["python"]
+                run.extras["frozen_flag"] = described["result"]["frozen"]
+            if wanted("failures"):
+                guarded("failures", phase_failures, run, host)
+            if wanted("success"):
+                guarded("success", phase_success, run, host)
+                run.extras["lifecycle_plugins_leftovers"] = hc18_scan_data_dir(run, host.data_dir)
+        except GateError as exc:
+            run.extras.setdefault("phase_errors", {})["lifecycle"] = str(exc)[:400]  # type: ignore[index]
+        finally:
+            host.stop()
+    if wanted("own_stack"):
+        log(f"{spec.label}: controlled stack")
+        host = run.host("own_stack")
+        try:
+            host.start()
+            guarded("own_stack", phase_own_stack, run, host)
+        except GateError as exc:
+            run.extras.setdefault("phase_errors", {})["own_stack"] = str(exc)[:400]  # type: ignore[index]
+        finally:
+            host.stop()
+        if "patch_ok" in run.extras:
+            finish_config_scenario(run)
+    if wanted("core_upgrade"):
+        log(f"{spec.label}: core upgrade")
+        guarded("core_upgrade", phase_core_upgrade, run)
+    if spec.form == "source" and wanted("admission"):
         log(f"{spec.label}: admission matrix")
         guarded("admission", phase_admission, run)
-    finish_side_effects(run, before, roots)
-    finish_admission(run)
+    if only_phases is None:
+        finish_side_effects(run, before, roots)
+        finish_admission(run)
     return run
 
 
@@ -1268,10 +1301,11 @@ def finish_side_effects(run: HostRun, before: dict, roots: dict[str, Path]) -> N
     after = snapshot_roots(roots, excludes=((REPO_ROOT / "docs" / "acceptance" / "evidence").as_posix(),))
     difference = snapshot_diff(before, after)
     sc.check(not difference, f"files outside the temporary data directory changed: {difference}")
-    sc.check(not run.extras.get("lifecycle_plugins_leftovers"), f"the adapter left runtime directories under plugins/: {run.extras.get('lifecycle_plugins_leftovers')}")
-    sc.check(not run.extras.get("stack_runtime_leftovers"), f"the controlled stack left runtime directories: {run.extras.get('stack_runtime_leftovers')}")
+    sc.check(run.extras.get("lifecycle_plugins_leftovers") == [], f"the adapter wrote files under plugins/: {run.extras.get('lifecycle_plugins_leftovers')}")
+    sc.check(run.extras.get("stack_runtime_leftovers") == [], f"the controlled stack's adapter wrote files: {run.extras.get('stack_runtime_leftovers')}")
     sc.record("changes_outside_data_dir", sorted(difference))
-    sc.record("runtime_dirs_left_by_adapter", sorted(set(run.extras.get("lifecycle_plugins_leftovers") or []) | set(run.extras.get("stack_runtime_leftovers") or [])))
+    sc.record("files_written_by_the_adapter", sorted(set(run.extras.get("lifecycle_plugins_leftovers") or []) | set(run.extras.get("stack_runtime_leftovers") or [])))
+    sc.record("runtime_dir_plugins_id_is_created_by_the_host_not_the_adapter", True)
     sc.record("plugin_tree_written_only_by_the_host_under_sources", True)
 
 

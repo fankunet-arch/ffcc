@@ -14,7 +14,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+#: mutation 测试通过环境变量把整个“被测仓库”换成带补丁的临时副本（见 test_amane_compat_mutation_nonvacuity.py）；
+#: 缺省 = 本文件所在的真实仓库。
+REAL_REPO = Path(__file__).resolve().parents[2]
+REPO = Path(os.environ.get("FFCC_C2_REPO_ROOT") or REAL_REPO)
 TOOLS = REPO / "tools"
 SHIM_DIR = REPO / "adapters" / "amane" / "shim"
 ADAPTER_TREE = REPO / "adapters" / "amane" / "fc2_amane_adapter"
@@ -244,3 +247,30 @@ def synthetic_matrix(artifacts: dict[str, str], *, identical_main: bool = True) 
             ],
         },
     }
+
+
+MUTANT_COPY_PATHS = (
+    "pyproject.toml",
+    "src/fc2_metadata_core",
+    "adapters/amane",
+    "tools",
+    "docs/acceptance/evidence",
+    "docs/specifications/PHASE5_C2_AMANE_COMPATIBILITY_CONTRACT.md",
+    "tests/fixtures/sources",
+    "tests/amane_compat/host_scripts",
+)
+
+
+def make_mutant_repo(destination: Path) -> Path:
+    """mutation 用的完整仓库子集副本（LF 规范化文本；不含 __pycache__ / .git）。"""
+    for relative in MUTANT_COPY_PATHS:
+        source = REAL_REPO / relative
+        files = [source] if source.is_file() else [item for item in sorted(source.rglob("*")) if item.is_file() and "__pycache__" not in item.parts]
+        for item in files:
+            out = destination / relative if source.is_file() else destination / relative / item.relative_to(source)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            data = item.read_bytes()
+            if item.suffix in TEXT_SUFFIXES:
+                data = data.replace(b"\r\n", b"\n")
+            out.write_bytes(data)
+    return destination

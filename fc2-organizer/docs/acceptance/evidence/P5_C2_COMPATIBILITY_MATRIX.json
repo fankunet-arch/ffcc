@@ -739,6 +739,11 @@
     ],
     "core_wheel_sha256": "0b3db80c9ab9160d9c925b0066ae9b3af72bf22cb4bf2e5278c43c9f47f4b42d"
   },
+  "final_artifacts": {
+    "compatibility_json_sha256": "9af6eae22c727bcbb110dfa18e29bdae1a0bfd027d0b6d8d680668c53b121d06",
+    "release_bundle_sha256": "8297037faf900a2ac45635cfbd2751acff51274f8cba40782a60e4c63de1e010",
+    "sha256sums_sha256": "7900b8401e057f480b5e1ed9bb47f139565588a1a69d0a48d84867b0ec3a0c70"
+  },
   "hosts": [
     {
       "adapter_used_subset_fingerprint_sha256": "13b70ba8b1c5abd16c99d9cd1e0bd21634e83ac531d317a7cb8c0ada125066d8",
@@ -758,7 +763,7 @@
       "scenarios": [
         {
           "id": "HC-01",
-          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "observations_sha256": "aabd4aabbc5988d02e114cbacf17b09b97b28b0fb0d050fcdd49eb33e782f25c",
           "passed": true
         },
         {
@@ -843,7 +848,7 @@
         },
         {
           "id": "HC-18",
-          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "observations_sha256": "785e71b56bf79441880878f564f675a34c58558fc807e3a873265ac5036e5c36",
           "passed": true
         },
         {
@@ -873,7 +878,7 @@
       "scenarios": [
         {
           "id": "HC-01",
-          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "observations_sha256": "aabd4aabbc5988d02e114cbacf17b09b97b28b0fb0d050fcdd49eb33e782f25c",
           "passed": true
         },
         {
@@ -958,7 +963,7 @@
         },
         {
           "id": "HC-18",
-          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "observations_sha256": "785e71b56bf79441880878f564f675a34c58558fc807e3a873265ac5036e5c36",
           "passed": true
         },
         {
@@ -988,7 +993,7 @@
       "scenarios": [
         {
           "id": "HC-01",
-          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "observations_sha256": "aabd4aabbc5988d02e114cbacf17b09b97b28b0fb0d050fcdd49eb33e782f25c",
           "passed": true
         },
         {
@@ -1073,7 +1078,7 @@
         },
         {
           "id": "HC-18",
-          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "observations_sha256": "785e71b56bf79441880878f564f675a34c58558fc807e3a873265ac5036e5c36",
           "passed": true
         },
         {
@@ -1103,7 +1108,7 @@
       "scenarios": [
         {
           "id": "HC-01",
-          "observations_sha256": "2b03940b85c23831c60699867f25242cae935cc4e4a19fceb76b599a1d4aff2f",
+          "observations_sha256": "aabd4aabbc5988d02e114cbacf17b09b97b28b0fb0d050fcdd49eb33e782f25c",
           "passed": true
         },
         {
@@ -1188,7 +1193,7 @@
         },
         {
           "id": "HC-18",
-          "observations_sha256": "12f1e858c1be14ddf72cdf40ac04e48e9c738214b9b905adfc90e0488f8a6413",
+          "observations_sha256": "785e71b56bf79441880878f564f675a34c58558fc807e3a873265ac5036e5c36",
           "passed": true
         },
         {
@@ -1454,6 +1459,6 @@
   ],
   "tool": {
     "name": "run_amane_compat_gate",
-    "sha256": "639a9132478f36c8dea965f02cd9d2b5c89453116baded65e3f06bc3efe5ecb0"
+    "sha256": "84bd627e06afa31de6e15c9542f946724ec2376931c4a8408d932e1850f558bf"
   }
 }

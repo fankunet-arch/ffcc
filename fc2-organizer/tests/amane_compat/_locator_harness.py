@@ -381,9 +381,11 @@ def _(ctx):
         wheel = ctx.sidecar_wheel
 
         def lstat_stub(path, *args, **kwargs):
+            real = real_lstat(path, *args, **kwargs)
             if os.fspath(path) == wheel:
-                return os.stat_result((stat.S_IFLNK | 0o777, 0, 0, 1, 0, 0, 10, 0, 0, 0))
-            return real_lstat(path, *args, **kwargs)
+                # 只把 st_mode 改成“符号链接”，其余字段（大小 / 时间戳）保持真实：这样“接受非普通文件”的变异体不会因为大小对不上而被偶然拒绝。
+                return os.stat_result((stat.S_IFLNK | 0o777,) + tuple(real)[1:])
+            return real
 
         os.lstat = lstat_stub
     ctx.extras["symlink_privilege"] = privilege

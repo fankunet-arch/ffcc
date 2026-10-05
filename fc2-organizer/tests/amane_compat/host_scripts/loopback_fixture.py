@@ -132,6 +132,19 @@ class LoopbackFixture:
                     result[source] += 1
         return dict(sorted(result.items()))
 
+    def segments(self) -> dict[str, dict[str, int]]:
+        """``/__mark/<label>`` 之后到下一个标记之前的每来源请求数（用于同一宿主栈内按计划分段统计）。"""
+        result: dict[str, dict[str, int]] = {}
+        current: str | None = None
+        with self._lock:
+            for source, value in self.log:
+                if source == "__mark__":
+                    current = value
+                    result.setdefault(current, {})
+                elif current is not None and value != "redirect-hop":
+                    result[current][source] = result[current].get(source, 0) + 1
+        return {label: dict(sorted(counts.items())) for label, counts in result.items()}
+
     def sequence(self) -> list[str]:
         with self._lock:
             return [source for source, _digits in self.log]
@@ -165,6 +178,11 @@ class LoopbackFixture:
 
     def _handle(self, handler: BaseHTTPRequestHandler) -> None:
         parts = urlsplit(handler.path)
+        if parts.path.startswith("/__mark/"):
+            with self._lock:
+                self.log.append(("__mark__", parts.path[len("/__mark/"):]))
+            self._reply(handler, 200, b"marked", "text/plain; charset=utf-8")
+            return
         if re.fullmatch(r"/(fc2db|javdb|av123)/r\d+", parts.path):  # 重定向环的后续跳转
             with self._lock:
                 self.log.append(({"fc2db": "fc2db_net", "javdb": "javdb", "av123": "av123"}[parts.path.split("/")[1]], "redirect-hop"))

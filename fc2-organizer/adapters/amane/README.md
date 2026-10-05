@@ -1,7 +1,10 @@
-# FC2 Metadata（ffcc）Amane 来源插件 —— 安装骨架说明
+# FC2 Metadata（ffcc）Amane 来源插件
 
-> **状态：P5-C1 实现候选（等待独立 Level 1 Review）。** 本文档只描述 **P5-C1 的安装骨架**。
-> **最终分发包、Core 的最终供给方式、安装 / 重载 / 配置往返验收、当前发布线兼容矩阵均属 P5-C2，本包不声称完成。**
+> **状态：P5-C1（CLOSED）= adapter 语义；P5-C2 = 宿主兼容与发布 closure，实现候选（等待独立 Level 1 Review）。**
+> 对外安装请使用 **P5-C2 发布包**（plugin zip + 独立 Core wheel + 校验清单 + 安装说明）。本文件只描述目录与入口；
+> 面向用户的安装步骤见 `adapters/amane/release/INSTALL.zh-CN.md`，规范见
+> `docs/specifications/PHASE5_C2_AMANE_COMPATIBILITY_CONTRACT.md`，证据见 `docs/review/P5_C2_HANDOFF.md`。
+> 支持声明是**坐标级**的（`(Amane 版本, 宿主形态, 平台)`；SC-01..SC-04 经验证，macOS / Linux / Docker 为 UNVERIFIED），不是版本全局的。
 
 ## 它是什么
 
@@ -19,7 +22,10 @@ Amane host（Python >= 3.14，v0.15.0）
 
 ```text
 adapters/amane/
-  api_manifest/amane_v0.15.0_api_manifest.json   从 exact v0.15.0（45dff21…）源码 AST 生成的公共 API 清单
+  api_manifest/amane_v0.15.0_api_manifest.json   从 exact v0.15.0（45dff21…）源码 AST 生成的公共 API 清单（P5-C1）
+  api_manifest/amane_v0.18.0_api_manifest.json   从 exact v0.18.0（0a8a731d…）源码 AST 生成的公共 API 清单（P5-C2）
+  shim/                                           P5-C2：plugin.py（冻结三行）+ _ffcc_locator.py（Core 准入）
+  release/                                        P5-C2：INSTALL.zh-CN.md、core_release_ledger.json
   fc2_amane_adapter/                              插件树（没有 __init__.py；plugin.py 在树根）
     plugin.py        宿主侧入口（唯一 import amane.plugin / pydantic 的模块）
     _core_gate.py    Core 缺失 / 不兼容时的固定 ImportError 翻译
@@ -30,7 +36,22 @@ adapters/amane/
     _outcome.py      AggregationResult -> 中立结果（状态 / 错误 / 字段映射与窄化）
 ```
 
-## 前置条件（P5-C1 冻结的最小要求）
+## P5-C2：最终分发与 Core 供给（摘要）
+
+* 最终 plugin zip = `shim/`（plugin.py + `_ffcc_locator.py` + 构建期生成的 `_ffcc_pin.py`）+ `_impl/`（本树的 **LF 规范化字节**）。
+* Core **不进入** plugin zip：独立的、确定性的 `fc2_metadata_core-<ver>-py3-none-any.whl` 由用户放进 `{数据目录}/plugins/_ffcc_core/`；
+  locator 只接受**那一个 exact pinned wheel**（文件名 + 整个文件 sha256 + 普通文件 + 大小有界 + `zipimporter` 精确类型 + 来源同根），
+  其它形态（pip / 解压 / editable / 源码 / `PYTHONPATH`）一律 fail closed。校验只保证**准入时刻**的完整性，不是运行期不可变性。
+* 构建：
+
+  ```powershell
+  python tools\build_core_wheel.py --out <dir>
+  python tools\build_amane_release.py stage1 --core-wheel <whl> --out <dir>
+  python tools\run_amane_compat_gate.py run --hosts-json <hosts.json> --core-wheel <whl> --stage1-dir <dir> --work <临时目录> --out <MATRIX.json>
+  python tools\build_amane_release.py finalize --core-wheel <whl> --stage1-dir <dir> --matrix <MATRIX.json> --out <dir>
+  ```
+
+## 前置条件（P5-C1 冻结的最小要求；P5-C2 的供给方式见上）
 
 1. 宿主：Amane **v0.15.0**，Python **>= 3.14**。
 2. **`fc2_metadata_core` 必须能在 Amane 所在的同一个 Python 解释器中被 import**（安装到该环境，或位于其 `sys.path` 上）。
@@ -40,17 +61,17 @@ adapters/amane/
      FC2 Metadata Core 未安装或版本不兼容：请在 Amane 所在的 Python 环境中安装 fc2-metadata-core（缺失模块：<模块名>）
      ```
 
-   - 注意：Amane 的开发文档写明插件“不能声明自己的 pip 依赖”。把 Core 预装到宿主解释器超出了宿主文档承诺的支持范围
-     （合同 L-08）；Core 的最终供给方式由 **P5-C2** 决定，本包**不**复制 / vendor / 打包 Core 源码。
+   - 注意：Amane 的开发文档写明插件“不能声明自己的 pip 依赖”。**P5-C2 已决定**：Core 以 sidecar wheel 供给（见上），
+     pip / 目录形态不被接受；本包**不**复制 / vendor / 打包 Core 源码。
 
-## 构建确定性的插件 zip（骨架）
+## 构建确定性的插件 zip（P5-C1 骨架；最终分发物见 P5-C2 的 `tools\build_amane_release.py`）
 
 ```powershell
 python tools\build_amane_plugin_zip.py --tree adapters\amane\fc2_amane_adapter --out <输出.zip>
 ```
 
 zip 的唯一顶层文件夹是 `ffcc.fc2-metadata/`，其下是插件树的全部 `*.py`；条目排序、固定时间戳 / 权限、LF 换行，
-相同输入得到字节相同的产物。**这不是最终可分发包。** 也可以手动把插件树复制到
+相同输入得到字节相同的产物。**这不是最终可分发包（最终包由 P5-C2 构建器生成）。** 也可以手动把插件树复制到
 `{data_dir}/plugins/sources/ffcc.fc2-metadata/`（目录名必须等于插件 id）。
 
 ## 配置（Amane 插件配置的 `config` 对象）
