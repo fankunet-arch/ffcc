@@ -1763,7 +1763,8 @@ def cmd_run(options) -> int:
         options.details.write_text(json.dumps({"scenarios": details, "extras": extras}, indent=1, sort_keys=True, ensure_ascii=False, default=repr), encoding="utf-8")
     options.out.parent.mkdir(parents=True, exist_ok=True)
     options.out.write_text(render(part_a), encoding="utf-8", newline="\n")
-    all_passed = all(not item.failures for run in runs.values() for item in run.results.values())
+    # 任一阶段异常（宿主探针中断等）也使运行失败：阶段中断后，该阶段里尚未执行的检查不能因为“没有失败记录”而被当作通过
+    all_passed = all(not item.failures for run in runs.values() for item in run.results.values()) and not any(run.extras.get("phase_errors") for run in runs.values())
     print(f"matrix Part A written; sha256={sha256_hex(render(part_a).encode('utf-8'))}; all_scenarios_passed={all_passed}; problems={len(problems)}", file=sys.stderr)
     return 0 if all_passed and not problems else 1
 

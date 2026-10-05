@@ -104,6 +104,11 @@ def test_r2_hc12_records_rejection_residue_registration_and_that_plugin_code_nev
         assert needle in source, needle
 
 
+def test_an_aborted_host_phase_fails_the_whole_run_instead_of_leaving_unexecuted_checks_green():
+    source = GATE.read_text(encoding="utf-8")
+    assert 'and not any(run.extras.get("phase_errors") for run in runs.values())' in source
+
+
 def test_r2_the_variant_statuses_enter_the_cross_host_parity_payload(gate):
     class Run:
         extras = {"hc12": {"12a_not_a_zip": 500}}
