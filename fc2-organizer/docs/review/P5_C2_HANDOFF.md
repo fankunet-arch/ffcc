@@ -11,8 +11,9 @@ Governance               : Acceleration v2（docs/PROJECT_GOVERNANCE_ACCELERATIO
 Risk Class               : C（外部可执行 artifact 信任边界；Risk C 不拆分 S1/S2/S3；U2-1..U2-12 均未触发）
 S1                       : 3191ffa feat(phase5): implement P5-C2 compatibility supply
 S2                       : 7a401c1 test(phase5): complete P5-C2 host compatibility
-S3                       : 本提交 docs(phase5): complete P5-C2 acceptance evidence（`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C2_HANDOFF.md`）
-Final Implementation Head: 同 S3（线性历史；无 amend / rebase / squash / force push）
+S3                       : b51836395ead93816a9370da1bf2611d3f8b5041 docs(phase5): complete P5-C2 acceptance evidence
+S3 follow-up（docs-only）  : 本文件的最后一次修改（只追加 §5.1 的干净检出验证记录；`git log -1 --format=%H -- fc2-organizer/docs/review/P5_C2_HANDOFF.md`）
+Final Implementation Head: 分支 HEAD（= S3 follow-up；线性历史；无 amend / rebase / squash / force push；L0 / L1 的输入文件自 S3 起未再改变）
 Architecture Blocker     : NONE
 Authority Escalation     : NONE
 Next                     : P5-C2 INDEPENDENT LEVEL 1 REVIEW（Reviewer 必须在自己的 checkout 上独立重跑 E31 与 M2-14..M2-23，不得只引用本文）
@@ -28,7 +29,7 @@ Next                     : P5-C2 INDEPENDENT LEVEL 1 REVIEW（Reviewer 必须在
 |---|---|
 | P5-C1 Final Closure Docs Head | `232ece06c1d166929846bc9c63ffc7314ea3a484`（= Package Frozen Base） |
 | P5-C1 adapter tree（零 diff） | `tree_sha256 = 9fe3dc3b9e815ec3768eec636db6747a68192d97112ea42e9a8545440cb40f82` == `P5_C1_HOST_WITNESS.adapter_tree_sha256` |
-| 线性提交 | `f358aca` Design Accepted Head → `3191ffa` S1 → `7a401c1` S2 → S3（本提交） |
+| 线性提交 | `f358aca` Design Accepted Head → `3191ffa` S1 → `7a401c1` S2 → `b518363` S3 → S3 follow-up（docs-only，见 §5.1） |
 | Amane v0.15.0 | tag 对象 `3292c957a092f85ddde1ba7462ffe9813827f4f1`，peeled `45dff2159369883e028a296d775a4598836c1ddd`，`requires-python >=3.14`，`PLUGIN_API_VERSION = "1"` |
 | Amane v0.18.0（当前稳定版） | tag 对象 `7d2190704fa1e3c0f7f86889111d12b9fa6701c8`，peeled `0a8a731d7746bde5e8828d1eb74c7bd9752b42e4`，GitHub Release 非 draft / 非 prerelease，`published_at = 2026-10-04T14:44:36Z`，`requires-python >=3.14`，`PLUGIN_API_VERSION = "1"` |
 | current main | `0a8a731d7746bde5e8828d1eb74c7bd9752b42e4` == v0.18.0 -> SC-05 = `IDENTICAL_TO_STABLE`（不重复计作独立见证） |
@@ -141,7 +142,18 @@ P5_C2_COMPATIBILITY_MATRIX.json（Part A + Part B）文件 sha256 = b5250b730d81
 ```
 
 验证（`final_pipeline`，不入库的编排脚本；步骤均已执行并通过）：`pin` 中的 wheel 哈希 == 实际 wheel 哈希；bundle 解出后 `sha256sum -c SHA256SUMS` 等价检查通过；成员字节 == 被验收的 L0 / L1 字节；
-在同一树上用 **Python 3.14 + 不同输出目录** 重建 L0 / L1 / L2 / L3 / L4 与上表**逐字节相同**；Part B 的取值不影响 L2–L4（E29 测试）。提交之后另在**干净检出**上再次重建并核对（见 §10）。
+在同一树上用 **Python 3.14 + 不同输出目录** 重建 L0 / L1 / L2 / L3 / L4 与上表**逐字节相同**；Part B 的取值不影响 L2–L4（E29 测试）。提交之后另在**干净检出**上再次重建并核对（见 §5.1）。
+
+### 5.1 干净检出验证（对提交 `b518363…` 实际执行）
+
+```text
+git worktree add --detach <dir> b518363   -> git status 干净（0 个条目）
+在该检出里：build_core_wheel -> build_amane_release stage1 -> run_amane_compat_gate run（第二次独立的真实宿主运行，4 个必需宿主 × 19 个场景）-> build_amane_release finalize
+Part A 与已提交 MATRIX 的 Part A 完全相同              : True
+Part B（compatibility.json / SHA256SUMS / bundle 哈希）与已提交值相同 : True
+L0 wheel 与 L1 plugin zip 哈希 == MATRIX Part A artifacts : True
+在该检出里运行 scope_gate / install_doc / matrix_json / artifact_dag / release_layout 测试 : 78 passed
+```
 
 ## 6. 测试数字（E25 / E26 / E27 / E28）
 
