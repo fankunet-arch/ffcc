@@ -60,6 +60,16 @@ Construction Plan     = CANDIDATE（本文件）
 Implementation        = NOT STARTED
 ```
 
+```text
+—— Pre-L1 Authority Amendment A1（本计划侧；取代上方两个头部块中关于 Implementation / 状态的历史表述，上方保留为设计历史）——
+P5-C2 PRE-L1 AUTHORITY AMENDMENT : CANDIDATE（docs-only；见附录 E 与合同第 11.7 节）
+Previous Frozen Plan             : f358aca1ff6e056f28c3b9b2d0fcaa2f608ac124（Design Accepted Head）
+Implementation Head              : 4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace（本 amendment 的 Parent）
+Implementation                   : COMPLETE CANDIDATE — NOT TECHNICALLY ACCEPTED
+U2-5                             : TRIGGERED — AUTHORITY CORRECTION IN PROGRESS
+Authority Status                 : CANDIDATE
+```
+
 坐标规则：本候选的 Design Base = `232ece0…`。**Package Frozen Base 只有在独立 Design Review 建立后才存在**；Design Review 通过之前，本文任何位置都不得被读作 FROZEN / DESIGN PASS / IMPLEMENTATION AUTHORIZED。
 唯一 authority 转换：独立 Design Review PASS -> 该 Review 建立 Design Accepted Head -> Frozen Contract / Construction Plan -> 才允许进入 S1。不创建纯状态的 design closure docs 提交（治理文档第 11.1 节）。
 
@@ -115,7 +125,7 @@ P5-C2 不得通过新合同静默 override P5-C1 CLOSED semantics；必须改变
    * locator（E31 的**单元层**；**exact pinned wheel only**）：合同第 8.3 节 4 步全部分支、4 个模板、E31-a..v 的 PASS / FAIL 配对——含**已加载**的 exact pinned wheel（PASS）/ 错误版本 / 被篡改的同名 wheel / 目录形态（pip `--target` / editable / 源码，即使字节正确）FAIL，
       **未加载**的目录形态无 sidecar（FAIL，import 之前，`fc2_metadata_core` 不在 `sys.modules`）、目录形态 + 有效 sidecar（PASS，加载的是 wheel，目录中的 sentinel 不存在）、
       **Reviewer 的恶意 `.pyc` PoC（E31-h；复用合同 W2-12 的构造：以真实 wheel 解压的目录形态 Core，pyc 携带源文件相同 mtime / size，payload 写 sentinel；3.12 与 3.14 均执行，不得删除）**、
-      sidecar 篡改 / 符号链接（无权限时 `os.lstat` 替身并记录 `symlink_privilege=false`，**不 skip**）/ 超大 / 同名目录 / 仅有其它版本 wheel、混合来源子模块、`sys.meta_path` 遮蔽（预解析即拒绝）、插入后才抢占的有状态 finder（**回滚**）、
+      sidecar 篡改 / 符号链接（无权限时 `os.lstat` 替身并记录 `symlink_privilege=false`，**不 skip**；真实宿主子项见附录 E 的 A1-3）/ 超大 / 同名目录 / 仅有其它版本 wheel、混合来源子模块、`sys.meta_path` 遮蔽（预解析即拒绝）、插入后才抢占的有状态 finder（**回滚**）、
       **每个 FAIL 机械断言 `sys.path` 与入口逐元素相同（同一 list 对象）、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变、verified-wheel 的 importer-cache 条目 == 入口状态**（不要求恢复全局 importer cache）、成功路径至多一次插入且幂等（**重复调用仍执行最终真实解析**）；`module_file` 为 staging 路径与正式路径；
       **`tmp_path` + 真实构建的 wheel**，不依赖 Amane；每个用例以 subprocess 隔离（避免污染主进程 `sys.modules` / `sys.path`，遵守 P5-ENTRY-CLOSURE-OBS-01）；
    * 确定性（E06）：两个解释器（subprocess 3.12 与 3.14）× 两个输出目录 × CRLF 检出副本 -> 哈希相等；allow-list / forbidden；
@@ -135,7 +145,7 @@ P5-C2 不得通过新合同静默 override P5-C1 CLOSED semantics；必须改变
    场景脚本只依赖宿主公共 API（`amane.plugin`）与 `amane.plugins.packaging` / `PluginManager` / `CrawlerFactory` 的**真实**对象，**不 mock** 它们。
 3. **回环 fixture**：`127.0.0.1` 上的 HTTP 服务器（线程；随机端口；记录请求；脚本化响应）；`base_url` 覆盖指向它。公网零访问。
 4. **配置往返一致性守卫（E09）**：对合同第 12.2 节每个样本，同时取 PATCH 状态、`validate_plugin_config`、`parse_settings`、`build_plugin_provider` 四个布尔值并断言全真或全假。
-5. **跨版本等价（E15 / E16）**：同一请求集在 v0.15.0 / v0.18.0 上产生规范化 JSON，比较 sha256；对宿主 `FailureReason` 全部成员做桥分类的全函数枚举测试。
+5. **跨版本等价（E15 / E16）**：同一请求集在 v0.15.0 / v0.18.0 上产生规范化 JSON，比较 sha256；对宿主 `FailureReason` 全部成员做桥分类的全函数枚举测试；**E16 的覆盖按附录 E 的双轨证据模型（合同第 13.2 节 A1-4）**。
 6. **冻结包见证**：HOST-A-WIN / HOST-B-WIN（坐标 SC-01 / SC-02，**必需的部署支持坐标**）在 Windows 上运行同一 HC 集合（服务进程 = `onedir/Amane.Server.exe`，环境变量同设计期探针；**不**设置 `PYTHONPATH`）。
    源码宿主 HOST-A-SRC / HOST-B-SRC（SC-03 / SC-04）= 必需的集成兼容。**macOS / Linux / Docker（SC-07 / SC-08 / SC-09）不可得 -> `UNVERIFIED`，不伪造，不进支持声明**（设计期已核对本环境无 Docker；不为扩大声明增加环境依赖）。
    **HC-19（Core 来源准入矩阵）**：真实宿主子进程内执行 E31 的 PASS / FAIL 配对；源码宿主覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**，无 sidecar -> FAIL，有 sidecar -> 加载 wheel 且 sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；冻结包覆盖 sidecar 各分支；每个 FAIL 要求 422 / `failures` + 固定模板 + 无半装 + `sys.path` 与入口逐元素相同 / `sys.modules` 中 `fc2_metadata_core*` 对象身份不变 / verified-wheel importer-cache 条目 == 入口状态；**HC-19 含 E31-u / E31-v（源码宿主；惰性 sentinel，不执行 payload）**，冻结包上无法在宿主进程里布置 `sys.path` 夹具，故只覆盖 sidecar 各分支。源码宿主**同样使用 sidecar wheel**（`AMANE_DATA_DIR/plugins/_ffcc_core/`），`pip` 只用于准备宿主 venv 依赖。
@@ -238,6 +248,7 @@ PASS 条件：E01..E31 全部有证据或有被接受的 `UNVERIFIED` / gap 记�
    支持声明为二维坐标，UNVERIFIED 平台不被版本状态覆盖；Design Review 为完整的第一次审查。
 8. Design R2：删除目录形态 Core 的接受（exact pinned wheel only），`.pyc` PoC 在设计期复现并由 wheel-only 原型拒绝（3.12.10 / 3.14.7）；威胁模型（Defended / Not Defended / Non-claims）与 L-C2-13 ACCEPTED 已冻结；失败回滚（预解析 + 单次插入 + 再验证 + `sys.path` 还原）已冻结并有机械验证；artifact 派生 DAG 无环（设计期探针）；支持措辞全文坐标化；zipimport 的 verified root 与 `_impl` 的 normalized-byte identity 术语已统一。
 9. **Design R3 直接回归守卫**：(1) 不存在任何“wheel anywhere in sys.path -> immediate success”的路径；(2) 每个 success path 都有最终真实解析证明；(3) 每个发生在 locator-owned path / cache 变化之后的失败都有精确回滚，且入口快照先于任何 probe；(4) 目录形态仍被拒绝；(5) 没有新增被接受的 Core 来源（受信 loader 仅 `type(...) is zipimporter`）；(6) E31-u / M2-23 / HC-19 / E31-p / I-C2-18 描述同一个不变量。
+10. **Pre-L1 Authority Amendment A1**：U2-5 已被触发并如实记录（不是“从未发生”，也不是 production 缺陷）；A1-1（201）/ A1-2（HC-12a）是对宿主行为的 A 类修正；A1-3 是环境能力限制下的证据方法（locator 语义不变，充分性由 Reviewer 裁决）；A1-4 是 A + B（合同双轨模型 + 实现证据补齐）；未改变 adapter 语义 / 安全边界 / exact pinned wheel / Risk C / P5-C1 语义。
 
 ---
 
@@ -350,3 +361,56 @@ W2-15  对第 8.3 节 2A..2E 的最小原型（3.12.10 与 3.14.7 均执行，�
 ```
 
 实现期 E31 必须在 3.12 与 3.14 上执行上述冻结不变量；探针本身不是实现，不得被当作测试替身提交。
+
+## 附录 E —— Pre-L1 Authority Amendment A1（本计划侧）
+
+```text
+P5-C2 PRE-L1 AUTHORITY AMENDMENT : CANDIDATE
+Implementation Head              : 4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace
+Implementation                   : COMPLETE CANDIDATE — NOT TECHNICALLY ACCEPTED
+U2-5                             : TRIGGERED — AUTHORITY CORRECTION IN PROGRESS
+```
+
+### E.1 权威语义同步（与合同第 11.7、13.2 节与文末修订记录一一对应）
+
+| 项 | 计划侧的同步内容 | 状态 |
+|---|---|---|
+| A1-1 HC-01 状态码 | 所有“上传 plugin zip 成功”的宿主判据 = 精确 201（HC-01 / HC-09 / HC-13 / HC-14 / HC-16 / HC-19 的 PASS 分支）；reload 200、DELETE 204、PATCH 200 不变；不泛化为 2xx | AMENDMENT CANDIDATE — AUTHORITY REVIEW REQUIRED |
+| A1-2 HC-12a | HC-12 拆为 12a..12e；12a = `.zip` 名 + 非 ZIP 字节 -> 宿主实测 500 + 拒绝 + 无残留 + 无注册 + 插件代码从未执行 + 两版相同；12b..e 仍 422；不放宽任何其它安装失败判据 | AMENDMENT CANDIDATE — AUTHORITY REVIEW REQUIRED |
+| A1-3 符号链接 | locator 语义不变；原要求为目标；环境不可得时 `ENVIRONMENTALLY_UNAVAILABLE` + 必需替代证据（单元层 3.12 / 3.14 替身仅改 `st_mode`、M2-14 killer、`symlink_privilege=false`）；不得表述为真实宿主已执行 PASS；**充分性由 Reviewer 裁决** | AMENDMENT CANDIDATE — AUTHORITY REVIEW REQUIRED |
+| A1-4 E16 | 双轨：E16-A（传输可诱发 kind 端到端；记录实际观测 kind，标签不得虚称）+ E16-B（全部 `SourceErrorKind` 成员在每个必需宿主进程内经生产映射路径与生产 provider 转换，四宿主哈希相等） | AMENDMENT CANDIDATE — AUTHORITY REVIEW REQUIRED |
+
+### E.2 本 amendment 不做什么
+
+* **不**重新拆分 S1 / S2 / S3，不新增 S 级 Review，不改变 Risk Class C，不重新设计 P5-C2。
+* `4358b3d` 的实现保持为 **candidate evidence**。在本 amendment 取得独立 Authority Review 的通过结论之前，**不授权**修改任何 production 代码 / 测试 / 工具 / evidence JSON / HANDOFF；
+  若 Reviewer 日后要求纠正，也只允许 **evidence-only** 的修正（不得改变 adapter 语义、locator 准入规则、exact pinned wheel 政策或 P5-C1 CLOSED 语义）。
+* 不重新打开：exact pinned wheel only、R3 最终解析不变量、回滚、威胁模型 / TOCTOU、artifact DAG、支持坐标模型、P5-C1 映射语义；`prefix == ""` 不是 amendment 事项（合同本来只要求顶层 spec）。
+
+### E.3 amendment 被独立接受之后：Evidence Executor 的对账清单（本轮**不执行**）
+
+| # | 对账项 | 说明 |
+|---|---|---|
+| R-1 | HC-01 等安装判据 | 网关已按 201 判定；核对 HC-09 / HC-13 / HC-14 / HC-16 / HC-19 的 PASS 分支同为 201；`INSTALL.zh-CN.md` 无需改（不含状态码） |
+| R-2 | HC-12 拆分 | 网关逐个记录 12a..12e 的状态码 / 残留 / 注册 / “插件代码从未执行”；12a 明确标注为宿主缺陷变体 |
+| R-3 | 符号链接 | `core_admission` 为符号链接子项记录 `observed = ENVIRONMENTALLY_UNAVAILABLE` + `symlink_privilege=false`；`validate_matrix` 只在该子项接受该取值（其它子项出现 = 问题）；补测试；HANDOFF 与 HC-19 描述不得称“真实宿主已执行 PASS”；单元层替身 / M2-14 killer 已存在（核对即可） |
+| R-4 | E16 | (a) 重命名 / 标注 `kind_decode_error_bad_charset`、`kind_redirect_error_loop`、`kind_response_too_large`（它们实际产生的是 `parse_error+invalid_response` / `connection_error` / `parse_error+invalid_response`），每个用例记录**实际观测的 kind**；(b) 新增宿主内 E16-B：用 Core 公共构造器构造 `SourceResult` / `AggregationResult`，运行生产映射 `map_aggregation`，再经生产 provider 转换得到宿主 `FailureReason` / `detail`，覆盖全部 16 个成员，四宿主哈希相等（`NOT_FOUND` -> no-match）；(c) 现有 `op_enumerations` 只调用 `reason_for_kind` 叶子函数，**不满足** E16-B，必须补足；(d) parity 载荷与 matrix 校验 / 测试同步 |
+| R-5 | HANDOFF 更正 | “U2-1..U2-12 均未触发 / Authority Escalation: NONE”改为如实记录 U2-5 已触发及本 amendment 的处理；E16 的“6 个不可诱发”更正为“端到端只观测到 7 个 kind，其余 9 个未观测”；HC-12 / 符号链接 / 201 的偏差改述为已冻结的 amendment 事实；不得使用“PASS / CLOSED / ACCEPTED”描述 amendment 自身 |
+| R-6 | 再生成与再验证 | 网关文件哈希、`core_admission` 行与 parity 载荷会变化 -> MATRIX Part A、`COMPATIBILITY.json`（L2）、`SHA256SUMS`（L3）、bundle（L4）与 Part B 重新生成；L0 / L1 的输入文件（locator / shim / adapter / INSTALL / 构建器）**不在授权修改范围内**，其哈希应保持不变，若变化即为越权；按合同第 10.5 节顺序在最终树上重做 DAG；重跑 `tests/amane_compat`、全量、3.14 集合 A / B / C 与 skip 对账；在干净检出上再次核对 |
+| R-7 | 之后 | 对账完成并经 Reviewer 同意后，才送独立 Level 1 Review |
+
+### E.4 留给 Reviewer 的单独裁决与未修正事项
+
+1. A1-3 的替代证据（Risk C 证据替代）是否足够；Designer 不自行宣称可接受。
+2. 合同文末“未被本 amendment 修改”的 HC-11(c)（冻结包无法布置目录形态夹具）文字是否需要在后续 amendment 中澄清。
+3. 若 Reviewer 要求把 A1-3 的真实宿主子项补证：条件见合同第 11.7 节 A1-3 第 4 条（环境所有者合法提供能力，不改变系统安全设置）。
+
+### E.5 状态
+
+```text
+P5-C2 PRE-L1 AUTHORITY AMENDMENT : CANDIDATE
+Implementation Head              : 4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace
+Implementation                   : COMPLETE CANDIDATE — NOT TECHNICALLY ACCEPTED
+U2-5                             : TRIGGERED — AUTHORITY CORRECTION IN PROGRESS
+Next                             : P5-C2 PRE-L1 INDEPENDENT AUTHORITY AMENDMENT REVIEW（尚未开始 Level 1；未开始 Phase 6）
+```

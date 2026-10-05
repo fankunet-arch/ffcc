@@ -18,6 +18,16 @@ Design Pre-Review R1    : docs-only 修订（C2-DESIGN-R1-01..04；见文末“D
 Branch                  : claude/phase5-c2-amane-compatibility
 ```
 
+```text
+—— 以下状态块（Pre-L1 Authority Amendment A1）取代上方 Design 阶段头部中关于 Implementation / 状态的历史表述；上方头部保留为设计历史 ——
+P5-C2 PRE-L1 AUTHORITY AMENDMENT : CANDIDATE（A1；docs-only；见文末“Pre-L1 Authority Amendment A1 修订记录”与第 11.7 节）
+Previous Frozen Contract         : f358aca1ff6e056f28c3b9b2d0fcaa2f608ac124（Design Accepted Head）
+Implementation Head              : 4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace（本 amendment 的 Parent）
+Implementation                   : COMPLETE CANDIDATE — NOT TECHNICALLY ACCEPTED
+U2-5                             : TRIGGERED — AUTHORITY CORRECTION IN PROGRESS
+Authority Status                 : CANDIDATE（尚无独立 Authority Amendment Review 结论；本文不自行宣称）
+```
+
 > 本文是 **候选合同**。Design Review PASS 之前，本文不是 Frozen Contract，不授权实现。
 > P5-C1（CLOSED）已冻结的全部语义（SearchQuery 映射、Core 调用、HTTP 桥、MediaMetadata 映射、错误映射、来源归属、契约测试、
 > 插件树布局）**保持冻结，本文不重新设计其中任何一项**。P5-C2 只闭合 P5-C1 合同第 26 节表 J 中标记为 P5-C2 的项。
@@ -204,6 +214,11 @@ U2-11 locator 准入规则被放宽（接受任何非 exact-pinned-wheel 的 Cor
 U2-12 需要重新引入目录形态 Core 的接受路径而无法冻结并验证“覆盖全部可执行字节（.py / .pyc / 所有影响 import 的文件）”的确定性规则——必须 STOP / DESIGN BLOCKER，不得降级为只哈希 `*.py`
 ```
 
+> **U2-5 的历史事实（A1 如实记录）**：U2-5 在 S2 / S3 实现期间**已经被触发**——真实宿主观测与冻结合同对宿主行为（`POST /api/plugins` 的成功状态码、非 zip 上传的 HTTP 状态）的假设不一致，
+> 另有两处冻结的证据方法在实现环境中无法照写执行（真实符号链接子项；“每个 `SourceErrorKind` 一例”）。Implementation 继续施工并如实记录了这些事实，但**没有权限放宽 Frozen Contract**；
+> 此前 HANDOFF 写的“U2-1..U2-12 均未触发”不成立（需在 amendment 被独立接受后由 Evidence Executor 对账更正）。
+> 本 amendment（第 11.7 节与文末修订记录）在**独立 Level 1 Review 之前**偿还这笔 authority debt；它不是 production correctness 缺陷，也不能被描述成“U2-5 从未发生”。
+>
 > U2-6 的含义：adapter 树哈希（`tree_sha256(adapters/amane/fc2_amane_adapter)`）必须仍等于 `P5_C1_HOST_WITNESS.json` 记录的
 > `adapter_tree_sha256`。若实现发现必须改 P5-C1 树才能完成兼容，**这是设计前提失效**，STOP，需要 authority amendment（第 2 节）。
 > U2-12 的前置事实：R1 曾以“`*.py` 树哈希 + 允许 `__pycache__/*.pyc`”接受目录形态；Reviewer 的 `.pyc` PoC 已证明该规则不覆盖全部可执行字节（W2-12，设计期在 3.12.10 / 3.14.7 复现）。R2 因此**删除目录形态的接受**，U2-12 在设计层面**未被触发**（不存在需要降级的验证）。
@@ -679,7 +694,7 @@ C1 骨架 zip 不再被称为可分发物；`adapters/amane/README.md` 的状态
 
 | ID | 场景 | 通过判据 |
 |---|---|---|
-| HC-01 | clean install：空数据目录 + sidecar 已放置 -> HTTP 上传 plugin zip | 200；`/api/plugins` 的 `items` 含 `ffcc.fc2-metadata`；`failures == []`；磁盘上 `plugins/sources/ffcc.fc2-metadata/` 的文件集合 == plugin zip 的文件集合（字节相等） |
+| HC-01 | clean install：空数据目录 + sidecar 已放置 -> HTTP 上传 plugin zip | **HTTP 201 Created**（A1-1；精确 201，不是 200，也不是“任意 2xx”）；`/api/plugins` 的 `items` 含 `ffcc.fc2-metadata`；`failures == []`；磁盘上 `plugins/sources/ffcc.fc2-metadata/` 的文件集合 == plugin zip 的文件集合（字节相等） |
 | HC-02 | discover：重启服务进程（restart persistence） | 重启后插件仍被发现；`descriptor` 的适配器可控子集与 HC-01 相同；配置仍生效（HC-05 之后执行） |
 | HC-03 | descriptor / capabilities | `id`、`name`、`version`（= `PLUGIN_VERSION`）、`capabilities == {film_metadata}`、`content_types == {fc2}`、`urls`、`api_version == "1"` 与 C1 §9 相等；`configuration_model().model_json_schema()` 与 C1 记录的 schema 相等 |
 | HC-04 | provider build（真实 `CrawlerFactory`）+ 一次**离线** fetch | 子进程内：真实 `PluginManager.discover` + 真实 `CrawlerFactory`（`PluginContext(web_client=真实 WebClient)`）；`WebClient._session` 为脚本化会话（C1 H 系列同法）或**本机回环 HTTP fixture**（`base_url` 指向 `127.0.0.1`）；得到与 C1 冻结映射一致的 `MediaMetadata`；`provider` 的 `web_client` 与 `PluginContext.web_client` 是同一对象（E17） |
@@ -690,14 +705,14 @@ C1 骨架 zip 不再被称为可分发物；`adapters/amane/README.md` 的状态
 | HC-09 | 插件替换 / 升级（pin 不变） | 构造“版本 +1、其它字节相同”的第二个 plugin zip（临时副本；`PLUGIN_VERSION` 常量改写仅在测试副本）-> 上传 -> `descriptor.version` 更新；旧模块不残留（stale-module 守卫） |
 | HC-10 | Core 缺失 | sidecar 目录不存在且 Core 不可 import：上传 -> 422，消息 == P5-C1 §22 冻结模板；`/api/plugins` 的 `items` 不含该插件；`sources/` 下无目录残留（无半装）；**无回退**到内置 FC2 爬虫 |
 | HC-11 | Core 不兼容 | (a) sidecar 放入文件名正确但内容被篡改的 wheel -> `WHEEL_HASH_MISMATCH_TEMPLATE`；(b) 放入另一版本文件名的 wheel -> `WHEEL_VERSION_MISMATCH_TEMPLATE`；(c) 目录形态 Core（pip / `--target` / editable / 源码，**即使字节正确**）且无 sidecar -> `UNVERIFIABLE_TEMPLATE`；均 422 且无半装 |
-| HC-12 | 畸形 plugin zip | 非 zip、含 `..` 路径、无 `plugin.py`、多顶层文件夹、超大（> 20 MiB）-> 422，`sources/` 无残留 |
+| HC-12 | 畸形 plugin zip（A1-2；拆分为 5 个变体，判据逐个冻结） | **HC-12a**（`.zip` 文件名、内容不是 ZIP 归档的字节）：**宿主实测 HTTP 500** AND 安装被拒绝 AND `sources/` 无残留 AND `/api/plugins` 无新注册 AND 插件代码从未被导入 / 执行 AND 在 v0.15.0 / v0.18.0（源码与冻结）上行为相同；**HC-12b** 含 `..` 路径、**HC-12c** 无 `plugin.py`、**HC-12d** 多顶层文件夹、**HC-12e** 超大（> 20 MiB）：仍要求 **HTTP 422** 且 `sources/` 无残留。HC-12a 的 500 是 pinned 宿主的已知路由缺陷，**不是**允许 plugin / artifact 返回 500，也不放宽任何其它安装失败判据 |
 | HC-13 | 错误 plugin id | zip 内 shim 的 `descriptor().id` 被改成 `other.id`（临时副本）-> 宿主按目录名 / id 校验失败（安装时落盘为 `other.id`；发现期无冲突，但 **`content_routes` / config 不引用**）——判据见第 11.3 节 |
 | HC-14 | 重复 plugin | 同一 zip 连续上传两次 -> 第二次**整棵替换**（宿主语义），`/api/plugins` 仍只有一个条目；与手工把同一目录放两个目录名（`descriptor.id != 目录名`）-> 发现期 `failures` 记录 |
 | HC-15 | 卸载 | `DELETE` -> 204；`sources/` 目录消失；`plugins/ffcc.fc2-metadata/`（运行时数据，若存在）保留；sidecar 目录**不被触碰** |
 | HC-16 | Core 升级（pin 变化）流程 | 按第 8.6 节：卸载 -> 重启 -> 放新 wheel -> 上传新 plugin zip；以及误操作（旧 Core 在内存时直接上传新 zip）得到 `RESTART_TEMPLATE` |
 | HC-17 | HTTP 生命周期保持 | 回环 fixture 记录请求：全部来自宿主 `WebClient`（`User-Agent` / TLS 指纹策略 / 代理由宿主决定；adapter 不设）；每个来源 L1 / L2 / L3 计数符合 C1 §15.2 |
 | HC-18 | 无副作用 | 运行前后对**临时数据目录之外**的文件系统做快照（`sidecar` 之外）：adapter 无新增 / 修改；插件树写入全部来自宿主（`sources/` 之下） |
-| HC-19 | Core 来源准入矩阵（Risk C 信任边界；第 8.3 节；E31） | 在宿主**子进程**内、用真实 `install_plugin_zip` / `PluginManager.discover` 驱动 artifact，对 E31-a..v 做 PASS / FAIL 配对：**源码宿主**覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**）无 sidecar（FAIL，payload sentinel 不存在）与有 sidecar（PASS 且加载的是 wheel、sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；**冻结包**覆盖 sidecar 的正确 / 错误版本 / 篡改 / 符号链接 / 超大。每个 FAIL 必须是 422 / `failures`、固定模板、**无半装**，且失败路径后 `sys.path` 与入口逐元素相同、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变、verified-wheel importer-cache 条目 == 入口状态。**E31-u（源码宿主）**：exact pinned wheel **已在** `sys.path`，而更靠前有一个**惰性的**（只含注释、从不执行代码的）不受支持 Core 目录包使真实解析先命中它 -> 必须 FAIL，惰性包从未被导入；**E31-v**：惰性的 `zipimporter` 子类 loader double -> FAIL。冻结包宿主上无法在宿主进程里布置 `sys.path` 夹具，HC-19 对冻结包只覆盖 sidecar 各分支；E31-u / E31-v 由源码宿主 + 单元层覆盖 |
+| HC-19 | Core 来源准入矩阵（Risk C 信任边界；第 8.3 节；E31） | 在宿主**子进程**内、用真实 `install_plugin_zip` / `PluginManager.discover` 驱动 artifact，对 E31-a..v 做 PASS / FAIL 配对：**源码宿主**覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**）无 sidecar（FAIL，payload sentinel 不存在）与有 sidecar（PASS 且加载的是 wheel、sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；**冻结包**覆盖 sidecar 的正确 / 错误版本 / 篡改 / 超大，以及符号链接子项（其**真实宿主**执行按第 11.7 节 A1-3：环境允许则必须真实执行；环境不允许则记为 `ENVIRONMENTALLY_UNAVAILABLE`，并**不得**表述为真实宿主已执行 PASS）。每个 FAIL 必须是 422 / `failures`、固定模板、**无半装**，且失败路径后 `sys.path` 与入口逐元素相同、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变、verified-wheel importer-cache 条目 == 入口状态。**E31-u（源码宿主）**：exact pinned wheel **已在** `sys.path`，而更靠前有一个**惰性的**（只含注释、从不执行代码的）不受支持 Core 目录包使真实解析先命中它 -> 必须 FAIL，惰性包从未被导入；**E31-v**：惰性的 `zipimporter` 子类 loader double -> FAIL。冻结包宿主上无法在宿主进程里布置 `sys.path` 夹具，HC-19 对冻结包只覆盖 sidecar 各分支；E31-u / E31-v 由源码宿主 + 单元层覆盖 |
 
 ### 11.3 HC-13 / HC-14 的判据说明
 
@@ -722,6 +737,38 @@ C1 骨架 zip 不再被称为可分发物；`adapters/amane/README.md` 的状态
 ### 11.6 不碰用户文件
 
 验收使用的数据目录、冻结包解压目录、venv 全部在临时目录；不扫描、不读取、不写入用户媒体库；不使用用户的 Amane 实例 / 数据目录。HC-18 与 E19 机检。
+
+### 11.7 Pre-L1 Authority Amendment A1：宿主观测事实与证据方法（冻结；窄范围）
+
+本节只冻结**真实宿主事实**与**证据方法**，**不改变** adapter 语义、安全边界、exact pinned wheel only、威胁模型 / TOCTOU、R3 最终解析不变量、回滚、artifact DAG、支持坐标模型、Risk Class C 与 P5-C1 CLOSED 语义。
+
+**A1-1 `POST /api/plugins` 的成功状态码 = 201 Created（分类 A：冻结设计对宿主 API 的错误假设）**
+
+* 事实（直接读两个 pinned 源码）：v0.15.0（`45dff2159369883e028a296d775a4598836c1ddd`）与 v0.18.0（`0a8a731d7746bde5e8828d1eb74c7bd9752b42e4`）的 `src/amane/api/routes/plugins.py` 都声明 `@router.post("", response_model=PluginListResponse, status_code=201)`；`routes/plugins.py` 与 `plugins/packaging.py` 在两版**逐字节相同**；上游自己的 `tests/api/test_plugins.py`（两版相同）对 zip 上传 / 目录路径 / zip 路径三种安装方式都断言 201；`POST /api/plugins/reload` 为默认 200、`DELETE` 为 204。四个必需宿主（含两个官方冻结包）的观测均为 201，与 plugin / shim / Core / 构建器无关。
+* 冻结：HC-01 以及所有“上传 plugin zip 成功”的判据（HC-09 / HC-13 / HC-14 / HC-16 / HC-19 的 PASS 分支）的状态码 = **精确 201**。**不**泛化为“任意 2xx”（上游源码与上游测试都固定为 201）；reload = 200、DELETE = 204、PATCH = 200 按原判据不变。
+* 若未来某个新坐标观测到不同的成功码：按第 14.2 节为该坐标重新见证，**不得**继承本冻结值。
+
+**A1-2 非 zip 上传（HC-12a）的宿主行为（分类 A：冻结设计对宿主路由异常处理的错误假设）**
+
+* “非 zip”的精确定义：以 `.zip` 文件名上传、内容不是 ZIP 归档的字节。（上游测试里的 `not_zip` 用例上传的是文件名 `plugin.py`，被**文件名检查**拒绝为 422；那是另一个变体，不属于冻结的变体集。）
+* 事实：路由只捕获 `(ValueError, TypeError, OSError)`（`routes/plugins.py` 第 63 行）；`install_plugin_zip` -> `_extract_zip` 的第一步是 `zipfile.ZipFile(io.BytesIO(payload))`，对非 ZIP 字节抛出 `zipfile.BadZipFile`，其 MRO 为 `BadZipFile -> Exception`（**不是** `ValueError` / `OSError` 的子类），因此未被路由捕获，FastAPI 返回 500。该异常发生在解压与导入**之前**（`inspect_plugin_id` 从未被调用），`finally` 清理 `.staging`，无残留。两版逐字节相同，四个必需宿主观测均为 500；原因不在 plugin、shim、Core 或 release 构建器（该 payload 里根本没有它们）。
+* 冻结：HC-12 拆为 12a..12e（见第 11.2 节）。12a = 宿主实测 500 + 拒绝 + 无残留 + 无注册 + 插件代码从未执行 + 两版相同；12b..12e 仍为 422 + 无残留。
+* 边界：这**不是**允许 plugin / artifact 返回 500；**不**把“任意安装失败”放宽成“任意错误状态码”（HC-10 / HC-11 / HC-16 / HC-19 的失败仍是 422 + 固定模板）；仅对该 exact 变体、在这两个 pinned 宿主版本上有效，记为 L-C2-14。
+
+**A1-3 符号链接子项的真实宿主证据（执行环境能力限制；locator 语义不变）**
+
+* 不变：locator 只接受 `os.lstat` 判定的普通文件；符号链接冒充 wheel -> `WHEEL_HASH_MISMATCH_TEMPLATE`（D-06、I-C2-8、E31-i、M2-14）。
+* 观测环境事实：4358b3d 的执行环境是非管理员的 Windows 11 账户；`os.symlink` 失败，Win32 错误 1314（“客户端没有所需的特权”）；未持有 `SeCreateSymbolicLinkPrivilege`；开发者模式未启用。创建符号链接需要提权或改变系统安全设置，而本包不得要求用户修改 / 关闭系统安全功能；因此“在不改变系统安全设置的前提下临时创建 file symlink”在该环境**不可得**。
+* 冻结规则：
+  1. **原要求保留为目标**：在环境所有者合法提供创建 file symlink 能力、且无需改变系统安全设置的环境里，符号链接子项必须在四个必需宿主上**真实执行**，判据同 E31-i（422 + `WHEEL_HASH_MISMATCH_TEMPLATE` + 无半装 + `sys.path` / `sys.modules` / importer-cache 状态不变）。
+  2. 环境不具备该能力时，该子项的**真实宿主执行**记为 `ENVIRONMENTALLY_UNAVAILABLE`（既不是 PASS，也不是 FAIL，更不是“当作通过的 skip”），并且必须同时具备**全部**替代证据：
+     (a) E31-i 的符号链接单元用例在 3.12 与 3.14 上执行，使用 `os.lstat` 替身，替身**只**把 `st_mode` 改写为符号链接，其余字段（大小 / 时间戳）保持真实——使“接受非普通文件”的变异体不会因别的原因被偶然拒绝；
+     (b) M2-14 的“接受非普通文件（符号链接）”变体被 (a) 的用例杀死；
+     (c) 记录 `symlink_privilege=false`。
+  3. 报告规则：HC-11 / HC-19 / E31 / HANDOFF / `COMPATIBILITY.json` **不得**把该子项表述为“真实宿主已执行 PASS”。第 14.1 节 `core_admission.cases[].observed` 增加**唯一**的额外取值 `ENVIRONMENTALLY_UNAVAILABLE`，只能用于符号链接子项，并且必须与 `symlink_privilege=false` 同时出现；其它任何子项出现该值 = FAIL。HC-11 / HC-19 的 `passed` 只对**已执行**子项计算，但上述记录是必需项。
+  4. **这种 Risk C 证据替代是否足够，由独立 Reviewer 单独裁决**；本文（Designer）不宣称可接受。若 Reviewer 裁定不足，补证条件 = 在由环境所有者合法提供该能力的 Windows 环境上执行真实符号链接子项（不要求能力由开发者授予或长期保留）。
+
+**A1-4 E16 的双轨证据模型（分类 A + B；不降低语义覆盖）**：见第 13.2 节。
 
 ---
 
@@ -764,7 +811,7 @@ PATCH /api/plugins/ffcc.fc2-metadata {enabled?, config?}
 
 ### 13.2 必须字节 / 语义相等（E15、E16）
 
-对固定请求集（成功全字段、PARTIAL、未命中、每个 Core `SourceErrorKind` 一例、非法 `SearchQuery`、取消、`base_url` 回环、多来源冲突、复数窄化各一）在两个必需宿主上执行；
+对固定请求集（成功全字段、PARTIAL、未命中、非法 `SearchQuery`、取消、`base_url` 回环、多来源冲突、复数窄化各一；**每个 Core `SourceErrorKind` 的覆盖按本节末尾的 E16 双轨证据模型，A1-4**）在两个必需宿主上执行；
 以**规范化 JSON（排序键、`ensure_ascii`）**记录并比较下列字段的 sha256：
 
 ```text
@@ -774,6 +821,14 @@ FailureReason 值（逐 kind）、SourceError.detail 全文
 descriptor 的适配器可控子集（id、name、version、capabilities、content_types、languages、urls、metadata_fields、api_version、rate_limit）
 configuration_model().model_json_schema()
 ```
+
+**E16 双轨证据模型（A1-4）**
+
+* 原句“每个 `SourceErrorKind` 一例”隐含的前提——每个 kind 都能被真实 HTTP 传输自然诱发——被观测证伪：在 4358b3d，受控栈**端到端实际观测**到的 kind 集合 `K_A` = {`blocked`, `rate_limited`, `source_deadline`, `connection_error`, `http_server_error`, `parse_error`, `invalid_response`}（7 个；取自 `SourceResult` 的 `<source_id>=<kind>` detail 词汇）；其余 9 个（`adapter_exception`, `circuit_open`, `decode_error`, `network_error`, `not_found`, `redirect_error`, `response_too_large`, `result_contract_mismatch`, `timeout`）**未被观测到**。这是观测，不是“不可诱发”的证明；某个 kind 日后若能被传输层诱发，可加入 `K_A`。
+* **E16-A（传输可诱发；端到端）**：对 `K_A` 中的每个 kind，受控宿主栈（真实 `PluginManager` / `CrawlerFactory` / `WebClient` -> `127.0.0.1` 回环）端到端执行；规范化的 `FailureReason` 值与 `SourceError.detail` 全文在四个必需宿主上相等。**每个用例必须记录**实际观测到的 kind（来自 detail 词汇）；用例标签**不得**声称一个未被观测到的 kind。
+* **E16-B（全部 16 个成员；宿主进程内；生产映射路径）**：对**每一个** `SourceErrorKind` 成员，在**每个必需宿主进程内**（经探针；冻结包同样适用）：(1) 用 Core 的公共构造器构造 P5-C1 冻结的输入对象（`SourceResult` / `AggregationResult`），**不得**用手写字典代替；(2) 运行**生产**的结果映射路径（P5-C1 表 F / 表 G 的实现：`AggregationResult` -> 中立结果，得到 reason 与 `FC2 lookup failed: <source_id>=<kind>` 形式的 detail）；(3) 对运行性失败，再经**生产**的 provider 转换（中立失败 -> `SourceError(FailureReason(reason), detail=...)`；运行时以只返回该中立结果的桩替代）取得**宿主的** `FailureReason` 值与 `detail` 全文；(4) 非运行性 kind（`NOT_FOUND`；P5-C1 表 G 为“穷尽 `NOT_FOUND` 之外”）的期望 = 中立 no-match（宿主 `None`），不是 `SourceError`。
+* 完整性与等价：`SourceErrorKind` 的每个成员（当前 16 个）都必须出现在 E16-B 的结果里，缺一 = FAIL；E16-B 的规范化结果（kind -> {结果类别, `FailureReason` 值, `detail`}）在四个必需宿主上哈希相等；期望值以 P5-C1 Frozen 表 F / 表 G 为准（独立于被测实现的转录）。**只调用叶子函数 `reason_for_kind`、或只比较一张手写映射字典，不满足本模型**（那样的证据是空洞的）。
+* 保持不变：对宿主 `FailureReason` **全部成员**（v0.15.0：16 个；v0.18.0：17 个，多 `API_ERROR`），桥的分类是全函数且确定（C2-E16 原有要求）。
 
 ### 13.3 允许的差异（白名单；不在白名单的差异 = FAIL）
 
@@ -809,7 +864,7 @@ parity                : {required_pairs[{a, b, fields[…], equal(bool), sha256_
 status                : [{coordinate_id, amane_version, host_form, platform, status(SUPPORTED|CONDITIONALLY_SUPPORTED|BLOCKED|UNVERIFIED|INFORMATIONAL|IDENTICAL_TO_STABLE), reason}]
                          —— **key = 坐标 `(version, host_form, platform)`，不得只以版本为 key**；版本级状态不得覆盖 / 继承平台级状态
 platforms_unverified  : [macos, linux, docker]（= SC-07 / SC-08 / SC-09）
-core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|loaded|shadow), python, expected(PASS|FAIL), observed, template, sys_path_unchanged_on_fail(bool), sys_modules_unchanged_on_fail(bool), payload_executed(bool)}]}   # E31；Part A
+core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|loaded|shadow), python, expected(PASS|FAIL), observed(PASS|FAIL|ENVIRONMENTALLY_UNAVAILABLE；后者仅用于符号链接子项，见 A1-3), template, sys_path_unchanged_on_fail(bool), sys_modules_unchanged_on_fail(bool), payload_executed(bool)}]}   # E31；Part A
 ```
 
 ### 14.2 版本漂移门（以后出现新 Amane release）
@@ -843,7 +898,7 @@ core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|load
 | C2-E13 | missing Core | HC-10；消息 == P5-C1 §22；无半装；无回退 |
 | C2-E14 | incompatible Core | HC-11 / HC-19；wrong-version / tampered / directory-form / unverifiable / already-loaded-wrong / mixed-origin 全部 fail closed 且无半装（细节见 E31） |
 | C2-E15 | 跨版本结果等价 | 第 13.2 节全部字段哈希在两个必需宿主上相等 |
-| C2-E16 | 跨版本错误等价 | 每个 `SourceErrorKind` -> `FailureReason` / `detail` 相等；对宿主 `FailureReason` **全部成员**枚举，桥的分类是全函数且确定 |
+| C2-E16 | 跨版本错误等价 | **双轨（第 13.2 节 A1-4）**：E16-A = 传输可诱发的 kind 端到端（记录实际观测 kind；标签不得虚称）；E16-B = 全部 `SourceErrorKind` 成员在**每个必需宿主进程内**经**生产**映射路径与生产 provider 转换得到 `FailureReason` / `detail`，四宿主哈希相等；对宿主 `FailureReason` **全部成员**枚举，桥的分类是全函数且确定 |
 | C2-E17 | HTTP 生命周期保持 | provider 持有宿主 `web_client` 的**同一对象**；adapter 树无第二个 HTTP 客户端（AST，C1 守卫仍绿）；HC-17 |
 | C2-E18 | 无 vendoring | plugin zip 不含 Core 文件（文件名 + 整文件字节包含扫描）；`fc2_metadata_core` 仅出现在 `_impl` 的 import 语句与 `_core_gate` 常量中；Core wheel 与 plugin zip 为两个独立文件 |
 | C2-E19 | 无新持久化 / 无用户文件改动 | `_ffcc_locator` 与 shim 的 AST 守卫（无写 API）；HC-18 文件系统快照；用户目录零接触 |
@@ -872,7 +927,7 @@ core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|load
 | E31-f | 未加载：目录形态 Core 在 `sys.path` 上（pip / `--target` / editable / 源码 / `PYTHONPATH`，**即使字节完全正确**），无 sidecar | **FAIL**（`UNVERIFIABLE_TEMPLATE`），在任何 import 之前；`fc2_metadata_core` 不在 `sys.modules` |
 | E31-g | 未加载：目录形态 Core 在 `sys.path` 上，同时有**有效 sidecar** | **PASS**，且加载的是 wheel（`spec.loader.archive` == wheel）；目录形态 Core **从未被执行**（其 `__init__.py` 写 sentinel，sentinel 不存在） |
 | E31-h | **Reviewer 的恶意 `.pyc` PoC**：目录形态 Core，`__pycache__/__init__.cpython-3x.pyc` 被替换为携带源文件相同 mtime / size 的恶意 pyc；`*.py` 树哈希**不变** | (1) 无 sidecar：**FAIL**（`UNVERIFIABLE_TEMPLATE`），**payload sentinel 不存在**；(2) 有有效 sidecar：**PASS** 但加载的是 wheel，**payload sentinel 不存在**；(3) 已加载的目录形态（用无害 pyc 替身）：**FAIL**（`RESTART_TEMPLATE`）；**3.12 与 3.14 均执行**；**不得删除该场景** |
-| E31-i | sidecar：篡改 1 字节 / 符号链接 / `> 16 MiB` / 同名目录 / 仅有其它版本 wheel | **FAIL**（`WHEEL_HASH_MISMATCH_TEMPLATE` / `WHEEL_VERSION_MISMATCH_TEMPLATE`）；无权限创建符号链接时以 `os.lstat` 替身执行并在报告中记录 `symlink_privilege=false`（**不得 skip**） |
+| E31-i | sidecar：篡改 1 字节 / 符号链接 / `> 16 MiB` / 同名目录 / 仅有其它版本 wheel | **FAIL**（`WHEEL_HASH_MISMATCH_TEMPLATE` / `WHEEL_VERSION_MISMATCH_TEMPLATE`）；无权限创建符号链接时以 `os.lstat` 替身执行并在报告中记录 `symlink_privilege=false`（**不得 skip**）；**真实宿主**的符号链接子项按第 11.7 节 A1-3：环境允许则真实执行，否则记为 `ENVIRONMENTALLY_UNAVAILABLE`（不得表述为真实宿主已执行 PASS） |
 | E31-j | 混合来源：已加载的 `fc2_metadata_core.*` 子模块的 `loader.archive` 与顶层不同 / 来自目录 / 非精确 zipimporter 类型 / 无 `__spec__` / 命名空间包 | **FAIL**（`RESTART_TEMPLATE`） |
 | E31-k | 遮蔽：`sys.meta_path` 上更靠前的 finder 先返回 `fc2_metadata_core` | **FAIL**（`UNVERIFIABLE_TEMPLATE`）；**预解析阶段拒绝，从未修改 `sys.path`** |
 | E31-l | **locator-owned verified-wheel path / cache 效应的回滚**：(1) 插入后验证失败（有状态 finder：仅在 wheel 已进入 `sys.path` 之后才抢占），入口时 verified-wheel 的 importer-cache 条目**不存在**；(2) 同一场景，入口时该条目**已存在** | **FAIL**（`UNVERIFIABLE_TEMPLATE`）；回滚后 `sys.path` 与入口逐元素相同且是同一 list 对象；(1) 新增的 verified-wheel cache 条目被移除，(2) 条目保持入口时的**原对象**；不要求恢复全局 importer cache 的其它条目 |
@@ -985,6 +1040,9 @@ I-C2-19 受信 loader 判据 = `type(spec.loader) is zipimport.zipimporter`（�
 | L-C2-11 | C1 L-01..L-15 继续成立 |
 | L-C2-12 | 宿主「选择服务器路径」安装（`install_plugin_path`）若指向数据目录**之外**的插件目录，locator 无法由 `__file__` 推出数据目录，sidecar 不会被找到；官方安装流程只使用「上传 zip」，`INSTALL.zh-CN.md` 明示，且 HC 不把该路径作为必需场景 |
 | L-C2-13 | **ACCEPTED SECURITY LIMITATION**：校验只保证**准入时刻**的完整性；wheel 被 zipimport 在进程生命周期内懒读取，准入之后对该 wheel 的持续写入者**不被防御**（威胁模型 N-03）；已加载 Core 的证明只是 current-origin + current-artifact proof，不是历史已执行字节证明。不设计消除方案；文档要求“运行期间不要替换或删除 sidecar wheel”；Core 升级严格 `uninstall -> restart -> replace -> install`。能改写数据目录者本已能改写插件树与 pin（N-01） |
+| L-C2-14 | **（A1-2）** pinned 宿主（v0.15.0 / v0.18.0，逐字节相同的路由）对 `.zip` 名、非 ZIP 字节的上传返回 HTTP 500（未捕获 `zipfile.BadZipFile`），无残留；与 plugin 无关；仅对该 exact 变体与这两个 pinned 版本冻结 |
+| L-C2-15 | **（A1-3）** 真实宿主的符号链接 sidecar 子项依赖创建 file symlink 的 OS 权限；无该能力的环境里记为 `ENVIRONMENTALLY_UNAVAILABLE`，以单元层替身 + M2-14 killer 作替代证据，是否足够由 Reviewer 裁决 |
+| L-C2-16 | **（A1-4）** E16-B 在宿主进程内以生产映射路径证明 `SourceErrorKind` 全部成员的 `FailureReason` / `detail`，不是端到端传输证据；端到端只覆盖 `K_A` |
 
 ---
 
@@ -1001,6 +1059,8 @@ Package Frozen Base  : CANDIDATE — subject to Design Review
 
 本文不得被解读为 FROZEN / DESIGN PASS / IMPLEMENTATION AUTHORIZED / CLOSED。唯一 authority 转换：独立 Design R3 Incremental Closure Review PASS -> 该 Review 建立 Design Accepted Head -> Frozen Contract / Construction Plan -> 才允许进入 S1。
 S1 -> S2 -> S3 连续施工的意图保持不变；无需新增 S 级 Review。
+
+**Pre-L1 Authority Amendment A1（本文最新状态）**：Design 已经独立 Review 并冻结（Design Accepted Head `f358aca1…`）；Implementation 完成于 `4358b3df…`，但在送独立 Level 1 Review 之前发现 U2-5 已被触发（见 11.7 与文末修订记录）。本 amendment 只冻结真实宿主事实与证据方法，状态 = **CANDIDATE**，等待独立 Authority Amendment Review；在其结论建立之前，Implementation 保持“COMPLETE CANDIDATE — NOT TECHNICALLY ACCEPTED”。
 
 ### Design Pre-Review R1 修订记录（历史；docs-only；Parent = `8870df0ea42e60dd142a5878ea7c0abc6ca3c4b5`；**其中目录形态 Core 的接受规则已被 Design R2 取代**）
 
@@ -1055,3 +1115,31 @@ S1 -> S2 -> S3 连续施工的意图保持不变；无需新增 S 级 Review。
 3. **E31-u / E31-v / M2-23 / HC-19** 是否描述同一不变量，且 fixture 是否确实惰性（不执行 payload）。
 4. **A-03 措辞**与 N-03 / L-C2-13 是否一致；**A-04 精确类型判据**是否在所有出现 loader 判断的位置一致。
 5. 保持项仅在 R3 直接引入回归时复查。
+
+### Pre-L1 Authority Amendment A1 修订记录（docs-only；Parent = `4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace`；只改合同与施工计划）
+
+**治理事实（如实）**：U2-5 在 S2 / S3 期间被触发——真实宿主观测与冻结合同的宿主行为假设不一致。Implementation 继续施工并记录了事实，但没有放宽 Frozen Contract 的权限；本 amendment 在独立 Level 1 Review 之前偿还该 authority debt。
+这不是 production correctness 缺陷，也不是“U2-5 从未发生”。
+
+**逐项分类（A = 冻结设计的错误假设，可 amendment；B = implementation 缺陷，不可靠改合同通过）**
+
+| 项 | 真实事实 | 分类 | 处理 |
+|---|---|---|---|
+| A1-1 HC-01 状态码 | 两个 pinned 源码声明 `status_code=201`；上游测试固定 201；四宿主观测 201 | **A** | 冻结为精确 201（不是任意 2xx） |
+| A1-2 HC-12a 非 zip | 路由未捕获 `zipfile.BadZipFile`（`Exception` 子类）-> 500；两版逐字节相同；在导入之前；无残留；与 plugin 无关 | **A** | HC-12 拆 12a..12e；12a 冻结“宿主实测 500 + 拒绝 + 无残留 + 无注册 + 代码从未执行”；12b..e 保持 422 |
+| A1-3 符号链接 | 非管理员 Windows 账户，Win32 1314，开发者模式未启用；真实 file symlink 在不改变系统安全设置的前提下不可得 | 环境能力限制（非 A、非 B） | locator 语义不变；原要求保留为目标；不可得时 `ENVIRONMENTALLY_UNAVAILABLE` + 必需替代证据；**充分性由 Reviewer 裁决** |
+| A1-4 E16 | 端到端只观测到 7 个 kind（`K_A`）；9 个未观测到。另：用例 `kind_decode_error_bad_charset` / `kind_redirect_error_loop` / `kind_response_too_large` 实际产生的是 `parse_error+invalid_response` / `connection_error` / `parse_error+invalid_response`，标签虚称了未观测的 kind；4358b3d 的宿主内枚举只调用叶子函数 `reason_for_kind`，没有运行生产的 `AggregationResult -> 中立结果` 映射，也没有运行生产 provider 转换，`detail` 未被验证 | **A + B** | A：双轨模型（E16-A 端到端 + E16-B 全部成员在宿主进程内经生产路径）；B：**只改合同不够**，amendment 被接受后必须补 implementation evidence（见施工计划附录 E） |
+
+**明确不属于 amendment**：`prefix == ""` 仅对顶层 `fc2_metadata_core` spec 要求（合同第 8.3 节原文），子模块使用包内 importer 前缀，实现与合同一致；不为它增加 amendment。
+**不重新打开**：exact pinned wheel only、Risk Class C、R3 最终解析不变量、回滚、威胁模型 / TOCTOU、artifact DAG、支持坐标模型、P5-C1 映射语义。
+
+**未被本 amendment 修改、留给 Reviewer 的发现（不是 amendment）**：HC-11 的 (c)“目录形态 Core 无 sidecar”一行没有“冻结包除外”的限定；冻结包忽略 `PYTHONPATH`（W2-04），无法布置该夹具，合同第 11.2 节 HC-19 已写明“冻结包只覆盖 sidecar 各分支”。
+实现把 (c) 的真实宿主证据放在源码宿主的 HC-19（含真实 `PYTHONPATH` 用例）。本文**不**修改 HC-11，请 Reviewer 裁决该文字是否需要在后续 amendment 中澄清。
+
+**设计者希望 Authority Reviewer 重点质疑的决定**：
+
+1. A1-1：“精确 201”而非“2xx”是否是最窄且正确的冻结（上游源码 + 上游测试 + 四宿主观测）。
+2. A1-2：HC-12a 的判据是否足够窄，且没有把“任意错误状态码”引入其它安装失败判据；“非 zip”的精确定义（`.zip` 名 + 非 ZIP 字节）是否合适。
+3. A1-3：Option B 的替代证据是否足以关闭 Risk C 对符号链接真实宿主子项的要求；`ENVIRONMENTALLY_UNAVAILABLE` 作为 `observed` 的唯一额外取值是否可接受，是否需要更强的替代（例如要求在具备权限的环境补证）。
+4. A1-4：E16-B 是否确实“不降低语义覆盖”；“全部 16 个成员 × 每个必需宿主进程 × 生产映射 + 生产 provider 转换”是否足以替代“每个 kind 一例端到端”；独立期望值的来源（P5-C1 表 F / G）是否合适。
+5. 上述“未被本 amendment 修改”的 HC-11(c) 文字问题是否需要澄清。
