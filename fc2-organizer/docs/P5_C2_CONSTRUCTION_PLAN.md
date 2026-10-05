@@ -27,8 +27,9 @@ Why not split further              : 兼容矩阵、Core 供给、artifact、真
 Internal Stages                    : S1 Compatibility & Supply / S2 Install-Reload-Cross-Version Integration / S3 Final Artifact & Acceptance Evidence
                                      （S1 -> S2 -> S3 连续施工；无中间 Review；无 S 级状态 docs）
 Independent Review Plan            : one Design Review（P5-C2 **第一次** pre-implementation Design Review，已完成：Final Verdict = FAIL，findings P5-C2-DESIGN-R-01..06）
-                                     -> **ONE unified Design R2**（本 docs-only 提交，一次闭合 R-01..R-06）
-                                     -> **P5-C2 Design R2 Incremental Closure Review**（只复查 R-01..R-06 + R2 直接回归；不重新完整审 Amane API / 整个支持矩阵 / 整个 P5-C1 架构，
+                                     -> **ONE unified Design R2**（docs-only，一次闭合 R-01..R-06；增量审计：主体修复成立，遗留 R2-A-01..A-05）
+                                     -> **Design R3**（本 docs-only 提交，窄范围一次闭合 R2-A-01..A-05；不重新设计）
+                                     -> **P5-C2 Design R3 Incremental Closure Review**（只复查 R2-A-01..A-05 + R3 直接回归；不重新完整审 Amane API / 整个支持矩阵 / 整个 P5-C1 架构，
                                         除非 R2 实际改变核心 architecture；R2 的 trust-surface 收窄不是架构推翻）
                                      + **Security Review Focus**：Design Review 必须明确审合同第 8 节 locator 信任边界（exact pinned wheel only、预解析 / 回滚、威胁模型），并单独给出 security 裁决
                                      + one final C-level Review（S1-S3 全部完成之后；Independent Level 1；**必须独立执行 locator / security 证据 E31**，不得只引用 HANDOFF）
@@ -37,7 +38,7 @@ Independent Review Plan            : one Design Review（P5-C2 **第一次** pre
 Owner Question Gate                : BUSINESS DECISIONS ONLY（本设计未发现需要 Owner 的业务问题；支持声明为二维坐标 `(version, host_form, platform)`：
                                      SC-01 / SC-02（Windows x64 冻结桌面版）= 必需部署支持坐标，SC-03 / SC-04（源码宿主）= 必需集成兼容坐标，macOS / Linux / Docker = UNVERIFIED；属技术 / 证据裁决，
                                      可被 Design Reviewer 否决，不阻塞）
-Evidence Gate                      : C2-E01..C2-E31（合同第 15 节；E31 = locator 信任边界 / security 的 PASS-FAIL 配对矩阵；E01 diff scope、E02 C1 语义不变、E03 版本坐标、E04 API 矩阵、E05 Core 供给 / 安装、
+Evidence Gate                      : C2-E01..C2-E31（合同第 15 节；E31 = locator 信任边界 / security 的 PASS-FAIL 配对矩阵 E31-a..v，含 E31-u “wheel 已在 sys.path 但真实解析不是它”与 E31-v 精确 loader 类型；E01 diff scope、E02 C1 语义不变、E03 版本坐标、E04 API 矩阵、E05 Core 供给 / 安装、
                                      E06 确定性 artifact、E07-E14 安装 / 发现 / 配置 / build / reload / 升级 / 缺失 / 不兼容 Core、E15-E16 跨版本结果 / 错误等价、
                                      E17 HTTP 生命周期、E18 无 vendor、E19 无新持久化、E20 mutation、E21-E23 宿主集成、E24 平台 / 支持坐标矩阵、E25-E28 测试 / skip 对账、
                                      E29 artifact 哈希与派生 DAG、E30 gaps；E31 含 Reviewer 的 `.pyc` PoC 场景与失败回滚机械验证）
@@ -50,9 +51,10 @@ Package               = P5-C2 Amane Compatibility & Adapter Closure
 Branch                = claude/phase5-c2-amane-compatibility（自 232ece0… 创建）
 Design Candidate      = 8870df0ea42e60dd142a5878ea7c0abc6ca3c4b5（未经 Independent Review 即被 Owner 快速审计修订为 R1）
 Design Pre-Review R1  = 5dac181f3b948ed0bcdfcedf34100ab1536e41ee（Parent = 8870df0…；C2-DESIGN-R1-01..04；**经独立 Full Design Review：FAIL**）
-Design R2             = 本 docs-only 提交（Parent = 5dac181…；P5-C2-DESIGN-R-01..06；`git log -1 --format=%H -- fc2-organizer/docs/P5_C2_CONSTRUCTION_PLAN.md`）
+Design R2             = 01182642eccbed299577b35d4e9f88efe1b36f06（Parent = 5dac181…；P5-C2-DESIGN-R-01..06；增量审计：主体修复成立，直接引入 / 遗留 R2-A-01..A-05）
+Design R3             = 本 docs-only 提交（Parent = 01182642…；R2-A-01..A-05；`git log -1 --format=%H -- fc2-organizer/docs/P5_C2_CONSTRUCTION_PLAN.md`）
 规范合同              = docs/specifications/PHASE5_C2_AMANE_COMPATIBILITY_CONTRACT.md
-P5-C2 Design R2       = CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
+P5-C2 Design R3       = CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
 Contract              = CANDIDATE
 Construction Plan     = CANDIDATE（本文件）
 Implementation        = NOT STARTED
@@ -106,17 +108,18 @@ P5-C2 不得通过新合同静默 override P5-C1 CLOSED semantics；必须改变
    3.12 上记录 `pytest tests -q` 的 collected / passed / skipped 与 skip nodeid 清单（E27 / E28 基线，应等于 P5-C1 终点 8448 / 40 / 0）。
 2. **Amane 坐标核对（E03）**：重新从 upstream 读取 tag / tag 对象 / peeled commit / release / `requires-python` / `PLUGIN_API_VERSION`；GitHub Release 元数据确认“当前稳定版”（合同第 6.1 节定义）；记录 main 是否 == 稳定版。**此刻冻结矩阵坐标**；与设计期不同（出现更新的 `v*` release）时：以 S1 时刻为准，在 HANDOFF 记录差异，不是 blocker。
 3. **API 指纹（E04）**：复用 C1 `tools/amane_api_manifest.py`（不改）为 v0.18.0 生成 `adapters/amane/api_manifest/amane_v0.18.0_api_manifest.json`；新增 `tools/compare_amane_api.py`：读取各清单，输出“适配器可控子集指纹”并断言两个必需版本相等；对合同第 6.2 节每一行差异产生机检断言。
-4. **shim**：`adapters/amane/shim/plugin.py`（合同第 9.1 节三行，不得增加逻辑）与 `adapters/amane/shim/_ffcc_locator.py`（合同第 8.3 节；纯 stdlib；3.11-3.14 语法；`ensure_core(pin, module_file)` 的 4 步、预解析 / 单次插入 / 再验证 / 回滚、**exact pinned wheel only** 与 4 个固定模板；**不实现树哈希、不验证 pyc、不接受任何目录形态**）。
+4. **shim**：`adapters/amane/shim/plugin.py`（合同第 9.1 节三行，不得增加逻辑）与 `adapters/amane/shim/_ffcc_locator.py`（合同第 8.3 节；纯 stdlib；3.11-3.14 语法；`ensure_core(pin, module_file)` 的 0..4 步、入口快照 -> wheel 证明 -> 防御性预解析 -> 至多一次插入（已存在则不插入、不重排、不提升）-> **最终真实解析证明（唯一成功规则）** / 回滚、**exact pinned wheel only** 与 4 个固定模板；**不实现树哈希、不验证 pyc、不接受任何目录形态**）。
 5. **Core wheel 构建器** `tools/build_core_wheel.py`（合同第 10.2 节）+ **发布台账** `adapters/amane/release/core_release_ledger.json`（同版本不同 tree 哈希 -> 构建失败）；wheel 仅含 `*.py` + 4 个 dist-info 文件，成员 tree 哈希对拍 C1 `core_tree_sha256`（E31-q）。
 6. **plugin zip / bundle 构建器** `tools/build_amane_release.py`（合同第 9.1、10 节）：生成 `_ffcc_pin.py`（只含字面量）；把 `adapters/amane/fc2_amane_adapter/*.py` 的 **LF 规范化字节**放入 `_impl/`（normalized-byte identity）；拒绝 id != `PLUGIN_ID`；allow-list / forbidden 扫描；`ZIP_STORED`；按合同第 10.5 节**严格无环的 DAG** 分两个子命令：`stage1`（L1：以 L0 wheel 的哈希生成 `_ffcc_pin.py`，输出 plugin zip、`INSTALL.zh-CN.md`、`VERSION`；INSTALL / VERSION 不含任何哈希）与 `finalize`（L2–L4：只读 MATRIX **Part A 的字段白名单**投影出 `COMPATIBILITY.json`，再生成 `SHA256SUMS`（5 个成员，不含自身）与 bundle zip）；S1 先实现并测试 `finalize` 的投影 / 顺序 / 禁止字段（以占位 Part A 作输入），S3 用真实 Part A 生成最终 bundle。**不 import C1 构建器**。
 7. **主进程纯逻辑测试**（3.12；`tests/amane_compat/test_amane_compat_*.py`；pytest 文件名全局唯一）：
-   * locator（E31 的**单元层**；**exact pinned wheel only**）：合同第 8.3 节 4 步全部分支、4 个模板、E31-a..t 的 PASS / FAIL 配对——含**已加载**的 exact pinned wheel（PASS）/ 错误版本 / 被篡改的同名 wheel / 目录形态（pip `--target` / editable / 源码，即使字节正确）FAIL，
+   * locator（E31 的**单元层**；**exact pinned wheel only**）：合同第 8.3 节 4 步全部分支、4 个模板、E31-a..v 的 PASS / FAIL 配对——含**已加载**的 exact pinned wheel（PASS）/ 错误版本 / 被篡改的同名 wheel / 目录形态（pip `--target` / editable / 源码，即使字节正确）FAIL，
       **未加载**的目录形态无 sidecar（FAIL，import 之前，`fc2_metadata_core` 不在 `sys.modules`）、目录形态 + 有效 sidecar（PASS，加载的是 wheel，目录中的 sentinel 不存在）、
       **Reviewer 的恶意 `.pyc` PoC（E31-h；复用合同 W2-12 的构造：以真实 wheel 解压的目录形态 Core，pyc 携带源文件相同 mtime / size，payload 写 sentinel；3.12 与 3.14 均执行，不得删除）**、
       sidecar 篡改 / 符号链接（无权限时 `os.lstat` 替身并记录 `symlink_privilege=false`，**不 skip**）/ 超大 / 同名目录 / 仅有其它版本 wheel、混合来源子模块、`sys.meta_path` 遮蔽（预解析即拒绝）、插入后才抢占的有状态 finder（**回滚**）、
-      **每个 FAIL 机械断言 `sys.path` 逐元素不变（同一 list 对象）且 `sys.modules` 中 `fc2_metadata_core*` 对象身份不变**、成功路径至多一次插入且幂等；`module_file` 为 staging 路径与正式路径；
+      **每个 FAIL 机械断言 `sys.path` 与入口逐元素相同（同一 list 对象）、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变、verified-wheel 的 importer-cache 条目 == 入口状态**（不要求恢复全局 importer cache）、成功路径至多一次插入且幂等（**重复调用仍执行最终真实解析**）；`module_file` 为 staging 路径与正式路径；
       **`tmp_path` + 真实构建的 wheel**，不依赖 Amane；每个用例以 subprocess 隔离（避免污染主进程 `sys.modules` / `sys.path`，遵守 P5-ENTRY-CLOSURE-OBS-01）；
    * 确定性（E06）：两个解释器（subprocess 3.12 与 3.14）× 两个输出目录 × CRLF 检出副本 -> 哈希相等；allow-list / forbidden；
+   * **R3 增量（A-01..A-04）**：**E31-u**（wheel 已在 `sys.path`，更靠前有**惰性的**不受支持 Core 来源：目录包 `__init__.py` 只含注释或惰性 meta_path finder；不执行任何 payload）-> 必须 FAIL，惰性包从未被导入，状态与入口一致；**E31-v**（惰性的 `zipimporter` 子类 loader double）-> FAIL（`type(loader) is zipimporter`，非 `isinstance`）；**E31-l** 含入口有 / 无 verified-wheel cache 条目两个回滚子场景；**M2-23** 的 killer = E31-u；3.12 与 3.14 均执行；
    * 无 vendor（E18）；`_impl` 的 `tree_sha256` == C1 `adapter_tree_sha256`（E02，normalized-byte identity）；shim / locator AST 守卫（无写 API、无网络、无 amane / pydantic / Core import、无 `sys.modules` 修改、无树哈希 / pyc 逻辑）；
    * **artifact 派生 DAG 测试（E29 / M2-22）**：拓扑检查、禁止字段扫描（`COMPATIBILITY.json` / `INSTALL.zh-CN.md` / `VERSION` 不含 `SHA256SUMS` / bundle / 自身 / MATRIX 哈希）、改 MATRIX Part B 不改变 L2–L4、`sha256sum -c`、从仓库树重建逐字节一致；
    * 威胁模型措辞守卫（E31-t）：INSTALL 含“运行期间不要替换或删除 sidecar wheel”，且不含未被支持的“发布者认证 / 数字签名 / 防篡改”承诺；
@@ -135,7 +138,7 @@ P5-C2 不得通过新合同静默 override P5-C1 CLOSED semantics；必须改变
 5. **跨版本等价（E15 / E16）**：同一请求集在 v0.15.0 / v0.18.0 上产生规范化 JSON，比较 sha256；对宿主 `FailureReason` 全部成员做桥分类的全函数枚举测试。
 6. **冻结包见证**：HOST-A-WIN / HOST-B-WIN（坐标 SC-01 / SC-02，**必需的部署支持坐标**）在 Windows 上运行同一 HC 集合（服务进程 = `onedir/Amane.Server.exe`，环境变量同设计期探针；**不**设置 `PYTHONPATH`）。
    源码宿主 HOST-A-SRC / HOST-B-SRC（SC-03 / SC-04）= 必需的集成兼容。**macOS / Linux / Docker（SC-07 / SC-08 / SC-09）不可得 -> `UNVERIFIED`，不伪造，不进支持声明**（设计期已核对本环境无 Docker；不为扩大声明增加环境依赖）。
-   **HC-19（Core 来源准入矩阵）**：真实宿主子进程内执行 E31 的 PASS / FAIL 配对；源码宿主覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**，无 sidecar -> FAIL，有 sidecar -> 加载 wheel 且 sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；冻结包覆盖 sidecar 各分支；每个 FAIL 要求 422 / `failures` + 固定模板 + 无半装 + `sys.path` 逐元素不变 / `sys.modules` 中 `fc2_metadata_core*` 对象身份不变。源码宿主**同样使用 sidecar wheel**（`AMANE_DATA_DIR/plugins/_ffcc_core/`），`pip` 只用于准备宿主 venv 依赖。
+   **HC-19（Core 来源准入矩阵）**：真实宿主子进程内执行 E31 的 PASS / FAIL 配对；源码宿主覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**，无 sidecar -> FAIL，有 sidecar -> 加载 wheel 且 sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；冻结包覆盖 sidecar 各分支；每个 FAIL 要求 422 / `failures` + 固定模板 + 无半装 + `sys.path` 与入口逐元素相同 / `sys.modules` 中 `fc2_metadata_core*` 对象身份不变 / verified-wheel importer-cache 条目 == 入口状态；**HC-19 含 E31-u / E31-v（源码宿主；惰性 sentinel，不执行 payload）**，冻结包上无法在宿主进程里布置 `sys.path` 夹具，故只覆盖 sidecar 各分支。源码宿主**同样使用 sidecar wheel**（`AMANE_DATA_DIR/plugins/_ffcc_core/`），`pip` 只用于准备宿主 venv 依赖。
 7. HOST-C-MAIN：若 main == 稳定版 commit -> `IDENTICAL_TO_STABLE`，不重复运行；否则运行，**失败不阻塞**，记录为信息差异。HOST-MID 可选。
 8. S2 结束的 checkpoint：HC 全集在两个必需源码宿主 + 两个冻结包上通过（或 BLOCKED + 根因，不得绕过）；**MATRIX Part A** 初稿生成（Part B 不在此时写入）。
 
@@ -147,7 +150,7 @@ P5-C2 不得通过新合同静默 override P5-C1 CLOSED semantics；必须改变
 3. `adapters/amane/README.md` 状态行更新（仅文档；不改 C1 树）。
 4. **提交** `docs/acceptance/evidence/P5_C2_COMPATIBILITY_MATRIX.json`（Part A + Part B；确定性；同一环境重跑逐字节相同；测试重算 artifact 哈希并与之核对）；`status` 以**坐标** `(version, host_form, platform)` 为 key（合同第 14.1 节），含 `core_admission` 的 E31 用例结果；
    `COMPATIBILITY.json`、`INSTALL.zh-CN.md`、E24 使用同一份支持坐标表（合同第 7.2 节）；INSTALL 中任何 Docker 步骤标 `UNVERIFIED / informational — 不在本发布验收覆盖范围内`。
-5. **Mutation / 非空洞（E20）**：M2-01..M2-22 以补丁脚本作用于**临时副本**，断言 killer 失败；其中 M2-14 / M2-15 / M2-17..M2-21 是 locator 信任边界的专项 mutant（E31；**M2-21 = 目录形态含未被 `*.py` 哈希表示的恶意 `.pyc`，killer = E31-h**），M2-22 = artifact 派生环（killer = E29 DAG 测试）。
+5. **Mutation / 非空洞（E20）**：M2-01..M2-23 以补丁脚本作用于**临时副本**，断言 killer 失败；其中 M2-14 / M2-15 / M2-17..M2-21 与 **M2-23（existing-wheel 分支不做最终真实解析，killer = E31-u）** 是 locator 信任边界的专项 mutant（E31；**M2-21 = 目录形态含未被 `*.py` 哈希表示的恶意 `.pyc`，killer = E31-h**），M2-22 = artifact 派生环（killer = E29 DAG 测试）。
 6. **回归**：P5-C1 `tests/amane_adapter/**` 在 3.12 上全绿；P5-C1 要求的 3.14 证据集 A / B 在 3.14 上重跑，数字与 C1 终点一致（A 1833、B 520）；`pytest tests -q`（3.12）全量，skip 对账（E27 / E28）。
 7. 写 `docs/review/P5_C2_HANDOFF.md`（实现完成后；**不是**本设计阶段产物）：逐条 E01..E31、坐标、哈希、局限、`Next`。
 8. 只在 S3 末尾提交 HANDOFF 后停止，等待**一次**独立 Level 1 Review。
@@ -231,9 +234,10 @@ PASS 条件：E01..E31 全部有证据或有被接受的 `UNVERIFIED` / gap 记�
 4. 设计期实证（W2-04 / W2-05）在**真实官方冻结包**上执行并记录；对未验证的平台（macOS / Linux / Docker）明确 `UNVERIFIED`。
 5. Core 供给方案满足“不 vendor / 普通用户可从零安装”，并回答了合同第 8.1 节的全部问题。
 6. 每个 mutant 有 killer；每个 E 项有判据。
-8. Design R2：删除目录形态 Core 的接受（exact pinned wheel only），`.pyc` PoC 在设计期复现并由 wheel-only 原型拒绝（3.12.10 / 3.14.7）；威胁模型（Defended / Not Defended / Non-claims）与 L-C2-13 ACCEPTED 已冻结；失败回滚（预解析 + 单次插入 + 再验证 + `sys.path` 还原）已冻结并有机械验证；artifact 派生 DAG 无环（设计期探针）；支持措辞全文坐标化；zipimport 的 verified root 与 `_impl` 的 normalized-byte identity 术语已统一。
-7. Pre-Review R1：Authority 优先级已领域化（不再写 “Governance > Frozen Contract”）；Risk Class = C 且理由精确；Core pin 在**每一种**执行模式下 fail closed（含已加载、editable、pip）且无 `unverified-path`；
+7. **（HISTORICAL — SUPERSEDED BY R2：directory forms are no longer accepted execution modes；此条为 R1 时代的自审记录，其中“每一种执行模式下 fail closed（含已加载、editable、pip）”的表述已作废，目录形态 / editable / pip 不再是被接受的执行模式，现行规则见合同第 8.3 节）** Pre-Review R1：Authority 优先级已领域化（不再写 “Governance > Frozen Contract”）；Risk Class = C 且理由精确；Core pin 在**每一种**执行模式下 fail closed（含已加载、editable、pip）且无 `unverified-path`；
    支持声明为二维坐标，UNVERIFIED 平台不被版本状态覆盖；Design Review 为完整的第一次审查。
+8. Design R2：删除目录形态 Core 的接受（exact pinned wheel only），`.pyc` PoC 在设计期复现并由 wheel-only 原型拒绝（3.12.10 / 3.14.7）；威胁模型（Defended / Not Defended / Non-claims）与 L-C2-13 ACCEPTED 已冻结；失败回滚（预解析 + 单次插入 + 再验证 + `sys.path` 还原）已冻结并有机械验证；artifact 派生 DAG 无环（设计期探针）；支持措辞全文坐标化；zipimport 的 verified root 与 `_impl` 的 normalized-byte identity 术语已统一。
+9. **Design R3 直接回归守卫**：(1) 不存在任何“wheel anywhere in sys.path -> immediate success”的路径；(2) 每个 success path 都有最终真实解析证明；(3) 每个发生在 locator-owned path / cache 变化之后的失败都有精确回滚，且入口快照先于任何 probe；(4) 目录形态仍被拒绝；(5) 没有新增被接受的 Core 来源（受信 loader 仅 `type(...) is zipimporter`）；(6) E31-u / M2-23 / HC-19 / E31-p / I-C2-18 描述同一个不变量。
 
 ---
 
@@ -300,14 +304,14 @@ W2-14  artifact 派生 DAG 探针（脚本不入库）
 ## 附录 D —— 状态
 
 ```text
-P5-C2 Design R2      : CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
+P5-C2 Design R3      : CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
 Contract             : CANDIDATE
 Construction Plan    : CANDIDATE
 Risk Class           : C
 Implementation       : NOT STARTED
 ```
 
-### Design R2 修订记录（本计划侧；与合同“Design R2 修订记录”一一对应）
+### Design R2 修订记录（历史；本计划侧；与合同“Design R2 修订记录”一一对应；R-01..R-06 主体修复经增量审计成立）
 
 | Finding | 本计划的同步内容 | 状态 |
 |---|---|---|
@@ -319,3 +323,31 @@ Implementation       : NOT STARTED
 | P5-C2-DESIGN-R-06 | `_impl` 统一为 LF 规范化字节 / normalized-byte identity；zipimport 的 verified root 语义写入合同第 8.3 节 | REMEDIATED — INCREMENTAL REVIEW REQUIRED |
 
 Design R2 不改变：Authority model、Risk Class C、Amane 坐标、API 兼容结论、支持坐标结构、sidecar 主架构、P5-C1 映射与 `_impl` 语义、Core 不 vendor、`src/**` 与 `pyproject.toml` 零改动、无热切换 Core、Phase 6 边界、S1/S2/S3 连续意图。R2 不得写为 CLOSED / PASS / FROZEN / AUTHORIZED。
+
+### Design R3 修订记录（本计划侧；与合同“Design R3 修订记录”一一对应）
+
+| Finding | 本计划的同步内容 | 状态 |
+|---|---|---|
+| R2-A-01 | S1 locator 单元层新增 E31-u（wheel 已在 `sys.path`、更靠前有惰性不受支持来源 -> 必须 FAIL）；S2 HC-19 同步；S3 新增 M2-23（killer = E31-u）；重复调用仍执行最终真实解析（E31-p）；locator 实现必须遵守“NO SUCCESS RETURN UNTIL ACTUAL CURRENT RESOLUTION PROVES THE EXACT PINNED WHEEL”（I-C2-18） | REMEDIATED — REVIEW REQUIRED |
+| R2-A-02 | 测试断言的回滚范围统一为 `sys.path` + verified-wheel importer-cache 条目 + `sys.modules` 的 Core 对象身份；不要求恢复全局 importer cache；入口快照先于任何 probe | REMEDIATED — REVIEW REQUIRED |
+| R2-A-03 | 已加载 Core 的证明措辞 = current-origin + current-artifact proof，不是历史已执行字节证明（N-03 / L-C2-13） | REMEDIATED — REVIEW REQUIRED |
+| R2-A-04 | 受信 loader 判据 = `type(loader) is zipimporter`；E31-v 以惰性 `zipimporter` 子类 double 验证 | REMEDIATED — REVIEW REQUIRED |
+| R2-A-05 | 自审清单 R1 时代条目标注 HISTORICAL — SUPERSEDED BY R2；R1 / R2 修订记录标为历史；正文无“字节原样 `_impl`” | REMEDIATED — REVIEW REQUIRED |
+
+Design R3 不改变：exact pinned wheel only、目录形态拒绝、Risk Class C、威胁模型与 TOCTOU 接受、artifact 派生 DAG、坐标化支持声明、Amane 坐标 / API 结论、P5-C1 normalized `_impl` 语义、不 vendor、无热切换 Core、Phase 6 边界。R3 不得写为 CLOSED / PASS / FROZEN / AUTHORIZED。
+
+### Design R3 设计期探针（**不入库**；惰性 sentinel fixture，不执行任何 payload，不复现攻击链）
+
+```text
+W2-15  对第 8.3 节 2A..2E 的最小原型（3.12.10 与 3.14.7 均执行，全部符合期望）
+  A  wheel 已在 sys.path，更靠前有惰性的不受支持 Core 目录包（__init__.py 只含注释）-> 预解析（wheel-first）通过，最终真实解析命中惰性包 -> REJECT；
+     sys.path 与入口相同、verified-wheel cache 条目被清除、惰性包未被导入
+  B  wheel 已在 sys.path[0] -> 成功，未插入
+  C  wheel 不在 sys.path -> 一次插入；重复调用幂等（wheel 条目恰好 1 个，第二次仍走最终真实解析）
+  D  插入后才抢占的有状态 finder，入口无 cache 条目 -> 回滚后 sys.path 与 cache 均回到入口
+  E  同 D，但入口已有 cache 条目 -> 回滚后仍是原对象
+  F  惰性 zipimporter 子类 loader double -> `type(loader) is zipimporter` 拒绝；`isinstance` 会接受（探针同时打印两者）
+```
+
+实现期 E31 必须在 3.12 与 3.14 上执行上述冻结不变量；探针本身不是实现，不得被当作测试替身提交。
+

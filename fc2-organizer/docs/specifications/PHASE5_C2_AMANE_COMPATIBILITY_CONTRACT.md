@@ -1,7 +1,7 @@
 # P5-C2 合同（Contract）-- Amane Compatibility & Adapter Closure
 
 ```text
-状态                    : P5-C2 Design R2: CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
+状态                    : P5-C2 Design R3: CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
 Contract                : CANDIDATE
 Construction Plan       : CANDIDATE（docs/P5_C2_CONSTRUCTION_PLAN.md）
 Implementation          : NOT STARTED
@@ -12,6 +12,7 @@ P5-C1 Final Reviewed Technical Head : 0289b191659234a0e74f498e7b412c06c3d28d4a
 Package Frozen Base     : CANDIDATE = 232ece06c1d166929846bc9c63ffc7314ea3a484（是否冻结由独立 Design Review 建立；本文不自行宣称）
 Design Base             : 232ece06c1d166929846bc9c63ffc7314ea3a484（Design 起始基线，不等于已冻结的 Package Frozen Base）
 Risk Class              : C（Design Pre-Review R1 裁决：P5-C2 新建“外部可执行 artifact 信任边界”= security boundary；第 5 节。Risk C 不自动拆分 S1/S2/S3）
+Design R3               : docs-only 窄范围收口（R2-A-01..A-05；Parent = 01182642eccbed299577b35d4e9f88efe1b36f06；见文末“Design R3 修订记录”）；仍是 CANDIDATE，**不是** FROZEN / PASS / AUTHORIZED / CLOSED
 Design R2               : docs-only 统一修订（P5-C2-DESIGN-R-01..06；Parent = 5dac181f3b948ed0bcdfcedf34100ab1536e41ee；见文末“Design R2 修订记录”）；仍是 CANDIDATE，**不是** FROZEN / PASS / AUTHORIZED
 Design Pre-Review R1    : docs-only 修订（C2-DESIGN-R1-01..04；见文末“Design Pre-Review R1 修订记录”）；仍是 CANDIDATE，**不是** FROZEN / PASS / AUTHORIZED
 Branch                  : claude/phase5-c2-amane-compatibility
@@ -274,11 +275,12 @@ U2-12 需要重新引入目录形态 Core 的接受路径而无法冻结并验�
 | W2-07 | Core 无资源文件 / 无 `__file__` 依赖 | `grep` `__file__ / importlib.resources / pkgutil / pkg_resources / get_data` 在 `src/fc2_metadata_core` 为空；Core 目录无非 `.py` 文件 -> 可 zipimport |
 | W2-08 | Core import 面不需要第三方包 | 沿用 C1 W-03（`httpx` 等被阻断时 import 成功）；W2-05 在冻结宿主上再次确认（`httpx` 未被加载） |
 | W2-09 | 现有 `pip wheel` 的 zip 字节依赖构建环境 | setuptools 产物含文件 mtime 与 deflate 流；不满足“同输入 -> 同字节”，需自建构建器并用 `ZIP_STORED`（第 10.3 节） |
-| W2-10 | C1 见证测试把 adapter 树哈希与 Core 树哈希焊在 CLOSED 测试里 | `tests/amane_adapter/test_amane_host_witness_log.py` 断言 `adapter_tree_sha256 == tree_sha256(adapter tree)` 与 `core_tree_sha256 == tree_sha256(src/fc2_metadata_core)`；因此**任何对 adapter 树的字节改动都会破坏一个 CLOSED 测试**（决定第 9 节的 shim + 字节原样 `_impl/` 设计，U2-6 / U2-7） |
+| W2-10 | C1 见证测试把 adapter 树哈希与 Core 树哈希焊在 CLOSED 测试里 | `tests/amane_adapter/test_amane_host_witness_log.py` 断言 `adapter_tree_sha256 == tree_sha256(adapter tree)` 与 `core_tree_sha256 == tree_sha256(src/fc2_metadata_core)`；因此**任何对 adapter 树的字节改动都会破坏一个 CLOSED 测试**（决定第 9 节的 shim + LF 规范化字节同一的 `_impl/` 设计，U2-6 / U2-7） |
 | W2-11 | （观察，**R2 不再依赖**）`pip install --target` 安装出的目录形态 Core 的 `*.py` 树哈希与 source tree 哈希及 C1 witness 的 `core_tree_sha256` 逐字相等（`6077cd6739424848137f2b8a1d6c37d20cc9cb3185cc94df07774169b3fda026`） | 该观察曾支撑 R1 的目录形态准入；R2 因 W2-12 删除目录形态准入，仅保留其作为构建期 traceability（E31-q） |
 | W2-12 | **Reviewer 的 `.pyc` 绕过 PoC 在设计期复现** | 取设计期 wheel 的 `fc2_metadata_core/` 解压为目录形态 Core；Python 先生成真实的 `__pycache__/__init__.cpython-3x.pyc`（时间戳型）；用 `importlib._bootstrap_external._code_to_timestamp_pyc(code, 源文件 mtime, 源文件 size)` 生成**携带相同 mtime / size** 的恶意 pyc 覆盖之（payload = 写 sentinel 文件后继续原代码）。结果（**3.12.10 与 3.14.7 均**）：`tree_sha256`（C1 算法，仅 `*.py`）**前后相同**（前 12 位 `6077cd673942`）；新解释器 `import fc2_metadata_core` 后 **sentinel 存在，payload 已执行**。即 R1 的“`*.py` 树哈希 + 允许 `.pyc`”**不覆盖全部可执行字节** |
 | W2-13 | wheel-only 准入原型（**不入库**）：zipimport 语义与拒绝 / 遮蔽 / 回滚（3.12.10 与 3.14.7 均通过） | 原型实现第 8.3 节算法：(a) 目录形态 Core（含恶意 pyc）在 `sys.path` 上、无 sidecar -> `UNVERIFIABLE`，`fc2_metadata_core` 不在 `sys.modules`，`sys.path` / `sys.modules` 不变；(b) 同目录 + 有效 sidecar -> wheel 被插入 `sys.path[0]` 且 `find_spec` 解析到 wheel（目录形态未被执行）；重复调用幂等（wheel 条目 1 个）；(c) 被篡改的同名 wheel -> `WHEEL_HASH`，状态不变；(d) `sys.meta_path` 上抢占的 finder -> 预解析即拒绝，`sys.path` 未被修改；(e) 仅在 wheel 进入 `sys.path` 后才抢占的有状态 finder -> 回滚，`sys.path[:] = before`，状态不变；(f) 本账户无权限创建符号链接（`OSError`）-> 实现测试须用 `os.lstat` 替身并记录 `symlink_privilege=false`。zipimport 语义：`spec.loader` 为 `zipimporter`，`loader.archive` == wheel 路径，`loader.prefix == ""`，`spec.origin == <archive>\fc2_metadata_core\__init__.py`，`spec.submodule_search_locations == [<archive>\fc2_metadata_core]`（归档内路径，非文件系统目录） |
 | W2-14 | artifact 派生 DAG 无环且确定（**不入库**探针） | 以 `ZIP_STORED` 确定性 zip 实现 L0..L4：同输入两次构建的 bundle 字节相同；`COMPATIBILITY.json` 不含自身 / `SHA256SUMS` / bundle 哈希；`sha256sum -c` 通过且 `SHA256SUMS` 不列自身；改变 Part A 的状态只改变 L2–L4、不改变 L0 / L1（无回边）；若 `COMPATIBILITY.json` 内嵌 `SHA256SUMS` 哈希则重新计算后该哈希立即过期（不动点不可达），证明原设计的环 |
+| W2-15 | R3 防御性探针（**不入库**；惰性 sentinel fixture，不执行任何 payload；3.12.10 与 3.14.7 均通过） | 原型实现第 8.3 节 2A..2E：(A) wheel **已在** `sys.path`、更靠前有惰性的不受支持 Core 目录包 -> 预解析（wheel-first）通过但**最终真实解析**命中惰性包 -> `REJECT`；`sys.path` 与入口相同、verified-wheel cache 条目被清除、惰性包未被导入；(B) wheel 已在 `sys.path[0]` -> 成功且未插入；(C) wheel 不在 -> 一次插入；重复调用幂等（wheel 条目恰好 1 个，第二次仍走 2E）；(D) 插入后才抢占的有状态 finder、入口无 cache 条目 -> 回滚后 `sys.path` 与 cache 均回到入口；(E) 同上但入口已有 cache 条目 -> 回滚后仍是**原对象**；(F) 惰性 `zipimporter` 子类 loader double -> `type(loader) is zipimporter` 拒绝，而 `isinstance` 会接受（探针同时打印两者） |
 
 ---
 
@@ -395,32 +397,50 @@ CORE_TREE_SHA256   = "<tree_sha256(src/fc2_metadata_core)>"       # 仅用于构
 SIDECAR_DIRNAME    = "_ffcc_core"
 ```
 
-**Verified root（只有 wheel 形态；R-06 的 zipimport 精确语义，W2-13 在 3.12.10 / 3.14.7 实测）**：verified root = **那一个 `.whl` 归档文件的路径**。对被验证的 wheel：`spec.loader` 是 `zipimport.zipimporter`，其 `archive` 规范化（`os.path.normcase(os.path.realpath(·))`）后等于 verified wheel 的规范化路径，`prefix == ""`；
+**Verified root（只有 wheel 形态；R-06 的 zipimport 精确语义，W2-13 在 3.12.10 / 3.14.7 实测）**：verified root = **那一个 `.whl` 归档文件的路径**。对被验证的 wheel：`type(spec.loader) is zipimport.zipimporter`（**精确类型判据，不是 `isinstance`**；zipimporter 的子类或任何其它 loader 实现一律不被信任；本合同**不**支持任何其它具体标准库 loader，若将来必须支持须经合同 amendment 逐个列出），其 `archive` 规范化（`os.path.normcase(os.path.realpath(·))`）后等于 verified wheel 的规范化路径，`prefix == ""`；
 `spec.origin = <archive><os.sep><归档内成员路径>`（如 `…\fc2_metadata_core-0.1.0-py3-none-any.whl\fc2_metadata_core\__init__.py`）；包的 `spec.submodule_search_locations` 是**归档内**路径列表 `[<archive><os.sep>fc2_metadata_core]`（**不是文件系统目录**，不得用“恰好一个目录”描述）。
-所有 `fc2_metadata_core` / `fc2_metadata_core.*` 的模块必须满足：`__spec__` 存在，`__spec__.loader` 是 `zipimporter` 且 `archive` 规范化后**等于同一个 verified wheel**，`__spec__.origin` 以 `<archive><os.sep>` 开头（**同一 verified root**）。任何不满足（目录来源 / 非 zipimport loader / 缺失 `__spec__` / 命名空间包 / 不同 archive）= 不同根 / 无法验证。
+所有 `fc2_metadata_core` / `fc2_metadata_core.*` 的模块必须满足：`__spec__` 存在，`type(__spec__.loader) is zipimport.zipimporter`（精确类型）且 `archive` 规范化后**等于同一个 verified wheel**，`__spec__.origin` 以 `<archive><os.sep>` 开头（**同一 verified root**）。任何不满足（目录来源 / 非 zipimport loader / 缺失 `__spec__` / 命名空间包 / 不同 archive）= 不同根 / 无法验证。
 
 **wheel 证明（对 sidecar wheel 与对已加载 Core 所属 wheel 使用同一证明）**：`os.lstat` 为**普通文件**（非目录 / 非符号链接 / 非其它特殊文件）；文件名 == `CORE_WHEEL_NAME`；大小 `<= 16 MiB`；`sha256(整个文件) == CORE_WHEEL_SHA256`。
 
 `ensure_core(pin, module_file)` 按固定顺序执行（**无网络、无写文件、无子进程、不 import Core**；只做 `lstat` / 读 wheel 做哈希 / 读 `sys.modules` / `sys.meta_path` / 修改 `sys.path`）：
 
-1. **已加载**：`sys.modules` 已含 `fc2_metadata_core`：取其 `__spec__.loader.archive` 作为候选 wheel，执行**wheel 证明**，并要求所有 `fc2_metadata_core*` 模块同根（见上）。通过 -> 接受（**不修改任何状态**）；不通过（含目录形态 / 非 zipimport / 错误版本 / 被篡改的同名 wheel / 混合来源 / 无法定位）-> `ImportError(RESTART_TEMPLATE)`。
+0. **入口快照（A-01 / A-02；先于一切 probe）**：`ensure_core` 一进入就取得 `entry_sys_path = list(sys.path)`；在**已确定 sidecar wheel 路径之后、第一次 `find_spec` / `PathFinder` probe 之前**取得 `entry_cache`
+   = `sys.path_importer_cache` 中所有规范化路径等于该 wheel 的键及其值（路径推导只做字符串与 `lstat`，**不**触发任何 probe）。**不得**等预解析之后再取快照。
+1. **已加载**：`sys.modules` 已含 `fc2_metadata_core`：取其 `__spec__.loader.archive` 作为候选 wheel（要求 `type(__spec__.loader) is zipimport.zipimporter`），执行**wheel 证明**，并要求所有 `fc2_metadata_core*` 模块同根（见上）。通过 -> 接受（**不修改任何状态**）；不通过（含目录形态 / 非精确 zipimporter / 错误版本 / 被篡改的同名 wheel / 混合来源 / 无法定位）-> `ImportError(RESTART_TEMPLATE)`。
+   **措辞冻结（A-03）**：已加载 Core 的证明 = **current-origin + current-artifact proof**——当前模块 origin 指向那个确切的 wheel 路径，且该 wheel 文件的**当前**字节符合 pin；它**不是** historical executed-byte proof，**不**证明此前已执行过的全部字节就是当前 wheel 的字节（这属于已接受的运行期可变性限制，见威胁模型 N-03 / L-C2-13；不改变准入算法）。
    loaded Core != pinned Core 一律是 RESTART / PIN MISMATCH；**不 purge、不热切换**。
 2. **sidecar**：由 `module_file`（shim 的 `__file__`）向上逐级查找第一个满足 `p.name == "sources" and p.parent.name == "plugins"` 的目录 `p`，`data_dir = p.parent.parent`
    （同时覆盖 `sources/.staging/<x>/` 的安装前检查阶段与 `sources/ffcc.fc2-metadata/` 的正式加载阶段；找不到 -> “无 sidecar”，不报错）。`sidecar = data_dir / "plugins" / "_ffcc_core"`：
    * 目录不存在 -> “无 sidecar”；
    * 存在但**不含**名为 `CORE_WHEEL_NAME` 的条目：若含其它 `fc2_metadata_core-*.whl` -> `ImportError(WHEEL_VERSION_MISMATCH_TEMPLATE)`，否则“无 sidecar”；
-   * 含名为 `CORE_WHEEL_NAME` 的条目：执行**wheel 证明**，失败 -> `ImportError(WHEEL_HASH_MISMATCH_TEMPLATE)`；
-   * 通过后进入**预解析**（R-03；**不修改 `sys.path`**）：按 `sys.meta_path` 的顺序逐个询问：`importlib.machinery.PathFinder` 以 `find_spec("fc2_metadata_core", [wheel] + list(sys.path))` 解析（即“wheel 位于 `sys.path[0]` 时会得到什么”），其它 finder 以 `find_spec("fc2_metadata_core", None)` 询问；取**第一个**非 `None` 的 spec。
-     该 spec 必须满足 verified root 条件（loader 是 `zipimporter` 且 `archive` == 该 wheel）；否则 `ImportError(UNVERIFIABLE_TEMPLATE)`（**此时尚未修改任何状态**）。
-   * 若该 wheel（规范化路径）已在 `sys.path` 中 -> 幂等返回，不再插入；
-   * 否则**一次**插入并带回滚：`before = list(sys.path)`；`cache_had = wheel in sys.path_importer_cache`；`sys.path.insert(0, wheel)`；用 `importlib.util.find_spec("fc2_metadata_core")` **再验证**（防竞态 / 实现差异）；
-     再验证失败 -> **回滚**：`sys.path[:] = before`（保持 `sys.path` 为同一个 list 对象，逐元素还原，**不触碰**原本就存在的相同条目）；若 `cache_had` 为假则 `sys.path_importer_cache.pop(wheel, None)`；`sys.modules` 从未被改动；抛 `ImportError(UNVERIFIABLE_TEMPLATE)`。
+   * 含名为 `CORE_WHEEL_NAME` 的条目 -> 依次执行 2A..2E（**唯一成功规则：NO SUCCESS RETURN UNTIL ACTUAL CURRENT RESOLUTION PROVES THE EXACT PINNED WHEEL**；无论 wheel 原本是否已在 `sys.path`，都必须执行 2E）：
+     * **2A 入口快照**：已在第 0 步取得（`entry_sys_path`、`entry_cache`）。
+     * **2B wheel 证明**：精确文件名、普通文件、非符号链接、大小上限、整个 wheel 的 `sha256 == CORE_WHEEL_SHA256`；失败 -> `ImportError(WHEEL_HASH_MISMATCH_TEMPLATE)`。
+     * **2C 预解析（防御性；不修改 `sys.path`）**：按 `sys.meta_path` 的顺序逐个询问：`importlib.machinery.PathFinder` 以 `find_spec("fc2_metadata_core", [wheel] + list(sys.path))` 解析（“假设 wheel 位于最高优先级时会得到什么”），其它 finder 以 `find_spec("fc2_metadata_core", None)` 询问；取**第一个**非 `None` 的 spec。
+       该 spec 必须满足 verified root 条件（`type(loader) is zipimporter`、`archive` == 该 wheel、origin 与包的 `submodule_search_locations` 均在该归档内）；否则 `ImportError(UNVERIFIABLE_TEMPLATE)`。**预解析通过不是最终准入。**
+     * **2D 建立优先级（**唯一冻结行为：不重排、不移动、不删除任何已存在的 `sys.path` 条目**）**：
+       若该 wheel（规范化路径）**不在** `sys.path` 中 -> `sys.path.insert(0, wheel)`（**至多一次**）；
+       若该 wheel **已**在 `sys.path` 中（无论位置）-> **不插入、不重排、不提升**。**不得**因“wheel 已在 `sys.path` 中”而返回成功——直接进入 2E。
+     * **2E 最终真实解析（A-01；两个分支都必须执行）**：用**实际的当前 import 解析** `importlib.util.find_spec("fc2_metadata_core")`（此时的真实 `sys.meta_path` 与真实 `sys.path`）独立确认：`type(spec.loader) is zipimport.zipimporter`；`spec.loader.archive` 规范化后 == 该 verified wheel；`spec.origin` 在该归档内；包的 `spec.submodule_search_locations` 的每一项都等于 `<archive><os.sep>fc2_metadata_core`（归档内路径）。
+       任一不满足（例如已存在于 `sys.path` 的 wheel 之前还有一个不受支持的 Core 来源）-> **回滚（见下）并 `ImportError(UNVERIFIABLE_TEMPLATE)`**；**不**尝试把 wheel 提升到更高优先级（唯一行为 = fail closed，不留给 Developer 选择）。
+     * 只有 2E 通过才返回成功。
 3. **无有效 sidecar 且 Core 未加载**：`importlib.util.find_spec("fc2_metadata_core")`：`None` -> **什么也不做，不抛出**（随后 `_impl.plugin` 顶层 import 失败，由 **P5-C1 `_core_gate` 产生 §22 冻结消息**，第 8.7 节）；
    非 `None`（目录 / pip / editable / 源码 / 其它 loader）-> `ImportError(UNVERIFIABLE_TEMPLATE)`，**在任何 import 之前**拒绝（`find_spec` 对目录 finder 不执行包代码）；**不修改任何状态**。
-4. 成功路径的副作用上限：**至多一次 locator-owned `sys.path` 插入**；重复调用幂等；已加载且证明通过的 Core **不修改 `sys.path`**；locator **永远不**触碰 `sys.modules`。
+4. 成功路径的副作用上限：**至多一次 locator-owned `sys.path` 插入**（仅当 wheel 原本不在 `sys.path`）；重复调用幂等（wheel 已在 `sys.path` 时不插入，但**仍执行 2E**）；已加载且证明通过的 Core **不修改 `sys.path`**；locator **永远不**触碰 `sys.modules`。**任何成功返回之前都必须有 2E（或第 1 步）的最终证明；不存在“wheel 在 `sys.path` 中 -> 立即成功”的路径。**
 
-**失败路径的状态保证（P5-C2-DESIGN-R-03；由 E31-n 机械验证）**：每一个 FAIL 之后，`sys.path` **逐元素等于**调用前（同一个 list 对象），`sys.modules` 中 `fc2_metadata_core*` 的键集合与对象身份**等于**调用前，且 Core 未被导入。
-预解析使绝大多数 FAIL 在**尚未修改 `sys.path`** 时发生；插入后的再验证失败才触发回滚。（`sys.path_importer_cache` 只承诺“locator 为候选 wheel 新增的条目在回滚时被清除”，不承诺其它条目。）
+**失败路径的状态保证（P5-C2-DESIGN-R-03 + R2-A-02；由 E31-l / E31-n 机械验证）**：从**入口快照**起，任何 FAIL（含 2B / 2C / 2D / 2E 的失败，以及 2C 的 probe 可能已经造成的 importer-cache 变化）都执行**回滚**：
+
+```text
+sys.path[:] = entry_sys_path                 # 同一个 list 对象，逐元素还原；不触碰原本就存在的相同条目
+对 sys.path_importer_cache 中规范化路径 == verified wheel 的键（仅此一类，不承诺恢复全局缓存的其它条目）：
+    入口时不存在 -> 失败后删除（由 locator / probe 新创建）
+    入口时已存在 -> 失败后保持入口时的原对象 / 原状态（若被替换或移除则还原）
+sys.modules：locator 从未触碰；失败后 fc2_metadata_core* 的键集合与对象身份 == 入口
+```
+
+即每一个 FAIL 之后：`sys.path` **逐元素等于**入口状态（同一 list 对象）；`sys.modules` 中 `fc2_metadata_core*` 的对象身份不变；verified-wheel 的 importer-cache 条目 == 入口状态；Core 未被导入。
+**不承诺**恢复整个解释器的 `sys.path_importer_cache`（与本 locator 无关的任意条目不在保证范围内）。预解析使绝大多数 FAIL 在尚未修改 `sys.path` 时发生；2E 失败（含“wheel 已在 `sys.path` 但真实解析不是它”）同样走上述回滚。
 
 shim 的固定模板（有界、无密钥、无绝对路径、无外部数据的 `repr`；`<>` 内为构建期固定字面量）：
 
@@ -509,7 +529,7 @@ D-12 accidental / malicious replacement detectable by pinned bytes  在准入时
 N-01 attacker who can modify the plugin tree + the pin + the sidecar wheel together（同一信任域；pin 不是发布者身份）
 N-02 attacker who already controls the Amane process memory / interpreter / sys.meta_path hooks installed earlier
 N-03 attacker who modifies the ADMITTED wheel AFTER verification —— 包括此后整个进程生命周期内的 lazy import
-     （zipimport 在进程生命周期内按需读取该 wheel；这不是“哈希与导入之间的一个很小的窗口”）
+     （zipimport 在进程生命周期内按需读取该 wheel；这不是“哈希与导入之间的一个很小的窗口”；**因此已加载 Core 的证明是 current-origin + current-artifact proof，不是 historical executed-byte proof**，A-03）
 N-04 compromise of the release publishing channel / supply chain（无签名）
 N-05 Python 启动期钩子（sitecustomize / .pth / PYTHONSTARTUP 类）与同进程内的其它插件（均为同一信任域内的任意代码）
 N-06 恶意的 Amane 宿主本身
@@ -519,6 +539,7 @@ N-06 恶意的 Amane 宿主本身
 
 * **SHA-256 pin = integrity / exact-pairing evidence**，**不是** publisher authenticity，**不是**数字签名，**不是** runtime anti-tamper。
 * 若未来需要 publisher authenticity：signed manifest / 签名属于**未来增强，不在本包范围**。
+* **loaded-Core proof = current-origin + current-artifact proof**（当前 origin 指向确切 wheel 路径 + 该 wheel 的**当前**字节符合 pin），**不是** historical executed-byte proof；不声称已执行过的全部历史字节等于当前 wheel 字节（N-03 / L-C2-13 的组成部分，不改变准入算法）。
 * **L-C2-13 = ACCEPTED SECURITY LIMITATION**（裁决：接受，不设计消除方案；理由：zipimport 懒读取是宿主 / 语言机制，消除它需要把 Core 载入内存后自定义 loader，等于重写导入体系，且对已拥有数据目录写权限的攻击者收益有限——其本已可修改插件树与 pin，N-01）。
 * 因此：官方安装文档**必须**写明“**不要在 Amane 运行期间替换或删除 sidecar wheel**”；Core 升级**严格**按 `uninstall -> restart -> replace artifact -> install`（第 8.6 节）。**不声称** locator 能阻止运行期间 wheel 被替换。
 
@@ -676,7 +697,7 @@ C1 骨架 zip 不再被称为可分发物；`adapters/amane/README.md` 的状态
 | HC-16 | Core 升级（pin 变化）流程 | 按第 8.6 节：卸载 -> 重启 -> 放新 wheel -> 上传新 plugin zip；以及误操作（旧 Core 在内存时直接上传新 zip）得到 `RESTART_TEMPLATE` |
 | HC-17 | HTTP 生命周期保持 | 回环 fixture 记录请求：全部来自宿主 `WebClient`（`User-Agent` / TLS 指纹策略 / 代理由宿主决定；adapter 不设）；每个来源 L1 / L2 / L3 计数符合 C1 §15.2 |
 | HC-18 | 无副作用 | 运行前后对**临时数据目录之外**的文件系统做快照（`sidecar` 之外）：adapter 无新增 / 修改；插件树写入全部来自宿主（`sources/` 之下） |
-| HC-19 | Core 来源准入矩阵（Risk C 信任边界；第 8.3 节；E31） | 在宿主**子进程**内、用真实 `install_plugin_zip` / `PluginManager.discover` 驱动 artifact，对 E31-a..t 做 PASS / FAIL 配对：**源码宿主**覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**）无 sidecar（FAIL，payload sentinel 不存在）与有 sidecar（PASS 且加载的是 wheel、sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；**冻结包**覆盖 sidecar 的正确 / 错误版本 / 篡改 / 符号链接 / 超大。每个 FAIL 必须是 422 / `failures`、固定模板、**无半装**，且失败路径后 `sys.path` 逐元素不变、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变 |
+| HC-19 | Core 来源准入矩阵（Risk C 信任边界；第 8.3 节；E31） | 在宿主**子进程**内、用真实 `install_plugin_zip` / `PluginManager.discover` 驱动 artifact，对 E31-a..v 做 PASS / FAIL 配对：**源码宿主**覆盖 exact pinned wheel（PASS）、目录形态 Core（pip `--target` / editable / 源码 / `PYTHONPATH`，**含恶意 `.pyc` PoC**）无 sidecar（FAIL，payload sentinel 不存在）与有 sidecar（PASS 且加载的是 wheel、sentinel 不存在）、预加载的正确 / 错误 / 目录形态 Core、被篡改的同名 wheel、遮蔽 finder；**冻结包**覆盖 sidecar 的正确 / 错误版本 / 篡改 / 符号链接 / 超大。每个 FAIL 必须是 422 / `failures`、固定模板、**无半装**，且失败路径后 `sys.path` 与入口逐元素相同、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变、verified-wheel importer-cache 条目 == 入口状态。**E31-u（源码宿主）**：exact pinned wheel **已在** `sys.path`，而更靠前有一个**惰性的**（只含注释、从不执行代码的）不受支持 Core 目录包使真实解析先命中它 -> 必须 FAIL，惰性包从未被导入；**E31-v**：惰性的 `zipimporter` 子类 loader double -> FAIL。冻结包宿主上无法在宿主进程里布置 `sys.path` 夹具，HC-19 对冻结包只覆盖 sidecar 各分支；E31-u / E31-v 由源码宿主 + 单元层覆盖 |
 
 ### 11.3 HC-13 / HC-14 的判据说明
 
@@ -826,7 +847,7 @@ core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|load
 | C2-E17 | HTTP 生命周期保持 | provider 持有宿主 `web_client` 的**同一对象**；adapter 树无第二个 HTTP 客户端（AST，C1 守卫仍绿）；HC-17 |
 | C2-E18 | 无 vendoring | plugin zip 不含 Core 文件（文件名 + 整文件字节包含扫描）；`fc2_metadata_core` 仅出现在 `_impl` 的 import 语句与 `_core_gate` 常量中；Core wheel 与 plugin zip 为两个独立文件 |
 | C2-E19 | 无新持久化 / 无用户文件改动 | `_ffcc_locator` 与 shim 的 AST 守卫（无写 API）；HC-18 文件系统快照；用户目录零接触 |
-| C2-E20 | mutation / 非空洞 | 第 16 节 M2-01..M2-22 全部 KILLED |
+| C2-E20 | mutation / 非空洞 | 第 16 节 M2-01..M2-23 全部 KILLED |
 | C2-E21 | v0.15.0 宿主集成（坐标 SC-01 / SC-03） | HOST-A-SRC 与 HOST-A-WIN：HC-01..HC-19 全通过 |
 | C2-E22 | v0.18.0 宿主集成（坐标 SC-02 / SC-04） | HOST-B-SRC 与 HOST-B-WIN：HC-01..HC-19 全通过（或 BLOCKED + 根因） |
 | C2-E23 | current main 信息见证 | HOST-C-MAIN：若 commit == 稳定版 -> `IDENTICAL_TO_STABLE`（不重复计作独立见证）；否则运行并记录，**失败不阻塞**，记为信息差异。E23b：中间版本（可选） |
@@ -843,7 +864,7 @@ core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|load
 
 | 子项 | 场景 | 期望 |
 |---|---|---|
-| E31-a | already-loaded：来自 exact pinned wheel（文件名 + sha256 == pin，所有 `fc2_metadata_core*` 条目同根） | **PASS**（`sys.path` / `sys.modules` 无任何变化） |
+| E31-a | already-loaded：来自 exact pinned wheel（`type(loader) is zipimporter`；文件名 + 当前 sha256 == pin；所有 `fc2_metadata_core*` 条目同根）——**current-origin + current-artifact proof** | **PASS**（`sys.path` / `sys.modules` 无任何变化） |
 | E31-b | already-loaded：来自错误版本的 wheel | **FAIL**（`RESTART_TEMPLATE`） |
 | E31-c | already-loaded：来自被篡改的同名 wheel（文件名相同、sha256 不同） | **FAIL**（`RESTART_TEMPLATE`） |
 | E31-d | already-loaded：目录形态 Core（pip `--target` / site-packages 形态；**即使字节完全正确**） | **FAIL**（`RESTART_TEMPLATE`） |
@@ -852,17 +873,19 @@ core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|load
 | E31-g | 未加载：目录形态 Core 在 `sys.path` 上，同时有**有效 sidecar** | **PASS**，且加载的是 wheel（`spec.loader.archive` == wheel）；目录形态 Core **从未被执行**（其 `__init__.py` 写 sentinel，sentinel 不存在） |
 | E31-h | **Reviewer 的恶意 `.pyc` PoC**：目录形态 Core，`__pycache__/__init__.cpython-3x.pyc` 被替换为携带源文件相同 mtime / size 的恶意 pyc；`*.py` 树哈希**不变** | (1) 无 sidecar：**FAIL**（`UNVERIFIABLE_TEMPLATE`），**payload sentinel 不存在**；(2) 有有效 sidecar：**PASS** 但加载的是 wheel，**payload sentinel 不存在**；(3) 已加载的目录形态（用无害 pyc 替身）：**FAIL**（`RESTART_TEMPLATE`）；**3.12 与 3.14 均执行**；**不得删除该场景** |
 | E31-i | sidecar：篡改 1 字节 / 符号链接 / `> 16 MiB` / 同名目录 / 仅有其它版本 wheel | **FAIL**（`WHEEL_HASH_MISMATCH_TEMPLATE` / `WHEEL_VERSION_MISMATCH_TEMPLATE`）；无权限创建符号链接时以 `os.lstat` 替身执行并在报告中记录 `symlink_privilege=false`（**不得 skip**） |
-| E31-j | 混合来源：已加载的 `fc2_metadata_core.*` 子模块的 `loader.archive` 与顶层不同 / 来自目录 / 非 zipimport / 无 `__spec__` / 命名空间包 | **FAIL**（`RESTART_TEMPLATE`） |
+| E31-j | 混合来源：已加载的 `fc2_metadata_core.*` 子模块的 `loader.archive` 与顶层不同 / 来自目录 / 非精确 zipimporter 类型 / 无 `__spec__` / 命名空间包 | **FAIL**（`RESTART_TEMPLATE`） |
 | E31-k | 遮蔽：`sys.meta_path` 上更靠前的 finder 先返回 `fc2_metadata_core` | **FAIL**（`UNVERIFIABLE_TEMPLATE`）；**预解析阶段拒绝，从未修改 `sys.path`** |
-| E31-l | 插入后验证失败（有状态 finder：仅在 wheel 已进入 `sys.path` 之后才抢占） | **FAIL**（`UNVERIFIABLE_TEMPLATE`）；**回滚后 `sys.path` 与调用前逐元素相同且是同一 list 对象**；该 wheel 在 `sys.path_importer_cache` 的新增条目被清除 |
+| E31-l | **locator-owned verified-wheel path / cache 效应的回滚**：(1) 插入后验证失败（有状态 finder：仅在 wheel 已进入 `sys.path` 之后才抢占），入口时 verified-wheel 的 importer-cache 条目**不存在**；(2) 同一场景，入口时该条目**已存在** | **FAIL**（`UNVERIFIABLE_TEMPLATE`）；回滚后 `sys.path` 与入口逐元素相同且是同一 list 对象；(1) 新增的 verified-wheel cache 条目被移除，(2) 条目保持入口时的**原对象**；不要求恢复全局 importer cache 的其它条目 |
 | E31-m | 预装目录形态 Core 且 sidecar 同名条目是目录 / 非普通文件 | **FAIL**（`WHEEL_HASH_MISMATCH_TEMPLATE`）；目录形态 Core 不被执行 |
-| E31-n | **失败路径副作用（机械验证）**：对**每一个** FAIL 用例 | 断言 `sys.path` **逐元素等于**调用前（同一 list 对象）；`sys.modules` 中 `fc2_metadata_core*` 的键集合与对象身份**等于**调用前；locator **没有** import Core |
+| E31-n | **失败路径副作用（机械验证）**：对**每一个** FAIL 用例（含 E31-u / E31-v） | 断言：`sys.path == entry snapshot`（逐元素、同一 list 对象）；`sys.modules` 中 `fc2_metadata_core*` 的键集合与对象身份 == 入口；**verified-wheel 的 importer-cache 条目 == 入口状态**（入口无 -> 无；入口有 -> 原对象）；locator **没有** import Core。**不**要求恢复整个解释器的 importer cache |
 | E31-o | 无 Core、无 sidecar（`find_spec is None`） | locator 不抛；随后产生 **P5-C1 §22 冻结消息**（E13） |
-| E31-p | 成功路径副作用上限 | 至多一次 locator-owned `sys.path` 插入；重复调用幂等（`sys.path` 中该 wheel 恰好 1 个条目）；已加载且证明通过的 Core 不改 `sys.path` |
+| E31-p | 成功路径副作用上限与幂等 | 至多一次 locator-owned `sys.path` 插入（仅当 wheel 原本不在 `sys.path`）；重复调用幂等（`sys.path` 中该 wheel 恰好 1 个条目，**第二次调用仍执行 2E 最终真实解析**）；已加载且证明通过的 Core 不改 `sys.path`；**每一个成功返回前都有最终真实解析证明** |
 | E31-q | wheel 构建内容 | 构建器产出的 wheel **仅含** `*.py` + 4 个 dist-info 文件（无 `.pyc` / `.pyd` / `.so` / `.pth`）；wheel 成员的 tree 哈希（C1 算法）== `P5_C1_HOST_WITNESS.json.core_tree_sha256`（**构建期** traceability；locator 不使用树哈希） |
 | E31-r | 错误模板 | 4 个模板固定、有界、无绝对路径、无外部数据的 `repr` |
 | E31-s | Python 矩阵 | 上述全部用例在 3.12（主套件）与 3.14（宿主）上执行 |
 | E31-t | 威胁模型措辞守卫 | `INSTALL.zh-CN.md` 含“运行期间不要替换或删除 sidecar wheel”；`INSTALL.zh-CN.md` / `COMPATIBILITY.json` / HANDOFF 不含“publisher authenticity / 发布者认证 / 数字签名 / 防篡改”之类**未被设计支持**的承诺（字符串扫描；第 8.8 节 Non-claims） |
+| E31-u | **wheel 已在 `sys.path` 但实际当前解析不是它（A-01；无副作用 sentinel fixture，不执行任何 payload）**：Core 尚未加载；exact pinned wheel **已经**位于 `sys.path`（例如在较后位置）；`sys.path` 中更靠前的位置有一个**惰性的**不受支持 Core 来源（目录形态包，`__init__.py` 只含注释，不执行任何代码；或惰性 meta_path finder）使真实解析先命中它 | **FAIL**（`UNVERIFIABLE_TEMPLATE`）——**不得**因“wheel 已在 `sys.path`”而成功；唯一冻结行为 = fail closed（不提升、不重排）。同时断言：不受支持的来源**从未被接受**（惰性包**从未被导入**）；`sys.path` 与入口逐元素相同；verified-wheel importer-cache 条目 == 入口状态；`sys.modules` 中 `fc2_metadata_core*` 对象身份不变；locator 没有 import Core；3.12 与 3.14 均执行 |
+| E31-v | **意外的 loader 实现（A-04）**：惰性 test double 使真实解析返回的 spec 的 `loader` 是 `zipimporter` 的**子类实例**（`archive` 等于 verified wheel 且 origin 在归档内）；以及已加载 Core 的 `__spec__.loader` 为该类 double | **FAIL**（`UNVERIFIABLE_TEMPLATE` / 已加载分支 `RESTART_TEMPLATE`）——证明判据是 `type(loader) is zipimport.zipimporter` 而不是 `isinstance`；不需要制造实际攻击对象 |
 
 ---
 
@@ -888,10 +911,11 @@ core_admission        : {core_wheel_sha256, cases[{id, mode(wheel|directory|load
 | M2-16 | 兼容 JSON 里把 `IDENTICAL_TO_STABLE` 的 main 伪装成独立见证 / 把 UNVERIFIED 平台写成 SUPPORTED / 以版本为 key 使版本状态覆盖平台状态 | E23 / E24 的 JSON 自洽性测试（schema + 规则）；`COMPATIBILITY.json` 派生测试 |
 | M2-17 | **already loaded -> blindly trust**（`fc2_metadata_core` 已在 `sys.modules` 就接受，不核对其来自 exact pinned wheel） | E31-b / c / d / e / j（HC-19 的预加载分支）：错误 / 目录形态 / 混合来源的已加载 Core 必须 FAIL |
 | M2-18 | **接受任何目录形态 Core**（pip / 解压 / editable / 源码 / `PYTHONPATH`），无论是否比对版本或 `*.py` 树哈希；或恢复 `unverified-path -> ACCEPT` | E31-d / e / f / h：目录形态必须 FAIL（即使字节正确）；有 sidecar 时目录形态 Core 不被执行（E31-g） |
-| M2-19 | 移除遮蔽 / 同根防御（不做预解析或插入后再验证；不检查所有 `fc2_metadata_core*` 子模块同根；不检查 `loader` 是 `zipimporter` 且 `archive` 匹配） | E31-j / k / l |
+| M2-19 | 移除遮蔽 / 同根防御（不做预解析或最终真实解析；不检查所有 `fc2_metadata_core*` 子模块同根；不检查 `loader` 是 `zipimporter` 且 `archive` 匹配） | E31-j / k / l |
 | M2-20 | locator 在失败或 pin 变化时 purge `fc2_metadata_core*` / 热切换；或**失败路径不回滚 `sys.path`**（留下半插入的 wheel 条目） | E31-l / n；U2-11 的 AST 守卫（locator 无 `del sys.modules[...]` / `sys.modules.pop` / 对 `sys.modules` 的赋值） |
 | M2-21 | **目录形态 Core 含有未被 `*.py` 树哈希表示的可执行 `.pyc`**（即 R1 设计：按 `*.py` 树哈希接受目录形态） | **E31-h pyc 准入场景**：恶意 pyc（相同 mtime / size）必须 FAIL / 不被执行；payload sentinel 必须不存在；3.12 与 3.14 均执行 |
 | M2-22 | **artifact 派生环**：`COMPATIBILITY.json` / `INSTALL.zh-CN.md` / `VERSION` 内嵌 `SHA256SUMS` / release bundle / 自身的哈希，或 `SHA256SUMS` 列出自身，或 L2 投影读取 Part B | E29 DAG 测试：拓扑检查、禁止字段扫描、改 Part B 不改 L2–L4、`sha256sum -c`、从仓库树重建逐字节一致 |
+| M2-23 | **existing-wheel 分支不做最终真实解析就返回成功**（“wheel 已在 `sys.path` -> 立即幂等成功”，不执行 2E） | **E31-u**：wheel 已在 `sys.path`、更靠前有惰性的不受支持来源 -> 必须 FAIL；变异后该用例会错误地 PASS，必须被判定为 KILLED（同时 E31-p 断言第二次调用仍执行 2E） |
 
 > mutation 以**可复现的补丁脚本 + 测试**实施（C1 `test_amane_mutation_nonvacuity.py` 同法）：对**临时副本**应用 mutant，断言对应 killer 失败；**不修改**工作树。
 
@@ -932,12 +956,14 @@ I-C2-8  sidecar 仅在 wheel 的文件名 == pin、整个 wheel 的 sha256 == pi
 I-C2-9  不覆盖、不移动、不写入用户文件；验收只用临时目录
 I-C2-10 兼容见证 JSON 确定、自洽；UNVERIFIED 不得声明为 SUPPORTED；IDENTICAL_TO_STABLE 不计作独立见证
 I-C2-11 宿主差异只允许白名单 DIFF-01..DIFF-07
-I-C2-12 已加载的 Core 不得被盲信：必须证明来自同一个 exact pinned wheel 且所有 `fc2_metadata_core*` 同根；证明不了 -> RESTART / PIN MISMATCH；不 purge、不热切换
+I-C2-12 已加载的 Core 不得被盲信：必须证明来自同一个 exact pinned wheel（`type(loader) is zipimporter`、当前 origin、当前 wheel 字节符合 pin）且所有 `fc2_metadata_core*` 同根；这是 current-origin + current-artifact proof，**不是**历史已执行字节证明；证明不了 -> RESTART / PIN MISMATCH；不 purge、不热切换
 I-C2-13 没有任何目录形态 / `unverified-path` 的接受路径；locator 不实现树哈希、不验证 pyc
 I-C2-14 支持声明以 `(version, host_form, platform)` 为坐标；版本状态不得覆盖平台状态；UNVERIFIED 坐标不得出现在支持声明里
-I-C2-15 失败路径后 `sys.path` 逐元素等于调用前、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变；成功路径至多一次 locator-owned 插入、幂等
+I-C2-15 失败路径后 `sys.path` 与入口逐元素相同（同一 list 对象）、`sys.modules` 中 `fc2_metadata_core*` 对象身份不变、verified-wheel 的 importer-cache 条目回到入口状态（不承诺恢复全局 importer cache）；成功路径至多一次 locator-owned 插入、幂等
 I-C2-16 完整性保证 = admission-time integrity，**不是** runtime immutability；SHA-256 pin 不是 publisher authenticity / 签名 / 运行期防篡改（第 8.8 节）
 I-C2-17 artifact 派生 DAG 严格无环：任何成员的内容不依赖其自身或更高层 artifact 的哈希（第 10.5 节）
+I-C2-18 **NO SUCCESS RETURN UNTIL ACTUAL CURRENT RESOLUTION PROVES THE EXACT PINNED WHEEL**：每一个成功返回（含 wheel 已在 `sys.path` 的分支、重复调用）之前都必须有对实际当前 import 解析的最终证明；预解析不是准入；不存在“wheel 在 `sys.path` 中 -> 立即成功”的路径
+I-C2-19 受信 loader 判据 = `type(spec.loader) is zipimport.zipimporter`（精确类型）；子类 / 其它 loader 一律不被信任；本合同不支持任何其它具体 loader
 ```
 
 ---
@@ -958,23 +984,23 @@ I-C2-17 artifact 派生 DAG 严格无环：任何成员的内容不依赖其自�
 | L-C2-10 | 真实站点网络冒烟与真实 scrape 任务端到端不在本包（Phase 6） |
 | L-C2-11 | C1 L-01..L-15 继续成立 |
 | L-C2-12 | 宿主「选择服务器路径」安装（`install_plugin_path`）若指向数据目录**之外**的插件目录，locator 无法由 `__file__` 推出数据目录，sidecar 不会被找到；官方安装流程只使用「上传 zip」，`INSTALL.zh-CN.md` 明示，且 HC 不把该路径作为必需场景 |
-| L-C2-13 | **ACCEPTED SECURITY LIMITATION**：校验只保证**准入时刻**的完整性；wheel 被 zipimport 在进程生命周期内懒读取，准入之后对该 wheel 的持续写入者**不被防御**（威胁模型 N-03）。不设计消除方案；文档要求“运行期间不要替换或删除 sidecar wheel”；Core 升级严格 `uninstall -> restart -> replace -> install`。能改写数据目录者本已能改写插件树与 pin（N-01） |
+| L-C2-13 | **ACCEPTED SECURITY LIMITATION**：校验只保证**准入时刻**的完整性；wheel 被 zipimport 在进程生命周期内懒读取，准入之后对该 wheel 的持续写入者**不被防御**（威胁模型 N-03）；已加载 Core 的证明只是 current-origin + current-artifact proof，不是历史已执行字节证明。不设计消除方案；文档要求“运行期间不要替换或删除 sidecar wheel”；Core 升级严格 `uninstall -> restart -> replace -> install`。能改写数据目录者本已能改写插件树与 pin（N-01） |
 
 ---
 
 ## 21. 状态
 
 ```text
-P5-C2 Design R2      : CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
-Contract             : CANDIDATE（本文；含 Design Pre-Review R1 与 Design R2 修订）
+P5-C2 Design R3      : CANDIDATE — INCREMENTAL DESIGN CLOSURE REVIEW REQUIRED
+Contract             : CANDIDATE（本文；含 Design Pre-Review R1、Design R2、Design R3 修订）
 Construction Plan    : CANDIDATE（docs/P5_C2_CONSTRUCTION_PLAN.md）
 Risk Class           : C
 Implementation       : NOT STARTED
 Package Frozen Base  : CANDIDATE — subject to Design Review
 ```
 
-本文不得被解读为 FROZEN / DESIGN PASS / IMPLEMENTATION AUTHORIZED。唯一 authority 转换：独立 Design R2 Incremental Closure Review PASS -> 该 Review 建立 Design Accepted Head -> Frozen Contract / Construction Plan -> 才允许进入 S1。
-S1 -> S2 -> S3 连续施工的意图保持不变，但**只有**在 R2 完成（security trust surface 完整冻结、E31 / mutation 已更新、失败原子性已冻结）并经 incremental closure review 之后才被正式授权；无需新增 S 级 Review。
+本文不得被解读为 FROZEN / DESIGN PASS / IMPLEMENTATION AUTHORIZED / CLOSED。唯一 authority 转换：独立 Design R3 Incremental Closure Review PASS -> 该 Review 建立 Design Accepted Head -> Frozen Contract / Construction Plan -> 才允许进入 S1。
+S1 -> S2 -> S3 连续施工的意图保持不变；无需新增 S 级 Review。
 
 ### Design Pre-Review R1 修订记录（历史；docs-only；Parent = `8870df0ea42e60dd142a5878ea7c0abc6ca3c4b5`；**其中目录形态 Core 的接受规则已被 Design R2 取代**）
 
@@ -988,7 +1014,7 @@ S1 -> S2 -> S3 连续施工的意图保持不变，但**只有**在 R2 完成（
 | C2-DESIGN-R1-04 | 支持声明只以 `{v0.15.0, v0.18.0}` 版本集表达 | 第 7.2 节冻结**二维支持坐标** `(version, host_form, platform)`：SC-01..SC-09；Windows x64 desktop = 必需受支持部署；source host = 必需集成兼容；macOS / Linux / Docker = UNVERIFIED（本环境无 Docker，不为扩大声明增加环境依赖）；版本状态不得覆盖平台状态；`COMPATIBILITY.json.status`、`INSTALL.zh-CN.md`、E24 共用同一份坐标表；Docker 安装步骤若保留必须标 `UNVERIFIED / informational`；I-C2-14、M2-16 扩展 |
 | （不变） | — | 当前稳定版坐标不变（v0.18.0 / `0a8a731d…`；main == stable，Owner 已独立核实）；P5-C1 映射 / 桥 / SearchQuery / MediaMetadata / 错误 / 归属不动；`_impl` 字节原样；无 vendor；无 `src/**`；无 `pyproject.toml` 改动；无自动 pip 安装器；无热切换 Core |
 
-### Design R2 修订记录（docs-only；一次统一修订；Parent = `5dac181f3b948ed0bcdfcedf34100ab1536e41ee`）
+### Design R2 修订记录（历史；docs-only；一次统一修订；Parent = `5dac181f3b948ed0bcdfcedf34100ab1536e41ee`；其中 R-01..R-06 的主体修复经增量审计成立，R2 直接引入 / 遗留的 R2-A-01..A-05 由 Design R3 收口）
 
 | Finding | 修订 | 状态 |
 |---|---|---|
@@ -1000,12 +1026,32 @@ S1 -> S2 -> S3 连续施工的意图保持不变，但**只有**在 R2 完成（
 | P5-C2-DESIGN-R-06（术语 / zipimport 精确性） | wheel 形态的 verified root = 精确的 `.whl` 归档路径（`zipimporter.archive`），模块 origin 在**同一归档内**；包的 `submodule_search_locations` 是**归档内路径**，不再用“恰好一个目录”描述（W2-13 在 3.12.10 / 3.14.7 实测）；`_impl` 统一为 **LF 规范化字节（派生自 `adapters/amane/fc2_amane_adapter/*.py`）**，`tree_sha256` 使用与 P5-C1 witness 相同的 CRLF -> LF 规范化，即 **normalized-byte identity**，不是磁盘原始字节同一（I-C2-1、第 0 / 3 / 4 / 9 / 10 节同步） | REMEDIATED — INCREMENTAL REVIEW REQUIRED |
 | （保持不变） | — | Authority model、Risk Class C、Amane 坐标、API 兼容结论、支持坐标结构、sidecar 主架构、P5-C1 映射与 `_impl` 语义、Core 不 vendor、`src/**` 零改动、`pyproject.toml` 零改动、无热切换 Core、Phase 6 边界、S1/S2/S3 连续意图 |
 
-### 设计者希望复查者重点质疑的决定（Design R2 增量复查范围：R-01..R-06 + R2 直接回归）
+### Design R3 修订记录（docs-only；窄范围收口；Parent = `01182642eccbed299577b35d4e9f88efe1b36f06`）
 
-1. **第 8.3 节 exact pinned wheel only**：是否确实消除了目录形态的全部可执行字节绕过（含 `.pyc` PoC 的 E31-h 场景与 M2-21 killer）；“目录形态即使字节正确也拒绝”的取舍（开发者 / 源码宿主也必须使用 sidecar wheel，L-C2-04）是否可接受。
-2. **第 8.3 节预解析 + 插入 + 再验证 + 回滚**：是否冻结了完整的失败状态保证；对 `sys.meta_path` 上第三方 finder 的 `find_spec` 调用（预解析）是否可接受。
-3. **第 8.8 节威胁模型**：Defended / Not Defended / Non-claims 的划分与 L-C2-13 的 ACCEPTED 裁决是否诚实、是否被文档措辞守卫（E31-t）覆盖。
-4. **第 10.5 节 DAG**：是否严格无环；MATRIX Part A / Part B 的字段边界与“L2 只读 Part A 白名单”的规则是否足以保证 L2–L4 与 Part B 无依赖。
-5. **第 7.2 节与全文措辞**：是否仍有未限定平台 / 形态的支持表述。
-6. **第 9 / 10 节 `_impl` 的 normalized-byte identity 表述**是否与 P5-C1 witness 的 `tree_sha256` 语义一致。
-7. 保持项（第 9 节 shim 最小性、第 8.7 节 L-C2-03、第 8.6 节升级流程、第 10.3 节 `ZIP_STORED`）仅在 R2 直接引入回归时复查。
+| Finding | 修订 | 状态 |
+|---|---|---|
+| R2-A-01（HIGH / BLOCKING；“wheel 已在 `sys.path` -> 幂等成功”不充分） | 冻结唯一成功规则 **NO SUCCESS RETURN UNTIL ACTUAL CURRENT RESOLUTION PROVES THE EXACT PINNED WHEEL**（I-C2-18）：2A 入口快照 -> 2B wheel 证明 -> 2C 防御性预解析（**不是**最终准入）-> 2D 仅当 wheel 不在 `sys.path` 才至多一次插入（已存在则不插入、不重排、不提升）-> **2E 对实际当前 import 解析的最终证明（两个分支都必须执行）**；2E 不满足 -> 回滚 + `UNVERIFIABLE_TEMPLATE`。选定的**唯一行为** = fail closed（不提升 / 不重排），不留给 Developer。新增 E31-u（无副作用 sentinel fixture：wheel 已在 `sys.path`、更靠前有惰性的不受支持来源 -> 必须 FAIL）、HC-19 同步、M2-23（existing-wheel 分支不做最终解析 -> killer E31-u）；E31-p 要求第二次调用仍走 2E；设计期探针 W2-15（3.12.10 / 3.14.7） | REMEDIATED — REVIEW REQUIRED |
+| R2-A-02（MEDIUM；importer-cache 快照晚于预解析） | 回滚快照移到函数入口、先于**任何** probe：`entry_sys_path` + 入口时 verified-wheel 的 importer-cache 状态；失败路径恢复 `sys.path`（同一 list 对象、逐元素）并恢复 verified-wheel 的 cache 条目（入口无 -> 删除；入口有 -> 原对象）；**不承诺**恢复全局 importer cache。E31-l 改为“locator-owned verified-wheel path / cache 回滚”（含入口有 / 无 cache 条目两个子场景），E31-n 统一 `sys.path` / `sys.modules` / verified-wheel cache 三项 | REMEDIATED — REVIEW REQUIRED |
+| R2-A-03（LOW；已加载 Core 措辞过强） | 已加载 Core 的证明冻结为 **current-origin + current-artifact proof，不是 historical executed-byte proof**；与 N-03 / L-C2-13（ACCEPTED 运行期可变性限制）关联；准入算法不变（第 8.3 节第 1 步、I-C2-12、第 8.8 节、E31-a、L-C2-13） | REMEDIATED — REVIEW REQUIRED |
+| R2-A-04（LOW；`isinstance` 过宽） | 受信 loader 判据冻结为 `type(spec.loader) is zipimport.zipimporter`（精确类型，I-C2-19）；不扩大到其它 loader；新增 E31-v（惰性 `zipimporter` 子类 double -> FAIL；探针同时证明 `isinstance` 会接受而 `type() is` 拒绝）；E31-j 措辞同步 | REMEDIATED — REVIEW REQUIRED |
+| R2-A-05（LOW；文档卫生） | 清除正文残留的“字节原样 `_impl/`”（W2-10 -> LF 规范化字节同一 / normalized-byte identity）；R1 / R2 修订记录显式标为**历史**；施工计划中 R1 时代的“每一种执行模式下 fail closed（含已加载、editable、pip）”标注 **HISTORICAL — SUPERSEDED BY R2：directory forms are no longer accepted execution modes** | REMEDIATED — REVIEW REQUIRED |
+| （保持不变；仅 R3 直接回归守卫） | — | exact pinned wheel only、目录形态拒绝、Risk Class C、威胁模型与 TOCTOU 接受、artifact DAG、坐标化支持声明、Amane 坐标 / API 结论、P5-C1 normalized `_impl` 语义、不 vendor、无热切换 Core、Phase 6 边界均未重新设计 |
+
+**R3 直接回归自查（Design R3 提交前逐项核对）**：
+
+```text
+1. 不存在任何“wheel anywhere in sys.path -> immediate success”的路径（2D 只决定是否插入；成功只来自 2E / 第 1 步）
+2. 每一个 success path 都有 final actual-resolution proof（2E 或已加载分支的 current-origin + current-artifact proof）
+3. 每一个发生在 locator-owned path / cache 变化之后的失败都有精确回滚；且入口快照先于任何 probe
+4. 目录形态仍然被拒绝（E31-d / e / f / g / h 不变；E31-u 的惰性目录包仅是被拒绝的不受支持来源，从未被导入）
+5. 没有新增被接受的 Core 来源（受信 loader 仅 type(...) is zipimporter；不支持其它 loader）
+6. E31-u / M2-23 / HC-19 / E31-p / I-C2-18 描述同一个不变量
+```
+
+### 设计者希望复查者重点质疑的决定（Design R3 增量复查范围：R2-A-01..A-05 + R3 直接回归）
+
+1. **第 8.3 节 2A..2E**：唯一成功规则是否确实消除了“wheel 已存在于 `sys.path` 即成功”的盲目幂等；选定“fail closed、不提升 / 不重排”作为唯一行为是否可接受（对比“规范化提升”：会重排 / 移动既有 `sys.path` 条目，违背“不触碰原有条目”）。
+2. **入口快照 / 回滚范围**：只承诺恢复 `sys.path` 与 verified-wheel 的 importer-cache 条目（不承诺全局 cache）是否诚实且足够；2C 的 probe 造成的 cache 变化是否都被覆盖。
+3. **E31-u / E31-v / M2-23 / HC-19** 是否描述同一不变量，且 fixture 是否确实惰性（不执行 payload）。
+4. **A-03 措辞**与 N-03 / L-C2-13 是否一致；**A-04 精确类型判据**是否在所有出现 loader 判断的位置一致。
+5. 保持项仅在 R3 直接引入回归时复查。
