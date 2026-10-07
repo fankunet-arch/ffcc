@@ -121,7 +121,7 @@ def test_changing_part_b_does_not_change_level_2_to_4_bytes(world, release):
 
 def test_changing_part_a_changes_level_2_to_4_but_never_level_0_or_1(world, release):
     matrix = copy.deepcopy(world["matrix"])
-    matrix["hosts"][0]["scenarios"][0]["passed"] = False
+    matrix["parity"]["allowed_diffs_observed"] = ["DIFF-01", "DIFF-07"]
     changed = release.build_finalize(world["stage1"], world["wheel_name"], world["wheel"], matrix)
     for name in ("COMPATIBILITY.json", "SHA256SUMS", BUNDLE):
         assert changed[name] != world["produced"][name], name

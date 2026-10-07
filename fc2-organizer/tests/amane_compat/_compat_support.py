@@ -256,7 +256,8 @@ def synthetic_matrix(artifacts: dict[str, str], *, identical_main: bool = True) 
         },
         "hosts": hosts,
         "artifacts": dict(artifacts),
-        "parity": {"required_pairs": [{"a": "a-src", "b": "b-src", "fields": ["result"], "equal": True, "sha256_a": digest, "sha256_b": digest}], "allowed_diffs_observed": ["DIFF-01"], "e16": e16},
+        "parity": {"required_pairs": [{"a": a, "b": b, "fields": ["result"], "equal": True, "sha256_a": digest, "sha256_b": digest}
+                                      for a, b in (("a-src", "b-src"), ("a-win", "b-win"), ("a-src", "a-win"), ("b-src", "b-win"))], "allowed_diffs_observed": ["DIFF-01"], "e16": e16},
         "status": status,
         "platforms_unverified": ["macos", "linux", "docker"],
         "core_admission": {

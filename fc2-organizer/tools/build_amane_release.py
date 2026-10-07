@@ -249,8 +249,49 @@ def render_sha256sums(members: dict[str, bytes]) -> bytes:
     return "".join(f"{sha256_hex(data)}  {name}\n" for name, data in sorted(members.items())).encode("utf-8")
 
 
+def acceptance_preflight(matrix: dict, stage1: dict[str, object], wheel: bytes) -> None:
+    """发布安全门：仅检查必需见证全绿与 L0 / L1 字节身份，不复制完整 MATRIX 校验器。"""
+    required_hosts = (
+        ("SC-01", "a-win", "frozen-desktop", "v0.15.0"),
+        ("SC-02", "b-win", "frozen-desktop", "v0.18.0"),
+        ("SC-03", "a-src", "source", "v0.15.0"),
+        ("SC-04", "b-src", "source", "v0.18.0"),
+    )
+    required_scenarios = {f"HC-{index:02d}" for index in range(1, 20)}
+    required_pairs = {("a-src", "b-src"), ("a-win", "b-win"), ("a-src", "a-win"), ("b-src", "b-win")}
+    try:
+        for coordinate_id, label, form, tag in required_hosts:
+            hosts = [host for host in matrix["hosts"] if host["coordinate_id"] == coordinate_id]
+            if len(hosts) != 1:
+                raise ReleaseError(f"finalize: required host {coordinate_id} missing or duplicated")
+            host = hosts[0]
+            if (host["label"], host["form"], host["tag"], host["platform"], host["role"]) != (label, form, tag, "windows-x64", "required"):
+                raise ReleaseError(f"finalize: required host {coordinate_id} identity differs")
+            scenarios = host["scenarios"]
+            if len(scenarios) != 19 or {row["id"] for row in scenarios} != required_scenarios:
+                raise ReleaseError(f"finalize: {coordinate_id} requires exactly HC-01..HC-19")
+            if any(row.get("passed") is not True for row in scenarios):
+                raise ReleaseError(f"finalize: {coordinate_id} has a scenario that is not PASS")
+            statuses = [row for row in matrix["status"] if row["coordinate_id"] == coordinate_id]
+            if len(statuses) != 1 or statuses[0].get("status") != "SUPPORTED":
+                raise ReleaseError(f"finalize: required coordinate {coordinate_id} is not SUPPORTED")
+        pairs = matrix["parity"]["required_pairs"]
+        if not pairs or any(pair.get("equal") is not True for pair in pairs):
+            raise ReleaseError("finalize: required parity is not established")
+        if not required_pairs <= {(pair["a"], pair["b"]) for pair in pairs}:
+            raise ReleaseError("finalize: required parity pair is missing")
+        plugin_name = f"{PLUGIN_ID}-{stage1['plugin_version']}.zip"
+        actual = {"core_wheel_sha256": sha256_hex(wheel), "plugin_zip_sha256": sha256_hex(stage1["files"][plugin_name])}
+        for key, digest in actual.items():
+            if matrix["artifacts"].get(key) != digest:
+                raise ReleaseError(f"finalize: Part A {key} differs from actual input bytes")
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise ReleaseError("finalize: incomplete acceptance evidence") from exc
+
+
 def build_finalize(stage1: dict[str, object], wheel_name: str, wheel: bytes, matrix: dict) -> dict[str, bytes]:
     """L2 -> L3 -> L4；返回 ``{COMPATIBILITY.json, SHA256SUMS, <bundle 名>}``。"""
+    acceptance_preflight(matrix, stage1, wheel)
     files: dict[str, bytes] = dict(stage1["files"])  # type: ignore[arg-type]
     files[wheel_name] = wheel
     files["COMPATIBILITY.json"] = render_compatibility_json(matrix, stage1)

@@ -425,15 +425,16 @@ PREFIX = "fc2-organizer/"
 #: 本轮唯一被授权修改的证据面（任务书第 4 节）；``tests/amane_compat/`` 内的修改只为 evidence schema / witness / validator。
 RECONCILIATION_ALLOWED = (
     r"tools/run_amane_compat_gate\.py",
+    r"tools/build_amane_release\.py",  # P5-C2-L1-01 R1：明确授权 direct finalize 安全门
     r"tests/amane_compat/.+",
     r"docs/acceptance/evidence/P5_C2_COMPATIBILITY_MATRIX\.json",
     r"docs/review/P5_C2_HANDOFF\.md",
 )
-#: 零 diff：产品实现、L0 / L1 输入文件、构建器、P5-C1、权威文件、治理文件。
+#: 零 diff：产品实现、L0 / L1 输入文件、其它构建器、P5-C1、权威文件、治理文件。
 RECONCILIATION_ZERO_DIFF = (
     r"src/.+",
     r"adapters/amane/.+",
-    r"tools/(build_core_wheel|build_amane_release|compare_amane_api|prepare_amane_hosts|amane_api_manifest|build_amane_plugin_zip|run_amane_host_witness)\.py",
+    r"tools/(build_core_wheel|compare_amane_api|prepare_amane_hosts|amane_api_manifest|build_amane_plugin_zip|run_amane_host_witness)\.py",
     r"pyproject\.toml",
     r"tests/(?!amane_compat/).+",
     r"docs/specifications/.+",
