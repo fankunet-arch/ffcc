@@ -1,7 +1,8 @@
-# P5-C2 HANDOFF —— Amane Compatibility & Adapter Closure（Pre-L1 证据对账完成；等待独立 Level 1 Review）
+# P5-C2 HANDOFF —— Level 1 R1 Finalize Closure（等待增量 Level 1 闭环复查）
 
 ```text
-P5-C2 PRE-L1 EVIDENCE RECONCILIATION : COMPLETE
+Independent L1                        : FAIL（唯一 blocking finding：P5-C2-L1-01，MEDIUM）
+P5-C2-L1-01 R1                        : REMEDIATED — INCREMENTAL LEVEL 1 REVIEW REQUIRED
 Technical Acceptance                  : NOT YET
 P5-C2                                 : NOT CLOSED（本文不是 Level 1 结论，也不是 Technical Acceptance）
 Branch                                : claude/phase5-c2-amane-compatibility
@@ -10,12 +11,15 @@ Original Design Accepted Authority    : f358aca1ff6e056f28c3b9b2d0fcaa2f608ac124
 Accepted Pre-L1 Amendment A1          : b8480e74ab2b8d7901a0de98ee396f72e204aba7（独立 Authority Amendment Review：PASS）
 Current Accepted Authority Head       : b8480e74ab2b8d7901a0de98ee396f72e204aba7
 Previous Implementation Candidate     : 4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace
+R1 Base                               : ab477b0852dd2c49d1c73cbd0bcfea080724238d
+Previous R1 Head                      : 71aa4666747f7ac847d13de3d8e249e77a352dcc
+R1 Code Candidate                     : 7bbd39d2c401bdf8d8cce19e6ff90849670ef2e4
 Governance                            : Acceleration v2（docs/PROJECT_GOVERNANCE_ACCELERATION.md；零 diff）
 Risk Class                            : C（外部可执行 artifact 信任边界；不拆分 S1 / S2 / S3；未升级）
 U2-5                                  : TRIGGERED（S2 / S3 期间，在送 Level 1 之前发现：冻结设计对宿主 API / 路由 / 环境的 3 项事实假设与观测不符，以及 E16 的证据模型缺陷）
 Authority debt                        : RESOLVED by Accepted A1（b8480e74…）；独立 A1 Review：PASS
 Architecture Blocker                  : NONE
-Next                                  : P5-C2 INDEPENDENT LEVEL 1 REVIEW（Reviewer 必须在自己的 checkout 上独立重跑 E31、M2-14..M2-23 与 E16-B，不得只引用本文）
+Next                                  : P5-C2 R1 INCREMENTAL LEVEL 1 CLOSURE REVIEW
 ```
 
 > 本文只记录实现与证据；不改变 Frozen Contract / Plan / Accepted A1 的任何语义、scope、Risk 或 finding authority。
@@ -23,7 +27,7 @@ Next                                  : P5-C2 INDEPENDENT LEVEL 1 REVIEW（Revie
 > 只在 SC-01..SC-04 上经验证兼容；macOS / Linux / Docker 为 UNVERIFIED。
 > 治理历史如实保留：**U2-5 确实被触发过**（见 §0）；本轮没有把它改写成“从未发生”。
 
-## 0. Pre-L1 对账（本轮；evidence-only）
+## 0. Pre-L1 对账（截至 71aa466 的历史；本次 R1 见 §0.2）
 
 **U2-5 与 A1**：S2 / S3 阶段发现下列事实与冻结设计不符，已在送 Level 1 之前上报并由 Authority Amendment A1 冻结（合同第 11.7、13.2 节；计划附录 E），独立 Review 结论 PASS：
 
@@ -45,11 +49,74 @@ Next                                  : P5-C2 INDEPENDENT LEVEL 1 REVIEW（Revie
 * 证据：18 个新 guard（场景初始 false、逐个阶段中断、host_row、validator、`finalize_problems`、`finalize` 命令对中断 / 缺失场景的拒绝并且不写文件、正向路径）；**真实宿主证明**：在一次性临时检出里，`a-win` 的控制栈阶段中断（该次恰好是同一个 Windows `WinError 5` 瞬时错误自然触发的）-> `HC-04 / 05 / 08 / 17 / 18` 为 false，其中 `HC-08` **没有任何失败记录**（正是旧缺陷会误判为 PASS 的情形）-> `SC-01` = `BLOCKED` -> `finalize` 拒绝，退出码 1，没有写出任何文件。
 * 这一改动**没有改变任何真实宿主观测**：重新生成后的 Part A 与上一次相比只有 `tool.sha256` 不同，L2 / L3 / L4 逐字节相同。
 
-**本轮改了什么 / 没改什么**
+**上一轮 Pre-L1 对账修改范围（截至 71aa466；本次 R1 增量见 §0.2）**
 
 * 只修改被授权的证据面：`tools/run_amane_compat_gate.py`、`tests/amane_compat/**`（只为 evidence schema / witness / 校验器）、`P5_C2_COMPATIBILITY_MATRIX.json`、本文。
 * **零 diff**：`src/**`、`adapters/amane/**`（adapter、shim、INSTALL、ledger、manifest）、`build_core_wheel.py`、`build_amane_release.py`、`compare_amane_api.py`、`prepare_amane_hosts.py`、`pyproject.toml`、P5-C1 全部文件 / evidence、P5-C2 合同与施工计划、治理文档（范围门测试 `b8480e74..HEAD` 机检）。
 * **L0 Core wheel 与 L1 plugin zip 的输入字节未变**：两个哈希与被验收候选 `4358b3d` 完全相同（§5）。
+
+## 0.2 P5-C2-L1-01：Level 1 R1 最后一道发布安全门
+
+Independent L1 的结论是 **FAIL**，唯一 finding `P5-C2-L1-01`（MEDIUM、blocking）。本轮基于 `71aa4666747f7ac847d13de3d8e249e77a352dcc`，Previous R1 Base = `ab477b0852dd2c49d1c73cbd0bcfea080724238d`。真实本地 worktree 为 `C:/Users/Ctg/Projects/ffcc/.claude/worktrees/p5-c2`；修改前 branch、HEAD、origin 与 `ls-remote` 均吻合且 clean / 无 untracked。本轮状态仅为 **REMEDIATED — INCREMENTAL LEVEL 1 REVIEW REQUIRED**；Technical Acceptance = NOT YET，P5-C2 = NOT CLOSED，Phase 6 未开始。
+
+根因分两层：
+
+1. 未完成的 scenario 过去被当作 PASS。上一轮已改为 `completed && no failures`，阶段中断使相关场景保持 false，并推导 required coordinate 为 BLOCKED；本轮沿用，未重做。
+2. Direct release builder 过去直接信任 Part A，没有自己的 acceptance preflight。本轮在 `build_finalize()` 的 L2 projection 前加入独立发布安全门：SC-01..SC-04 对应四个 required Windows hosts 必须完整且身份匹配；每个 host 恰有 HC-01..HC-19，`passed is True`；required coordinate 必须精确 SUPPORTED；四个 required parity pairs 必须存在，所有列出的 pairs 必须 `equal is True`；Part A 的 wheel / plugin zip SHA256 必须等于此次真实输入 bytes。缺失、重复或 non-green evidence 以 ReleaseError 拒绝；在生成 / 写出 COMPATIBILITY.json、SHA256SUMS 或 bundle 前停止。
+
+该 preflight 不复制完整 `validate_matrix`，不新增 MATRIX 顶层字段，不改变 L0 / L1、投影白名单、hash derivation、artifact DAG 或支持坐标语义；SC-05+ 不要求 SUPPORTED。CLI 原有 stage1-dir 与 fresh rebuild 字节对比继续执行；production `build_finalize()` 自己直接计算 wheel 和 plugin bytes 的 hash，不盲信 stage1 metadata。
+
+本轮相对 Previous R1 Head 的精确文件清单：
+
+```text
+fc2-organizer/tools/build_amane_release.py
+fc2-organizer/tests/amane_compat/_compat_support.py
+fc2-organizer/tests/amane_compat/_finalize_closure_witness.py
+fc2-organizer/tests/amane_compat/test_amane_compat_artifact_dag.py
+fc2-organizer/tests/amane_compat/test_amane_compat_evidence_reconciliation.py
+fc2-organizer/tests/amane_compat/test_amane_compat_finalize_closure.py
+fc2-organizer/docs/review/P5_C2_HANDOFF.md
+```
+
+新增 34 个行为测试，真实调用 direct CLI 或 production `build_finalize()`，覆盖 B1–B6、passed 缺失 / 非 bool True、重复 evidence、missing parity pair、实际 bytes 改变但 stage1 metadata 保持旧值等；每个 invalid CLI 用例均 non-zero 且输出目录未创建。旧 DAG 测试改用有效 Part A 的 allowed-diffs 字段变化证明投影依赖，不再要求 false scenario 被发布；其它 DAG / Part B 隔离断言保留。合成 Matrix fixture 补齐实际四个 parity pairs；范围守卫只增加本轮明确授权的 builder 文件。
+
+实测结果：
+
+| 检查 | 本轮结果 |
+|---|---|
+| 直接相关（finalize closure / artifact DAG / evidence reconciliation） | 3.12：109 passed；3.14.7：109 passed |
+| tests/amane_compat | 413 passed（原 379 + 新增 34）；0 skipped / 0 failed |
+| tests/amane_compat + tests/amane_adapter | 952 passed（413 + 539）；adapter 仍 539；0 skipped / 0 failed |
+| 全量 tests（3.12，带 -rs） | 8861 passed / 40 skipped / 0 failed；新增 skips 0，skip 清单与上一轮逐项一致 |
+| mutation / non-vacuity | 原 62 个测试继续 PASS，包含 M2-23 / E31-u 的已有 fixture killer；Risk-C 产品代码零 diff，不重跑全套 M2 real-host |
+| 正常四宿主 gate | SC-01..SC-04：各 19/19，gate exit 0；matrix validation PASS；source admission 中 E31-u 继续覆盖 |
+| 有效输入发布 | Gate finalize 与 Direct builder finalize 均成功，L0..L4 全部保持 §5 所列固定哈希 |
+| 真实 forced abort（四宿主） | a-win 的 own_stack 阶段抛出受控 RuntimeError；HC-08 failure 列表为空但 completed=false / passed=false；HC-04 / 05 / 08 / 17 / 18 false，SC-01 BLOCKED；其它三个宿主 19/19 |
+| forced abort 的持久化 Part A | NON-GREEN；gate exit 1；validate_matrix / validator CLI REJECT；Gate Finalize REJECT；Direct Builder Finalize REJECT；L2 / L3 / L4 NONE |
+
+负向见证通过临时函数替换在主进程注入 phase abort，该注入不修改生产文件、in_host.py 或 Amane upstream，没有自动 retry。第一次正常四宿主见证在运行期间受本轮测试文件新增 / 整理影响，HC-18 如实检出 repo 文件变化（b-src / a-win 18/19，gate exit 1），因此未用于验收且没有 finalize；首次日志和 Matrix 保留。文件稳定后重新完整运行的四宿主才用于正向见证。另保留初步单宿主 forced-abort witness；最终 negative witness 包含全部四宿主。没有发生需要人工重跑的 Windows transient，本轮未修改任何 startup / cleanup 行为。
+
+§1–9 的旧数字、完整 Level 1 指引与 A/B/C 记录保留为 Previous R1 Head 的历史证据；当前仅按本节执行增量闭环复查；本轮 3.14 仅重跑直接受影响的 109 个 C2 测试，未重新执行 Set A/B/C，未扩大为完整 Phase review。run_amane_compat_gate.py 没有修改，tool hash 不变；已提交 MATRIX 也不变，正常 witness 的发布投影与已有 Matrix 输出逐字节一致。
+
+复现命令（在 fc2-organizer 目录，使用项目 3.12 venv；测试输出及宿主临时目录位于仓库之外）：
+
+```powershell
+python -m pytest tests/amane_compat/test_amane_compat_finalize_closure.py tests/amane_compat/test_amane_compat_artifact_dag.py tests/amane_compat/test_amane_compat_evidence_reconciliation.py -q -p no:cacheprovider
+python -m pytest tests/amane_compat -q -p no:cacheprovider
+python -m pytest tests/amane_compat tests/amane_adapter -q -p no:cacheprovider
+python -m pytest tests -q -p no:cacheprovider -rs
+python tools/build_core_wheel.py --out <work>/l0
+python tools/build_amane_release.py stage1 --core-wheel <whl> --out <work>/l1
+python tools/run_amane_compat_gate.py run --hosts-json <hosts.json> --core-wheel <whl> --stage1-dir <work>/l1 --work <work>/hosts --amane-repo <amane-clone> --out <work>/partA.json --details <work>/details.json
+python tools/run_amane_compat_gate.py --validate <work>/partA.json
+python tools/build_amane_release.py finalize --core-wheel <whl> --stage1-dir <work>/l1 --matrix <work>/partA.json --out <work>/direct
+python tools/run_amane_compat_gate.py finalize --core-wheel <whl> --stage1-dir <work>/l1 --matrix <work>/partA.json --out <work>/gate
+python tests/amane_compat/_finalize_closure_witness.py --hosts-json <hosts.json> --core-wheel <whl> --stage1-dir <work>/l1 --work <work>/forced
+```
+
+Clean Checkout：代码 / 证据提交 `7bbd39d2c401bdf8d8cce19e6ff90849670ef2e4` 的 detached checkout 已验证：R1 negative / forced-abort closure 测试 34 passed；L0 / L1 重建不变；valid direct / gate finalize 的 L2 / L3 / L4 不变；用真实四宿主 forced-abort 的持久化 Part A 在该 checkout 重新执行 validator 与两个 finalize 均拒绝，没有 L2 / L3 / L4。最终 docs-only HEAD 后再执行同一检查，结果由执行报告记录。
+
+下一步仅为 **P5-C2 R1 INCREMENTAL LEVEL 1 CLOSURE REVIEW**。已独立通过的其它项目不重新打开；不得开始 Phase 6。
 
 ## 1. 坐标与提交链
 
@@ -305,14 +372,16 @@ Evidence Gaps（如实）：
 ```text
 git diff --check          : CLEAN
 git status                : CLEAN（提交后）
-Frozen scopes             : ZERO DIFF（src/**、C1 adapter 树、shim、INSTALL、构建器、既有 tests/**、P5-C1 文件 / evidence、合同 / 施工计划、治理文档）
+Frozen scopes             : ZERO DIFF（src/**、C1 adapter 树、shim、INSTALL、L0 构建器、C2 以外既有 tests/**、P5-C1 文件 / evidence、合同 / 施工计划、治理文档）
 L0 / L1 输入字节          : UNCHANGED
 Risk Class                : C（未升级）
 Authority debt            : U2-5 已记录并由 Accepted A1 偿还
 P5-C2 PRE-L1 EVIDENCE RECONCILIATION : COMPLETE
 Technical Acceptance      : NOT YET
 P5-C2                     : NOT CLOSED
-Next                      : P5-C2 INDEPENDENT LEVEL 1 REVIEW（C 级；必须独立执行 E31、M2-14..M2-23 与 E16-B；不得只引用本文）
+Independent L1            : FAIL（P5-C2-L1-01）
+R1                        : REMEDIATED — INCREMENTAL LEVEL 1 REVIEW REQUIRED
+Next                      : P5-C2 R1 INCREMENTAL LEVEL 1 CLOSURE REVIEW（只复核本 finding 的 closure 与相关 regression）
 ```
 
 Reviewer 复核命令（均在自己的 checkout 上）：
