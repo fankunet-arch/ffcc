@@ -1,6 +1,6 @@
 # FC2 Metadata（ffcc）Amane 来源插件
 
-> **状态：P5-C1（CLOSED）= adapter 语义；P5-C2 = 宿主兼容与发布 closure，实现候选（等待独立 Level 1 Review）。**
+> **状态：P5-C1（CLOSED）= adapter 语义；P5-C2（CLOSED）= 宿主兼容与发布 closure，Technical Acceptance PASS @ 1ef23247c2c65649589e9919c00093901bbcb517。**
 > 对外安装请使用 **P5-C2 发布包**（plugin zip + 独立 Core wheel + 校验清单 + 安装说明）。本文件只描述目录与入口；
 > 面向用户的安装步骤见 `adapters/amane/release/INSTALL.zh-CN.md`，规范见
 > `docs/specifications/PHASE5_C2_AMANE_COMPATIBILITY_CONTRACT.md`，证据见 `docs/review/P5_C2_HANDOFF.md`。

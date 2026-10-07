@@ -1,26 +1,109 @@
-# P5-C2 HANDOFF —— Level 1 R1 Finalize Closure（等待增量 Level 1 闭环复查）
+# P5-C2 HANDOFF —— Amane Compatibility & Adapter Closure（CLOSED）
 
 ```text
-Independent L1                        : FAIL（唯一 blocking finding：P5-C2-L1-01，MEDIUM）
-P5-C2-L1-01 R1                        : REMEDIATED — INCREMENTAL LEVEL 1 REVIEW REQUIRED
-Technical Acceptance                  : NOT YET
-P5-C2                                 : NOT CLOSED（本文不是 Level 1 结论，也不是 Technical Acceptance）
+P5-C2                                 : CLOSED（Final Closure 见 §0F）
+Technical Acceptance                  : PASS（独立 R1 Incremental Level 1 Closure Review）
+Final Reviewed P5-C2 Head              : 1ef23247c2c65649589e9919c00093901bbcb517
+Final Closure Docs Head               : 本 Final Closure 提交（纯状态 docs-only；Parent = 1ef23247c2c65649589e9919c00093901bbcb517；git log -1 --format=%H -- fc2-organizer/docs/review/P5_C2_HANDOFF.md）
+P5-C2-L1-01                           : CLOSED
+Independent Level 1                   : PASS（Full L1 = FAIL；唯一 finding P5-C2-L1-01；R1 Incremental Closure Review = PASS）
+Implementation                        : TECHNICALLY ACCEPTED @ 1ef23247c2c65649589e9919c00093901bbcb517
+Risk Class                            : C（VALID；外部可执行 artifact 信任边界；不拆分 S1 / S2 / S3；未升级）
+Architecture Blocker                  : NONE
+Authority Question                    : NONE
+New Findings                          : NONE
 Branch                                : claude/phase5-c2-amane-compatibility
 Package Frozen Base                   : 232ece06c1d166929846bc9c63ffc7314ea3a484
-Original Design Accepted Authority    : f358aca1ff6e056f28c3b9b2d0fcaa2f608ac124
-Accepted Pre-L1 Amendment A1          : b8480e74ab2b8d7901a0de98ee396f72e204aba7（独立 Authority Amendment Review：PASS）
+Original Design Accepted              : f358aca1ff6e056f28c3b9b2d0fcaa2f608ac124
+Accepted Amendment A1                 : b8480e74ab2b8d7901a0de98ee396f72e204aba7（独立 Authority Amendment Review：PASS）
 Current Accepted Authority Head       : b8480e74ab2b8d7901a0de98ee396f72e204aba7
 Previous Implementation Candidate     : 4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace
 R1 Base                               : ab477b0852dd2c49d1c73cbd0bcfea080724238d
 Previous R1 Head                      : 71aa4666747f7ac847d13de3d8e249e77a352dcc
 R1 Code Candidate                     : 7bbd39d2c401bdf8d8cce19e6ff90849670ef2e4
-Governance                            : Acceleration v2（docs/PROJECT_GOVERNANCE_ACCELERATION.md；零 diff）
-Risk Class                            : C（外部可执行 artifact 信任边界；不拆分 S1 / S2 / S3；未升级）
-U2-5                                  : TRIGGERED（S2 / S3 期间，在送 Level 1 之前发现：冻结设计对宿主 API / 路由 / 环境的 3 项事实假设与观测不符，以及 E16 的证据模型缺陷）
+Governance                            : Acceleration v2（docs/PROJECT_GOVERNANCE_ACCELERATION.md §11.1；零 diff）
+U2-5                                  : TRIGGERED historically（S2 / S3 期间，在送 Level 1 之前发现冻结设计事实假设与观测不符及 E16 证据模型缺陷）
 Authority debt                        : RESOLVED by Accepted A1（b8480e74…）；独立 A1 Review：PASS
-Architecture Blocker                  : NONE
-Next                                  : P5-C2 R1 INCREMENTAL LEVEL 1 CLOSURE REVIEW
+Next                                  : OWNER / PLANNER may begin Phase 6 planning separately；DO NOT START PHASE 6
 ```
+
+## 0F. P5-C2 Final Closure（纯状态 docs-only）
+
+本节只记录独立 R1 Incremental Level 1 Closure Review 已经建立的最终状态。依据 `docs/PROJECT_GOVERNANCE_ACCELERATION.md` §11.1，采用与 P5-C1 HANDOFF §0F 一致的纯状态 Final Closure：不改变 Frozen Contract / Frozen Construction Plan / Accepted A1 / Frozen Base / scope / Risk / support claims / security boundary / finding authority / 下一阶段输入语义。
+
+下文候选期原始说明及 §0、§0.1、§0.2、§1..§9 的旧状态是各提交当时的**历史记录**，不代表 Final Closure 时的当前状态。`Independent L1: FAIL`、`P5-C2-L1-01: REMEDIATED — REVIEW REQUIRED`（含增量复查待办）、`Technical Acceptance: NOT YET`、`P5-C2: NOT CLOSED` 均保留其历史含义。Full Level 1 确实 FAIL 过，U2-5 确实触发过；不得将历史改写成从未 FAIL 或从未触发。
+
+```text
+P5-C2 Technical Acceptance : PASS
+Final Reviewed P5-C2 Head  : 1ef23247c2c65649589e9919c00093901bbcb517
+Final Closure Docs Head   : 本 Final Closure 提交（Parent = 1ef23247c2c65649589e9919c00093901bbcb517）
+P5-C2-L1-01               : CLOSED
+Independent Level 1       : PASS（R1 Incremental Level 1 Closure Review）
+Risk Class                : C（VALID）
+Architecture Blocker      : NONE
+Authority Question        : NONE
+SC-01..SC-04              : SUPPORTED（coordinate-scoped）
+macOS / Linux / Docker    : UNVERIFIED
+U2-5                      : TRIGGERED historically
+Authority debt            : RESOLVED by Accepted A1
+P5-C2                     : CLOSED
+```
+
+### Final Review Chain（历史，按时间顺序）
+
+| 提交 | 角色 / 最终裁决 |
+|---|---|
+| `f358aca1ff6e056f28c3b9b2d0fcaa2f608ac124` | Original Design Accepted Authority |
+| `3191ffafd8f26c916e511887ae9cd3fbb5b49350` → `7a401c11327f57d7401c67dbc55811c90082606e` → `b51836395ead93816a9370da1bf2611d3f8b5041` | S1 → S2 → S3；原有完整链及证据见 §1 |
+| `4358b3df3353d634e4c2e8b1ee6b71c0a07b5ace` | Initial implementation candidate |
+| `b8480e74ab2b8d7901a0de98ee396f72e204aba7` | Accepted Authority Amendment A1；独立 Authority Amendment Review：PASS；authority debt RESOLVED |
+| `9550788adf4b86c13fc8c29fa16e171e81d03978` → `12bd5b8d8549dfb2b668b6e570c3f13566618271` → `f579db35c36579cb5084b51b6c3d135006c0e625` | Pre-L1 对账、阶段异常判失败及证据刷新；原有记录保留 |
+| `ab477b0852dd2c49d1c73cbd0bcfea080724238d` | Full Independent Level 1 candidate → **FAIL** → 唯一 blocking finding `P5-C2-L1-01`（MEDIUM） |
+| `1dcdd02e82e637c2d2a1c52133dff08a0ed0e71c` → `be11b48e40abf0495a76e137886599fa8c4d7076` → `71aa4666747f7ac847d13de3d8e249e77a352dcc` | Unified R1 的前段；`71aa466…` = Partial R1 head，complete-or-false evidence semantics 与 clean-checkout 记录 |
+| `7bbd39d2c401bdf8d8cce19e6ff90849670ef2e4` | Final R1 code candidate；direct builder finalize fail-closed |
+| `1ef23247c2c65649589e9919c00093901bbcb517` | Final R1 review candidate；独立 R1 Incremental Level 1 Closure Review：**PASS**；`P5-C2-L1-01: CLOSED`；Technical Acceptance：**PASS**；Final Reviewed P5-C2 Head |
+| 本 Final Closure 提交（Parent = `1ef23247c2c65649589e9919c00093901bbcb517`） | 纯状态 docs-only；仅修改本 HANDOFF 与 adapter README 状态行；建立 `P5-C2: CLOSED`；不再进行额外 independent docs-only Review |
+
+真实闭环链：**Full Level 1 FAIL（P5-C2-L1-01）→ unified R1 → R1 Incremental Level 1 Closure Review PASS → P5-C2 Technical Acceptance PASS → Final Closure**。
+
+### 独立 R1 Review 的最终证据摘要
+
+以下为 **Reviewer independently verified** 的最终独立确认，只做状态摘要，不是 Developer 自证。本 Final Closure 不重跑测试或真实宿主，不重新生成 evidence；最终 technical evidence 冻结在 `1ef23247c2c65649589e9919c00093901bbcb517`。
+
+```text
+Context Handshake             : PASS
+P5-C2-L1-01                   : CLOSED
+Scenario Completion           : PASS
+Forced Abort Matrix           : NON-GREEN
+Validator Abort Rejection     : PASS
+Gate Finalize Abort Rejection : PASS
+Direct Builder Abort Rejection: PASS
+B1..B6                        : REJECTED
+Invalid Finalize Output       : NONE
+Valid Builder                 : PASS
+Valid Gate Finalize           : PASS
+L0..L4                        : UNCHANGED
+Direct Tests                  : 109 passed
+Compat                        : 413 passed
+Adapter                       : 539 passed
+Combined                      : 952 passed
+Python 3.14 affected          : 109 passed
+Mutation / non-vacuity        : 62 passed
+Clean Checkout                : PASS
+R1 Direct Regression          : NONE
+New Findings                  : NONE
+```
+
+### 治理效果与下一步
+
+本 Final Closure commit 自身建立 `P5-C2: CLOSED`，不再安排额外 independent docs-only Review；它只记录已经独立成立的状态，不改变任何 authority semantics。Contract、Construction Plan、Accepted A1、MATRIX、L0..L4 artifacts 全部 UNCHANGED；production 与 tests 全部 ZERO DIFF。
+
+```text
+Next: OWNER / PLANNER may begin Phase 6 planning separately
+DO NOT START PHASE 6
+```
+
+以下候选期原始说明与历史记录原样保留。
 
 > 本文只记录实现与证据；不改变 Frozen Contract / Plan / Accepted A1 的任何语义、scope、Risk 或 finding authority。
 > 支持声明是**坐标级**的：version compatibility target = Amane v0.15.0 与 v0.18.0；**support claim is coordinate-scoped, not version-global**，
