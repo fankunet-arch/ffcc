@@ -17,7 +17,7 @@ Internal Stages                    : S1 / S2 / S3
 Independent Review Plan            : Independent Design Review once before S1 + one C-level Independent Level 1 Review after complete implementation
 Owner Question Gate                : BUSINESS DECISIONS ONLY
 Evidence Gate                      : 合同第 23 节 E6-01..E6-27 全部满足（含：≥10 FC2 的两个真实宿主纵向门、失败 / 重试 / 取消 / 并发 / 确定性、route ownership 机械证明、
-                                     安全 canary、不执行三层机检、16 项 mutation / non-vacuity、全量回归与基线对账、live smoke 记录、HANDOFF）
+                                     安全 canary（含异常图递归检查）、不执行三层机检、23 项 mutation / non-vacuity、持久化 provenance 六类反事实、有界 JSON、全量回归与基线对账、live smoke 记录、HANDOFF）
 ```
 
 ```text
@@ -25,13 +25,14 @@ Phase 6                       : DESIGN CANDIDATE
 P6-C1                         : DESIGN CANDIDATE — INDEPENDENT DESIGN REVIEW REQUIRED
 Frozen Contract               : NOT YET ACCEPTED（docs/specifications/PHASE6_C1_AMANE_BATCH_INTEGRATION_CONTRACT.md）
 Construction Plan             : NOT YET ACCEPTED（本文）
+Design-R1                     : CANDIDATE — UNIFIED FINDINGS CLOSURE（R1-01..R1-09；Design-R1 Base 28cb9c3fa9ecc60059c5bb621b0f9b5712cd8345）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
 Tests Modified                : NO
 ```
 
-本计划只有在独立 Design Review PASS 之后才成为 Frozen Construction Plan；在此之前**禁止 Developer 开始 S1**。Frozen 之后，计划与合同冲突时以合同为准。
+本计划只有在独立 Design Review（含 Design-R1 Closure Review）PASS 之后才成为 Frozen Construction Plan；在此之前**禁止 Developer 开始 S1**。Frozen 之后，计划与合同冲突时以合同为准。
 本文与 `docs/PHASE6_MASTER_PLAN.md`、Frozen Contract 的范围 / Risk Class / Frozen Base / Governance Authority 必须逐字一致（合同 U6-12）。
 
 ---
@@ -89,7 +90,7 @@ docs/ 下全部既有文件（上面 allow-list 之外）
 
 范围门同时断言：(a) `git diff 4189b95…..HEAD` 与工作树都落在 allow-list 内；(b) 两个 HG-1 文件中模块级常量
 `ALLOWED_PATTERNS` / `FROZEN_PATTERNS` / `RECONCILIATION_ALLOWED` / `RECONCILIATION_ZERO_DIFF` 的 AST 与 Frozen Base 版本（`git show 4189b95…:<path>`）**逐字相同**，
-且这两个文件的改动总行数不超过一个小常数（Design Review 在冻结时确认，建议 ≤ 60 行）。
+且 HG-1 commit 对这两个文件的 `added + deleted` 行数之和**冻结为 ≤ 60 行**（不再由 Reviewer 决定）；(c) 文件集合、唯一移交的两处工作树断言、测试函数名集合（= Base 集合减 1）、无新增 `skip` / `xfail` 均按合同 §5.4 机检；(d) **P6 范围门必须自带 C0 控制字符检查**，覆盖 `4189b95…..HEAD` ∪ 工作树内全部 `.py` / `.md` / `.json` / `.toml` 文件（承接被重绑后失去活动范围的历史检查）。
 
 ### 3.3 新增文件清单（冻结的名字；测试文件 basename 必须全局唯一，`tests/amane_batch/` 内**无** `__init__.py`）
 
@@ -133,24 +134,26 @@ docs/                  review/P6_C1_HANDOFF.md  acceptance/evidence/P6_C1_HOST_M
 1. 确认 Design Accepted Head 已由 Review 建立并记录进 HANDOFF；工作 branch 从该 Head 继续。
 2. 重做合同 §7.1 的 Amane 四个 SHA 核查，并重做 §7.3 的逐项核查（与合同表 H2 对账）；任何不符 → U6-6 停止。
 3. 在 Frozen Base `4189b95…`（或 Design Accepted Head，二者代码相同）上**记录基线**：各测试目录的通过 / 失败 / 跳过数（`tests/unit`、`tests/contract`、`tests/amane_adapter`、`tests/amane_compat`、`tests/phase4_acceptance` 等）与解释器版本。
+   同时在两个必需宿主上记录合同 §8.4 / §11.3 所需的**实测基线**（写入 HANDOFF；任一项与合同不符 → U6-6 停止，不得放宽判定）：① 成功 SCRAPE 的 `field_sources` 实际覆盖哪些 `MetadataField` 键（`title` 必须在内）；② `updated_at ≤ finished_at` 是否在干净成功 SCRAPE 上恒成立及时间戳精度；③ `locked_fields` 在 v0.15.0 缺失 / v0.18.0 存在；④ 合法响应的最大 JSON 深度 / 节点数 / 集合项数（须低于 `MAX_JSON_*` 的 1/4）；⑤ 取消 API 在“已认领未登记”窗口内的实际行为（尽力复现，不能复现则如实记录）；⑥ `WorkerConfig.concurrency` 缺省 10。
    这是 E6-22 全量回归“基线对账”的依据；不得事后补。基线必须**如实**标出继承的既有红：设计期按断言逻辑求值，
    `test_amane_compat_evidence_reconciliation.py` 的两个范围测试在 `4189b95…` 上应为红（P5-C2 Final Closure 修改了 `adapters/amane/README.md`，合同 §5.4）；
    以真实 pytest 结果为准，标 `PRE-EXISTING RED @ 4189b95`，不得写成 P6 回归。
-4. **HG-1 提交**（FUTURE S1 TEST-ONLY COMPATIBILITY REPAIR；仅当 Design Review 明确接受 HG-1 后才允许；独立 commit，标注 `HG-1`）：按合同 §5.4 重绑两个历史门禁；该 commit 的 diff 只含这两个文件；完成后这两个文件在 P6 分支上全绿。
+4. **HG-1 提交**（FUTURE S1 TEST-ONLY COMPATIBILITY REPAIR；实质裁决 ACCEPTED，Design Accepted Head 建立后才允许；独立 commit，标注 `HG-1`）：按合同 §5.4 的精确条款重绑两个历史门禁——上界改为 `P5_C2_REVIEWED_HEAD`；**仅**移交两处工作树断言（scope_gate 的 `test_working_tree_changes_are_limited_to_the_allow_list_as_well` 整个函数、reconciliation 的 `_changed_since_authority()` 中 `git status --porcelain` 输入分量），其余断言一律不删；四个历史常量 AST 不变；不新增 `skip` / `xfail`；diff ≤ 60 行；该 commit 的 diff 只含这两个文件；完成后这两个文件在 P6 分支上全绿，且 P6 新范围门已接管工作树与控制字符保护。
 
 ### 4.1 S1 —— Host Boundary + 安全 client + 结构化映射
 
 交付（对应合同 §8-§12、§20.2-§20.3、§20.5）：
 
 * `errors.py` / `credential.py` / `config.py` / `audit.py`（枚举与记录模型）/ `_wire.py` / `host_client.py` / `_lifecycle.py` / `_mapping.py` / `engine.py`。
-* 测试：E6-01、E6-03、E6-04、E6-05、E6-06、E6-07、E6-08、E6-09、E6-10（引擎层）、E6-17（安全 canary，基于 `httpx.MockTransport` 与一个真实的回环 TLS / 重定向 / cookie 测试服务器）。
-* 本阶段 mutation（进程内）：M6-03 / M6-04 / M6-05 / M6-06 / M6-09 / M6-12 / M6-13 / M6-15 / M6-16 的**单测层**对应项，每项带未变异孪生。
+* 测试：E6-01、E6-03、E6-04、E6-05、E6-06（含有界 JSON）、E6-07（含 provenance 矩阵与六类反事实）、E6-08（含 `SubmissionState`）、E6-09、E6-10（引擎层）、E6-17（安全 canary，含异常图递归检查与 `files` 路径 canary，基于 `httpx.MockTransport` 与一个真实的回环 TLS / 重定向 / cookie 测试服务器）。
+* 本阶段 mutation（进程内）：M6-03 / M6-04 / M6-05 / M6-06 / M6-09 / M6-12 / M6-13 / M6-15 / M6-16 / M6-17 / M6-18 / M6-19 / M6-21 / M6-23 的**单测层**对应项，每项带未变异孪生。
 
 要点（合同条款的落实顺序）：
 
 1. 先写 `_wire.py` 与 `host_client.py` 并用 `MockTransport` 钉死“请求账本”（方法 / 路径 / 体键集 / 头集 / 无 cookie / 无重定向 / 响应上限）。
-2. 再写 `_lifecycle.py`：状态机、deadline（至少一次观察）、观察失败容忍、清理预算、`CancelOutcome` 的 8 种结局；**提交永不重试**。
-3. 再写 `_mapping.py`：字段表穷举守卫、URL 卫生与 P5 I22 对账、最低成功、号等价、归属校验、`HostFailureKind` → Core 配对表（用 `ALLOWED_ERROR_KINDS` 穷举验证）、产出的 `AggregationResult` 通过 Core 校验并被 P4-C9 诊断投影接受。
+   * `_wire.py` 先实现**迭代式 JSON 结构预扫描**（`MAX_JSON_DEPTH` / `MAX_JSON_NODES` / `MAX_JSON_COLLECTION_ITEMS`）再接 `json.loads`；`host_client.py` 的 httpx 异常只在 `except` 块内分类、离开后才抛出安全异常，凭据只经 `httpx.Auth` 附加（合同 §8.3）。
+2. 再写 `_lifecycle.py`：状态机、deadline（至少一次观察）、观察失败容忍、清理预算、`SubmissionState` 四态、`CancelOutcome` 的 8 种结局（无 `CONFIRMED_STOPPED`）；**提交永不重试**。
+3. 再写 `_mapping.py`：字段表穷举守卫、URL 卫生与 P5 I22 对账、最低成功、号等价、任务侧归属 + 持久化侧 provenance（`E1/E2/E3` + R0；`source_urls` / `external_ids` 不映射）、`HostFailureKind` → Core 配对表（用 `ALLOWED_ERROR_KINDS` 穷举验证）、产出的 `AggregationResult` 通过 Core 校验并被 P4-C9 诊断投影接受。
 4. 最后写 `engine.py`：把以上串起来；`aggregate` 是类属性里的普通 `async def`（P4 静态形态检查要求）。
 
 S1 退出条件：E6-03..E6-10 + E6-17 的单测全绿；范围门绿；S1 mutation 全部“孪生绿 / 变异红”；无任何 CLOSED 文件改动（HG-1 除外）。**无需 Review，直接进入 S2。**
@@ -161,11 +164,11 @@ S1 退出条件：E6-03..E6-10 + E6-17 的单测全绿；范围门绿；S1 mutat
 
 * `models.py`（`AmaneBatchRound` / `AmaneBatchPreview` / `AmaneBatchSummary`，含全部 `__post_init__` 不变量）与 `facade.py`（preflight、`preview`、`preview_root`、`retry_failed`、`audit_snapshot`、`aclose`）。
 * 测试替身 `_batch_host_double.py`：一个基于 `httpx.MockTransport` 的**脚本化宿主**，实现表 H1 的 5 个端点并建模 Amane 的任务队列（QUEUED → RUNNING → DONE / FAILED、可配置 worker 并发、可控完成顺序、
-  两种取消语义 DIFF-P6-01 的 v0.15.0 / v0.18.0 变体、`Set-Cookie: amane_token`、401 行为）。
+  两种取消语义 DIFF-P6-01 的 v0.15.0 / v0.18.0 变体、**“已认领未登记”窗口与晚到 Metadata 写入（DIFF-P6-05）**、持久化 `field_sources` / `locked_fields` / `updated_at`（含手工编辑与外来来源）、`Set-Cookie: amane_token`、401 行为）。
   **它只服务于 S1 / S2 的进程内确定性测试，永远不被当作 Amane 证据**（E6-11..E6-16 必须是真实宿主）。S3 用“同一场景在替身与真实宿主上语义投影一致”的对账来约束替身不偏离真实行为。
-* 测试：E6-10（全链并发）、E6-19、E6-20（进程内）、`test_amane_batch_facade.py`（主轮 / 重试 / preflight / `preview_root` / 输入校验 / 取消）、E6-09（门面层取消）、E6-18（tripwire 全链）。
+* 测试：E6-10（全链并发，含门面并发 / 非法参数 / P4 busy 红绿）、E6-19（含跨轮 hardlink 反例）、E6-20（进程内）、`test_amane_batch_facade.py`（主轮 / 重试 / preflight / 冻结调用顺序 / `preview_root` / 输入校验 / 取消）、E6-09（门面层取消与取消真实性）、E6-18（tripwire 全链）。
 * 进程内纵向：≥ 10 个 FC2 经 `scan → … → BatchPreview → summary`，图片走真实 `HttpxImageClient` + `MockTransport`；失败 / 重试 / 取消 / 并发 / 确定性（完成顺序反转）全覆盖。
-* 本阶段 mutation：M6-07 / M6-08 / M6-10 / M6-11 / M6-14 的进程内对应项（孪生绿 / 变异红）。
+* 本阶段 mutation：M6-07 / M6-08 / M6-10 / M6-11 / M6-14 / M6-20 / M6-22 的进程内对应项（孪生绿 / 变异红）。
 
 S2 退出条件：进程内纵向全绿；`AmaneBatchSummary` 与 P4 `PreviewSummary` 交叉校验；`peak_in_flight ≤ M` 在完成顺序反转 / 慢 / 失败 / 取消下成立；范围门绿。**无需 Review，直接进入 S3。**
 
@@ -176,11 +179,11 @@ S2 退出条件：进程内纵向全绿；`AmaneBatchSummary` 与 P4 `PreviewSum
 * `tools/run_amane_batch_gate.py`：准备 HOST-A-SRC（v0.15.0）与 HOST-B-SRC（v0.18.0）（只读复用 P5-C2 的 `prepare_amane_hosts` / `build_core_wheel` / `build_amane_release` 与台账 pin），
   按合同 §22.2 配置；运行 E6-11 .. E6-16；写 `P6_C1_HOST_MATRIX.json`（确定、自洽；允许的非确定字段仅限显式列出的运维字段）。
 * `_batch_upstream.py` / `_batch_fault_proxy.py` / `_batch_corpus.py` / `_batch_oracles.py`；宿主级 mutation M6-01 / M6-02（门工具变体运行，退出码非 0）。
-* 双版本矩阵：纵向门（≥ 10 FC2）、失败矩阵、重试（宿主任务账本计数）、取消（含旁观任务与不确定性）、确定性（完成顺序反转 + 非空性）、route ownership、安全 canary（token 为 canary 的真实宿主）、不执行（文件系统树摘要）。
+* 双版本矩阵：纵向门（≥ 10 FC2）、失败矩阵、重试（宿主任务账本按不等式对账）、取消（含旁观任务、不确定性、claimed window 与晚到写入的尽力复现）、确定性（完成顺序反转 + 非空性）、route ownership 与持久化 provenance 六类反事实（故障代理含挂起 / 改写 `field_sources` · `locked_fields` · `updated_at` / 结构超限响应）、安全 canary（token 为 canary 的真实宿主）、不执行（文件系统树摘要）。
 * 替身 / 真实宿主对账：把 S2 的核心场景（ALL_OK×10、一个失败条目、取消）同样在真实宿主上运行，两边语义投影必须一致。
 * 可选：HOST-A-WIN / HOST-B-WIN（SC-01 / SC-02）；运行了才记录，没运行记 `UNVERIFIED`。
 * `P6_C1_LIVE_SMOKE.json`：`--live` 尝试（合同 §25）；结果 `VERIFIED` / `UNVERIFIED_ENVIRONMENT` / `NOT_RUN`，**不得**默认写成 PASS。
-* E6-21（全部 16 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.12 与 3.14）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
+* E6-21（全部 23 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.12 与 3.14）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
 
 S3 退出条件：合同 §23 的 E6-01..E6-27 全部有证据（或把无法获得的项如实写入 evidence gaps，并且不扩大任何支持声明）；HANDOFF 候选完成；然后**停止，等待 C-level Independent Level 1 Review**。
 
@@ -211,7 +214,7 @@ F   纯状态 Final Closure（Governance v2 §11.1：与 Final Closure 合并，
 
 | 评审 | 时点 | 内容 |
 |---|---|---|
-| **Independent Design Review**（一次） | S1 之前 | 三份文档一致性；合同第 30 节 DR-01..DR-10（含 **HG-1 裁决**、F-1、包位置、重试所有权拆分、宿主事实、取消模型、宿主库写入、route / provenance、安全边界、不执行隔离）；L6-01 独占 route 前提 |
+| **Independent Design Review**（一次，已完成 → FAIL；Design-R1 之后做增量 Closure Review） | S1 之前 | 三份文档一致性；合同第 30 节 DR-01..DR-18（含 HG-1 精确化、F-1、包位置、重试所有权拆分、宿主事实、取消三层模型、宿主库写入、route 与持久化 provenance、提交基数、异常图、门面调用顺序、跨轮冲突、JSON 上限、并发数区分、安全边界、不执行隔离）；L6-01 独占 route 前提 |
 | **C-level Independent Level 1 Review**（一次） | S3 之后 | 完整线性 diff、合同→实现→测试映射、全部证据与 mutation、安全不变量、真实宿主矩阵、evidence gaps |
 | 统一 R1（必要时） | Level 1 FAIL 之后 | 同一根因 / 范围明确 / 不需要新 authority；一次闭合全部已知 findings 并检查直接回归 |
 | Final Closure | Level 1（或 R1）PASS 之后 | 纯状态 docs；不单独再做 docs-only Review |
@@ -260,12 +263,13 @@ Phase 6                       : DESIGN CANDIDATE
 P6-C1                         : DESIGN CANDIDATE — INDEPENDENT DESIGN REVIEW REQUIRED
 Frozen Contract               : NOT YET ACCEPTED
 Construction Plan             : NOT YET ACCEPTED
+Design-R1                     : CANDIDATE — UNIFIED FINDINGS CLOSURE
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
 Tests Modified                : NO
 Risk Class                    : C
-Next                          : INDEPENDENT DESIGN REVIEW（通过之前禁止 Developer 开始 S1）
+Next                          : INCREMENTAL INDEPENDENT DESIGN-R1 CLOSURE REVIEW（通过之前禁止 Developer 开始 S1）
 ```
 
 唯一 authority 转换：独立 Design Review PASS → 该 Design Candidate SHA 成为 Design Accepted Head（Frozen Contract / Plan Head、Implementation Input）→ 才允许进入 S1。
