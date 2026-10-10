@@ -5,7 +5,8 @@ Phase 6                       : DESIGN CANDIDATE
 P6-C1                         : DESIGN CANDIDATE — INDEPENDENT DESIGN REVIEW REQUIRED
 Frozen Contract               : NOT YET ACCEPTED
 Construction Plan             : NOT YET ACCEPTED
-Design-R1                     : CANDIDATE — UNIFIED FINDINGS CLOSURE（R1-01..R1-09；Design-R1 Base 28cb9c3fa9ecc60059c5bb621b0f9b5712cd8345）
+Design-R1                     : SUPERSEDED BY DESIGN-R2 CANDIDATE（Design-R1 Head c05c7ebca04ded9e1853b71e82796a419fadc192）
+Design-R2                     : CANDIDATE — REMAINING FINDINGS CLOSURE（R2-01..R2-05；Design-R2 Base c05c7ebca04ded9e1853b71e82796a419fadc192）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
@@ -112,18 +113,19 @@ Authority 优先级：Frozen Contract > Frozen Construction Plan > `PROJECT_GOVE
 | F-2 | 5 个 CLOSED 架构测试逐字钉死了 `fc2_organizer` 的顶层子包集合；在其下新增 `amane_batch` 会使它们失败 | 新增**顶层同级包** `src/fc2_amane_batch/`（依赖方向 `fc2_amane_batch → fc2_organizer → fc2_metadata_core`），CLOSED 测试零改动 | §5.3 |
 | F-3 / HG-1 | P5-C2 的两个 CLOSED 测试把历史范围门的上界写成 `HEAD`，P6 分支任何新增文件都会使其失败（含本设计提交自身）；并且其中 reconciliation 门禁在 Frozen Base 上按断言逻辑求值**本来就是红**（P5-C2 Final Closure 改了 `adapters/amane/README.md`） | 最小、纯测试门禁的重绑：上界改为不可变的 P5-C2 Final Reviewed Technical Head `1ef23247…`（实测两个门禁在该上界都通过）；**实质裁决已被三份独立 Design Review 一致 ACCEPTED**，Design-R1 仅精确化文字：文件集合恰为两个；唯一移交的工作树断言恰好两处（scope_gate 的 `test_working_tree_changes_are_limited_to_the_allow_list_as_well` 整个函数；reconciliation 的 `_changed_since_authority()` 中 `git status --porcelain` 输入分量），其余断言一律不删；四个历史模式常量 AST 逐字不变；无新增 skip / xfail；diff 行数上限冻结为 60；P6 范围门覆盖自身 diff、工作树与 C0 控制字符检查。仍是**未来 S1 的 test-only 修复，本轮不执行** | §5.4 |
 | F-4 | Amane `TaskStatus` 只有 `queued / running / done / failed`，没有 `CANCELLED`；取消的终态是 `failed`（错误文本 “Cancelled by user”）。**v0.15.0 在“DB 已 RUNNING、协程尚未登记”（含信号量等待）的窗口内取消，只会让记录变 FAILED，执行协程仍会继续运行并写 Metadata；v0.18.0 窗口更小但无法证明不存在**（Design-R1 / R1-04） | 区分 L1 请求已发送 / L2 数据库终态已观察 / L3 执行已停止：P6 只能观察 L1、L2，L3 永远 UNVERIFIED；撤销 `CONFIRMED_STOPPED`，改为 `TERMINAL_FAILED_OBSERVED` / `TERMINAL_DONE_OBSERVED` 与 `UNCERTAIN_*`；不读 `error` 文本；晚到写入不可排除 | §10 |
-| F-5 | 宿主 SCRAPE 的任务 `field_sources` 给出“写入时打算怎样”，但**不等于**最终持久化 Metadata 的来源：v0.18.0 的 AUTO 写入保留锁定字段的既有值与来源（`_filter_locked`），v0.15.0 手工 `PATCH` 不改 `field_sources`，且 `source_urls` / `external_ids` 根本没有字段级来源（Design-R1 / R1-01） | 同时核对任务侧与持久化侧证据：字段级 `E1/E2/E3`（任务侧来源、持久化侧来源、未被锁定）+ 记录级 R0（`updated_at ≤ finished_at`，发现抓取后被改动）；`title` 失败 → 条目 fail closed，可选字段失败 → 排除；`source_urls` / `external_ids` 恒不映射；保证范围仅为读取那一刻，不声称任务专属不可变快照；独占 route 只是前提 | §7.6、§11.3 |
+| F-5 | 任务侧 / 持久化侧的 `field_sources`、字段锁、`updated_at` 都只是**标签或时间戳**，没有一个读取字段的实际值：用户 `PATCH` 把 title 改成 B 之后，持久化 `field_sources` 仍指向插件（`PATCH` 不改它；v0.18.0 解锁后也不再受锁保护），Design-R1 的 E1/E2/E3/R0 会全部通过并把 B 错误归属于插件（Design-R2 / R2-01）。核查两个 pinned release 发现 `Metadata.raw`（`dict[来源键, MediaMetadata.model_dump()]`，与展示列同次写入，`use_cache=[]` 时每个来源重新抓取，翻译 / FacetRule / 物化不改写，公开 `PATCH` 不能写，`GET /api/metadata/{id}` 返回）保存了插件的原始记录 | **方案 A（冻结，唯一）**：字段值只由 `raw["ffcc.fc2-metadata"]` 经严格 reader 与确定性映射派生；展示列、持久化 `field_sources` / `locked_fields` 不作内容证据；放弃的宿主后处理语义（翻译、FacetRule、物化、手工编辑）显式声明；`record_freshness` 只是审计提示；保证范围是“插件来源内容”，**不**是“任务独占内容”；放弃方案 B（逐值比较需无界变换白名单） | §7.3、§11.3 |
 | F-6 | SCRAPE 会 upsert **Amane 的 Metadata 数据库**；`auto_scrape` 还可能扇出 `ACTOR_SCRAPE` | preview 不执行用户媒体的文件系统整理，但 SCRAPE 会写宿主 Metadata 库（不得声称对宿主数据库只读）；`acknowledge_host_metadata_writes=True` 作为显式确认；后继任务属宿主所有 | §8.2、§27 L6-08 |
 | F-7 | 两个版本的 `TaskResponse` 都没有 progress 字段；进度只经 WebSocket | P6-C1 不使用 WebSocket、不新造 progress 契约 | §17 |
 | F-8 | Amane 可能把 poster 物化 / 裁剪成宿主内部 URL | 只接受绝对 http(s) URL，内部 URL 确定性剔除并计数；P4 图片获取不依赖 Amane Resource | §18 |
 | F-9 | 宿主对“失败”只给 `failed` + 文本，无法在不解析文本的前提下区分“号不存在”与“来源故障” | 统一 `HOST_TASK_FAILED`；P6 从不产生 `NOT_FOUND` | §12、§27 L6-05 |
 | F-10 | Amane 认证成功后会下发 `Set-Cookie: amane_token` | client 使用“拒绝一切 cookie”的 jar，不回传 | §8.3 |
 | F-11 | 提交尝试次数 ≠ 宿主创建的任务数：401 / 连接失败可能创建零个，响应丢失时创建状态未知（R1-02） | `SubmissionState` 四态；每个 aggregate 最多一次 `POST` 且永不自动重试；`CREATION_UNKNOWN` 不折算为 0 / 1，也不是重新提交的理由；任务账本用不等式对账 | §9.2、§13.1 |
-| F-12 | `raise … from None` 不清除 `__context__`，原 httpx 异常（含 `Authorization` 头）仍可经上下文到达（R1-03） | httpx 异常只在 `except` 块内分类，离开后才构造安全异常；凭据只经 `httpx.Auth` 附加；E6-17 递归检查异常图并带红绿孪生 | §8.3、§20.2 |
+| F-12 | `raise … from None` 不清除 `__context__`（R1-03）；Design-R1 只约束 `host_client.py` / `facade.py`，`credential.py` / `config.py` 等仍可 `except UnicodeEncodeError: raise … from None` 而保留 `.object=token`（Design-R2 / R2-02） | 规则扩展到整个 `src/fc2_amane_batch/**`：处理体内禁止带参数 `raise`、校验用纯谓词、失败路径重新绑定 `token` 局部、传输两层；保护面 P1–P3 / 禁入内容 F；区分“新引入的泄漏”与“调用方持有对象本身的认证状态”；强制失败矩阵与红绿孪生 | §8.3.1、§20.2 |
 | F-13 | P4 `_claim()` 是私有方法，P6 门面无法在 preflight 之前“委托 P4 busy-first”（R1-05） | 撤销该声明；冻结实际调用顺序（本地校验 → preflight → P4 公开 `preview`）；不复制 P4 锁、不承诺零网络或错误优先级 | §9.5 |
 | F-14 | P4 Phase B 以 `(device, inode)` 检测冲突，不同番号可共享 hardlink 源；单独重试子集看不见前轮 READY（R1-06） | 撤销“不可能冲突”断言；READY / 冲突只对本轮有效；汇总区分 `ready_round_local` 与 `cross_round_verified`；Phase 7 跨轮执行必须重新验证 | §13.4、§20.4 |
-| F-15 | 8 MiB 字节上限不限制 JSON 深度 / 节点 / 集合规模（R1-07） | `MAX_JSON_DEPTH=32` / `MAX_JSON_NODES=200000` / `MAX_JSON_COLLECTION_ITEMS=20000`；迭代式预扫描；超限 `HOST_RESPONSE_TOO_COMPLEX` | §8.4 |
-| F-16 | Amane `WorkerConfig.concurrency` 缺省为 10（不是 3，3 只是 `Worker` 构造函数的类默认）（R1-08） | 区分 P4 并发 M / 宿主配置并发 / 孤儿任务占用；`active aggregate ≤ M` 不推广为宿主全部任务 ≤ M | §14、L6-07 |
+| F-15 | 8 MiB 字节上限不限制 JSON 深度 / 节点 / 集合规模（R1-07）；Design-R1 的 `O(min(bytes, tokens))` 成本公式不成立（长字符串 / 长空白必须遍历）（R2-03） | `MAX_JSON_DEPTH=32` / `MAX_JSON_NODES=200000` / `MAX_JSON_COLLECTION_ITEMS=20000`；迭代式预扫描；成本修正为正常通过 `O(B)`（`B ≤ 8 MiB`），辅助空间 `O(MAX_JSON_DEPTH)`；超限 `HOST_RESPONSE_TOO_COMPLEX` | §8.4 |
+| F-16 | Amane `WorkerConfig.concurrency` 缺省为 10（不是 3，3 只是 `Worker` 构造函数的类默认）（R1-08）；Design-R1 的真实宿主 oracle 仍要求宿主上本批全部任务 `≤ M`，与 `CREATION_UNKNOWN` / 孤儿任务冲突（R2-04） | 区分 P4 并发 M / 宿主配置并发 / 孤儿任务占用；冻结三个集合 A（活跃 aggregate）/ K（等待中的已知 id）/ H（含孤儿的全部关联宿主任务），`\|A\| ≤ M`、`\|K\| ≤ \|A\|`，**不要求** `\|H\| ≤ M`；独立 POST 账本 + `ORPHAN-M1` 强制用例 | §14、L6-07 |
+| F-17 | R1 的 `NOT_APPLICABLE` 同时被绑定到“POST 前”与“未取消”，正常成功路径（已创建、未取消）无合法组合（R2-05） | 正交模型 `SubmissionState × CleanupTrigger × CancelOutcome × AggregateTerminal`；`NOT_APPLICABLE ⇔ 未触发清理`；新增 `NOTHING_TO_CANCEL`；合法组合 LC1–LC8 与计数口径；正常成功 / 未取消失败不计入 `abandoned_attempts` | §10.3、§20.5 |
 
 ### 6.1 对 Owner 可见的产品后果（由 Designer 按“更安全的 fail-closed 默认”裁决；Coordinator 可推翻）
 
@@ -141,7 +143,7 @@ Authority 优先级：Frozen Contract > Frozen Construction Plan > `PROJECT_GOVE
 |---|---|---|
 | R1 | 宿主语义随版本漂移（v0.15.0 vs v0.18.0） | 表 H2 逐项核查 + 版本差异白名单 DIFF-P6-01..04 + 双版本真实宿主矩阵；超出白名单即 U6-6 |
 | R2 | 遗留 / 孤儿宿主任务（提交歧义 `CREATION_UNKNOWN`、取消后执行层未验证、进程退出）；孤儿任务可能继续写 Metadata 并占用宿主并发 | 精确 id 取消 + 有界预算 + `SubmissionState` / `CancelOutcome` / `abandoned_attempts` 一等输出 + 审计；L3 永远 UNVERIFIED；无持久化故不承诺找回（L6-03 / L6-04） |
-| R3 | 凭据泄漏（repr / 异常 / `__context__` / 帧局部 / 日志 / 预览 / 诊断） | redacted 凭据、`httpx.Auth` 附加、httpx 异常只在 `except` 内分类（`from None` 不算证明）、本包零 logging、异常图递归 canary 测试（含真实宿主 canary） |
+| R3 | 凭据泄漏（repr / 异常 / `__context__` / 帧局部 / 日志 / 预览 / 诊断），含凭据 / 配置校验路径与 `UnicodeError.object` | redacted 凭据、`httpx.Auth` 附加、整个包的构造规则 C1–C7（`from None` 不算证明）、本包零 logging、保护面 P1–P3 的异常图递归 canary 测试与强制失败矩阵（含真实宿主 canary）；明确不承诺调用方持有对象本身的认证状态 |
 | R4 | 非确定性（完成顺序、时间、任务 id） | 语义 / 运维输出分离；语义投影等价判据；完成顺序反转 + 非空性控制 |
 | R5 | 乘法重试 | 重试 eligibility 归 P6、执行 / 调度 / 并发归 P4；POST 永不重试；不使用宿主 retry 动作；宿主任务账本计数 |
 | R6 | 误取消他人任务 | 请求体不含 `status` / `type`；旁观任务控制；M6-08 |
@@ -149,7 +151,7 @@ Authority 优先级：Frozen Contract > Frozen Construction Plan > `PROJECT_GOVE
 | R8 | 环境不可得（Python 3.14 宿主 / 端口 / 公网） | 缺失如实 `NOT_RUN` / `UNVERIFIED`，不扩大支持声明；确定性门不依赖公网 |
 | R9 | CLOSED 测试历史门禁碰撞 | HG-1（Design Review 裁决）；P6 自己的范围门 |
 | R10 | 夹具本身无效导致“假绿” | 派生夹具页必须先通过 Core 解析器预检；上游内容变化必须使语义投影变化（非空性） |
-| R11 | 虚假 provenance：把用户手工编辑 / 外来来源 / 抓取后被改动的字段归属于插件 | 任务侧 + 持久化侧双侧证据 + R0；六类反事实带绿色孪生；M6-17 / M6-18 / M6-23 |
+| R11 | 虚假 provenance：把用户手工覆盖的值（含 `PATCH` 之后来源标签仍指向插件）归属于插件 | 值级证据：输出只来自 `raw["ffcc.fc2-metadata"]`；七类反事实（v0.15.0 / v0.18.0 手工覆盖、同号竞争覆盖、外来标签、raw 缺失 / 非法、raw 与展示不一致、干净孪生）带绿色孪生；M6-17 / M6-18 / M6-23 |
 | R12 | 跨轮 READY 被误当作全局安全 | 逐轮口径 + `cross_round_verified`；Phase 7 重新验证；M6-22 |
 | R13 | 结构炸弹（字节未超限但深度 / 节点 / 集合超限） | `MAX_JSON_*` + 迭代式预扫描；M6-21 |
 
@@ -169,14 +171,15 @@ Phase 6                       : DESIGN CANDIDATE
 P6-C1                         : DESIGN CANDIDATE — INDEPENDENT DESIGN REVIEW REQUIRED
 Frozen Contract               : NOT YET ACCEPTED
 Construction Plan             : NOT YET ACCEPTED
-Design-R1                     : CANDIDATE — UNIFIED FINDINGS CLOSURE
+Design-R1                     : SUPERSEDED BY DESIGN-R2 CANDIDATE
+Design-R2                     : CANDIDATE — REMAINING FINDINGS CLOSURE
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
 Tests Modified                : NO
 ```
 
-下一步仅为 **Incremental Independent Design-R1 Closure Review**（验证 R1-01..R1-09 全部修复）。通过并由 Governance Coordinator 接受之前禁止 Developer 开始 S1。Reviewer 的强制审查点见合同第 30 节（DR-01..DR-10 与 Design-R1 追加的 DR-11..DR-18）：
+下一步仅为 **Independent Design-R2 Incremental Closure Review**（验证 R2-01..R2-05 全部修复，且 R1 已接受事项未回退）。通过并由 Governance Coordinator 接受之前禁止 Developer 开始 S1。Reviewer 的强制审查点见合同第 30 节（DR-01..DR-10、Design-R1 追加的 DR-11..DR-18、Design-R2 追加的 DR-19..DR-22）：
 
 ```text
 DR-01  F-1：`preview_retry` 是否真的要求完整 `BatchExecutionResult`（P4 `retry.py` / `orchestrator.py` 源码核对）
