@@ -7,7 +7,8 @@ Frozen Contract               : NOT YET ACCEPTED
 Construction Plan             : NOT YET ACCEPTED
 Design-R1                     : SUPERSEDED（Design-R1 Head c05c7ebca04ded9e1853b71e82796a419fadc192）
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE（Design-R2 Head b071d149f8f99385851cb6f8dc38f9904c624262）
-Design-R3                     : CANDIDATE — UNIFIED CLOSURE REPAIR（R3-01..R3-08；Design-R3 Base b071d149f8f99385851cb6f8dc38f9904c624262）
+Design-R3                     : SUPERSEDED BY DESIGN-R4 CANDIDATE（Design-R3 Head 85d3da8b7450fd50a112e8bbc47a248b9473e9a9）
+Design-R4                     : VERIFIED CLOSURE CANDIDATE — COMPLETE GOVERNANCE REPAIR（R4-01..R4-09；Design-R4 Base 85d3da8b7450fd50a112e8bbc47a248b9473e9a9；待独立复核）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
@@ -129,10 +130,15 @@ Authority 优先级：Frozen Contract > Frozen Construction Plan > `PROJECT_GOVE
 | F-17 | R1 的 `NOT_APPLICABLE` 同时被绑定到“POST 前”与“未取消”，正常成功路径（已创建、未取消）无合法组合（R2-05） | 正交模型 `SubmissionState × CleanupTrigger × CancelOutcome × AggregateTerminal`；`NOT_APPLICABLE ⇔ 未触发清理`；新增 `NOTHING_TO_CANCEL`；合法组合与计数口径；正常成功 / 未取消失败不计入 `abandoned_attempts` | §10.3、§20.5 |
 | F-18 | R2 只要求 `raw` 含插件键，插件与外来来源并存的记录仍会通过，与 H6-1（FC2 route 是插件单源）不一致（R3-01） | 严格键集合 `set(raw.keys()) == {"ffcc.fc2-metadata"}`，缺失 / 外来 / 混合 / 语言后缀 / 未知键统一 `HOST_ATTRIBUTION_FOREIGN`；这是对独占来源前提的验收，不恢复 E1/E2/E3/R0 | §11.3 |
 | F-19 | `record_freshness` 的名称与 §22.3 的要求暗示了无法证明的“实际后写入”事实；墙钟回拨 / 同刻精度下后写入仍得到 `≤`（R3-02） | 重命名 `TimestampRelation`（`UPDATED_AFTER_FINISHED` / `UPDATED_NOT_AFTER_FINISHED` / `INDETERMINATE`），只由两个字符串决定；CASE A–D；真实宿主与替身的共同强证明只有“语义 title == raw.title ≠ B” | §11.3.4、§22.3 |
-| F-20 | `_transport` 在取消 / 致命时 `request` / `response` 仍留在 traceback 帧；`_call` 抛出时持有 `body_bytes`；第三方栈帧不受本包控制（R3-03） | C5a（finally 无条件重绑 + 有界 aclose + 致命零 I/O）、C5b（`_decode` 纯函数 + 抛出前清理）、C5c（`CancelledError` 同类型新实例，方案 A）；致命 `BaseException` 原样传播，第三方帧可达性据实披露（方案 B，L6-21），不扩大测试豁免 | §8.3.1 |
+| F-20 | `_transport` 在取消 / 致命时 `request` / `response` 仍留在 traceback 帧；`_call` 抛出时持有 `body_bytes`；R3 用 `asyncio.shield` 关闭 Response 与“独立被 shield 的清理 task”会留下仍持有 Response 的 task（Gate C 实测，R3-03 / R4-02） | **唯一规范 = 合同 §10.2 内联清理生命周期**：全部清理在 aggregate 自己的 task 内联执行，包内无 shield / create_task / ensure_future / gather / TaskGroup；所有等待有界；二次取消停止后续 I/O；Response 内联有界关闭；`CancelledError` 只置标志、出口为 C5c 同类型新实例；致命 `BaseException` 原样传播且零清理 I/O，第三方帧可达性据实披露（L6-21）。有界性的作用域 = 生产传输路径（L6-23：注入的吞取消 `transport=`、DNS 线程、黑洞地址为 UNVERIFIED / 不在保证内） | §8.3.1、§10.2 |
 | F-21 | O2 以 `(番号, generation)` 为粒度错误（重复显式 `retry_failed` 合法）；O3 混淆 H2 / H4 且在取消响应处过早结束 K（R3-04 / R3-05） | `attempt_id` + `X-FFCC-Attempt`；H1–H4；K = `[task_known_event, end_event)`；可复算区间证据 + oracle 自检；20 ms 采样仅作佐证 | §14、§22.5 |
-| F-22 | POST 前致命异常无合法审计状态；LC7 要求的取消请求发送与否没有见证字段（R3-06 / R3-07） | 取消 / 致命矩阵（`S` 三种时刻 × `CE` / `KI/SE`）；`cancel_post_attempted` / `cancel_event` / `task_known_event` / `attempt_id` 与代理对账 (a)–(d)；自报告与独立事实严格区分 | §10.3、§20.5 |
-| F-23 | §18 / L6-10 遗留“Amane 裁剪导致 P6 poster 被剔除”的旧语义，与 raw-only 模型冲突（R3-08） | 宿主展示 poster 与 P6 raw URL 候选分离；同一上游内容在不同宿主裁剪配置下候选集合相同（E6-28） | §18、L6-10 |
+| F-22 | POST 前致命异常无合法审计状态；取消请求发送与否没有见证字段；R3 的 LC 规则与命名场景表对 `CALLER_CANCEL + RAISED`、缺 H4 的 confirmed、`UNKNOWN + DEADLINE` 等过度接受（Gate B：1728 组合里谓词接受 137 条，独立模拟器只产生 39 条）（R3-06 / R3-07 / R4-06 / R4-07） | **唯一规范 = 合同 §10.3.1 谓词 `record_is_legal` + §10.3.4 的 39 条可产生记录表**；谓词从合同抽取执行，接受集合与独立参考模拟器相等（过度接受 0、接受不足 0）；H4 事件、事件全序、`attempt_id` 稠密；取消见证区分自报告（谓词只验内部一致）与独立事实（代理对账 O2-5） | §10.3、§14.4、§20.5 |
+| F-23 | §18 / L6-10 遗留“Amane 裁剪导致 P6 poster 被剔除”的旧语义，与 raw-only 模型冲突（R3-08）；E6-28 只比较开关则可能空跑（R4-09） | 宿主展示 poster 与 P6 raw URL 候选分离；E6-28 冻结确定性输入（缺海报 / 短海报 / 缩略图重排）并要求展示值**实际改变**才算证明，否则 FAIL（NON-VACUITY）/ NOT_RUN | §18、L6-10、E6-28 |
+| F-24 | R3 的 §11.2 把号等价放在键集合与 `PluginRaw` 校验之前，缺键 / null / 缺 number 会在解引用处抛异常，混合来源 + 号错被误归 NUMBER_MISMATCH（Gate A：7/16 用例无单一分类）（R4-01） | **唯一规范 = 合同 §11.2 代码块 `map_host_result`**：外层结构 → 键集合 → PluginRaw → 号等价 → 映射 → 最低成功；从合同抽取执行，42 个有序优先级用例 + 20000 次 fuzz 无未处理异常 | §11.2 |
+| F-25 | O2 以 `(番号, generation)` 为粒度、无条件“成功恰好 1 个 / 恢复恰好 2 个”与合法的重复显式重试冲突；pre-proxy 取消 / 致命的 `POST = 0` 被误拒；`attempt_id` 只验单条记录（R4-03 / R4-04） | **唯一规范 = 合同 §14.4 请求账本模型**：任务数由独立调用脚本历史 `calls(N)` 决定；pre-proxy `POST = 0` 须被 `Mf` 注入清单或传输类 outcome 解释；`attempt_id` 靠 `seq` 稠密保证跨记录（含溢出后）唯一 | §9.2、§13.3、§14.4 |
+| F-26 | R3 同时要求“累计计数溢出后仍准确”和“全部计数 / 峰值由保留记录重算”（Gate D：20001 条时 submitted 20001 vs 20000、unknown 5 vs 4，历史峰值 5 vs 窗口 1）（R4-05） | **唯一规范 = 合同 §20.5**：累计状态 Z 在线更新、溢出后权威；保留窗口 W 只作证据窗口；全历史安全不变量靠测试工具在丢弃前分段流式取走验证，缺口 ⇒ NOT_VERIFIED | §14.4、§20.5 |
+| F-27 | L6-01 仍声称“真正的证明是逐字段双侧证据”（R4-08） | 统一为：任务侧 field_sources（必要条件）+ raw 键集合恰好插件（独占来源验收）+ PluginRaw 值（内容证据）；展示列 field_sources / 锁 / 时间戳不是证据，E1/E2/E3/R0 不得重新启用 | §11.3、L6-01 |
+| F-28 | 证据状态没有统一词汇，NOT_RUN / UNVERIFIED 可能被统计为通过（R4-09） | 合同 §23.2：PASS / FAIL / NOT_RUN / UNVERIFIED / BLOCKED，后三者不计为 PASS | §23.2 |
 
 ### 6.1 对 Owner 可见的产品后果（由 Designer 按“更安全的 fail-closed 默认”裁决；Coordinator 可推翻）
 
@@ -180,14 +186,15 @@ Frozen Contract               : NOT YET ACCEPTED
 Construction Plan             : NOT YET ACCEPTED
 Design-R1                     : SUPERSEDED
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE
-Design-R3                     : CANDIDATE — UNIFIED CLOSURE REPAIR
+Design-R3                     : SUPERSEDED BY DESIGN-R4 CANDIDATE
+Design-R4                     : VERIFIED CLOSURE CANDIDATE（待独立复核）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
 Tests Modified                : NO
 ```
 
-下一步仅为 **Independent Design-R3 Incremental Closure Review**（验证 R3-01..R3-08 全部修复，且 R1 / R2 已接受事项未回退）。通过并由 Governance Coordinator 接受之前禁止 Developer 开始 S1。Reviewer 的强制审查点见合同第 30 节（DR-01..DR-10、Design-R1 追加的 DR-11..DR-18、Design-R2 追加的 DR-19..DR-22、Design-R3 追加的 DR-23..DR-28）：
+下一步：**独立 Design-R4 复核**（G / C / x；验证 R4-01..R4-09 全部修复，且 R1–R3 已接受事项未回退；状态机的独立性与 E6-28 的真实宿主证明均尚未建立）。通过并由 Governance Coordinator 接受之前禁止 Developer 开始 S1。Reviewer 的强制审查点见合同第 30 节（DR-01..DR-10、Design-R1 追加的 DR-11..DR-18、Design-R2 追加的 DR-19..DR-22、Design-R3 追加的 DR-23..DR-28、Design-R4 追加的 DR-29..DR-35）：
 
 ```text
 DR-01  F-1：`preview_retry` 是否真的要求完整 `BatchExecutionResult`（P4 `retry.py` / `orchestrator.py` 源码核对）
