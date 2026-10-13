@@ -17,7 +17,7 @@ Internal Stages                    : S1 / S2 / S3
 Independent Review Plan            : Independent Design Review once before S1 + one C-level Independent Level 1 Review after complete implementation
 Owner Question Gate                : BUSINESS DECISIONS ONLY
 Evidence Gate                      : 合同第 23 节 E6-01..E6-28 全部满足（含：≥10 FC2 的两个真实宿主纵向门、失败 / 重试 / 取消 / 并发 / 确定性、route ownership 机械证明、
-                                     安全 canary（整个包的异常图递归检查与强制失败矩阵）、不执行三层机检、59 项 mutation / non-vacuity、值级 provenance 七类反事实、有界 JSON（O(B)）、孤儿安全并发 oracle（A / K / H、attempt 粒度 POST 账本、H1–H4、ORPHAN-M1）、提交 / 取消 / 致命组合合同与取消请求见证、严格 raw 键集合、图片裁剪语义对照（E6-28）、全量回归与基线对账、live smoke 记录、HANDOFF）
+                                     安全 canary（整个包的异常图递归检查与强制失败矩阵）、不执行三层机检、65 项 mutation / non-vacuity、值级 provenance 七类反事实、有界 JSON（O(B)）、孤儿安全并发 oracle（A / K / H、attempt 粒度 POST 账本、H1–H4、ORPHAN-M1）、提交 / 取消 / 致命组合合同与取消请求见证、严格 raw 键集合、图片裁剪语义对照（E6-28）、全量回归与基线对账、live smoke 记录、HANDOFF）
 ```
 
 ```text
@@ -29,7 +29,9 @@ Design-R1                     : SUPERSEDED（Design-R1 Head c05c7ebca04ded9e1853
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE（Design-R2 Head b071d149f8f99385851cb6f8dc38f9904c624262）
 Design-R3                     : SUPERSEDED（Design-R3 Head 85d3da8b7450fd50a112e8bbc47a248b9473e9a9）
 Design-R4                     : SUPERSEDED BY DESIGN-R5 DRAFT（Design-R4 Head 6ccf7d38ef637af6e8b481475441b4d1e13dfcca；独立复核 FAIL，C 报告 BLOCKED — SECURITY AUTHORITY）
-Design-R5                     : UNCOMMITTED DRAFT — 含 Governance Security Addendum 与最终致命异常安全架构修复（R5-01..R5-12；R5-11 方案 A = APPROVED FOR DESIGN REVISION ONLY；致命异常 F3 = 确定性所有权清理 + 异常引用脱离 = IMPLEMENTED CANDIDATE（生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；R5-C-01..03 与 R5-EV-01 已独立确认关闭；R5-CL-01 / R5-GOV-01 / R5-NEW-01 = CLOSED CANDIDATE，待独立复核）；X-NARROW 仅用于独立载荷对照，四个植入凭据用例 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1，可达性如实记录，不是 PASS）；调试器 / trace 在任意字节码注入致命异常 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B2；真实信号投递的保证仅限于运行时证据覆盖的范围）；均非 Security PASS；待 Governance 审阅致命异常安全架构修复报告）
+Design-R5                     : COMMITTED REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（Reviewer C / G / x 均 FAIL；候选内容：致命异常 F3 = 确定性所有权清理 + 异常引用脱离，生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；X-NARROW 仅用于独立载荷对照，四个植入凭据用例与 trace 注入 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1 / B2）；Reviewer x 的 Findings Addendum（x-01..x-07）已交付并由 R1-04..R1-10 在本地修复，R5-02..R5-07 与其编号对应由 Governance 保留，均不得视为已关闭；本状态不得改写为 PASS）
+R5 Candidate                  : 22a3fa4922c655cb5ce127ee2825b1678f4855db（已提交并推送的 R5 Review Candidate；不得改写 / amend / reset）
+Design-R5-R1                  : UNIFIED CLOSURE REPAIR — LOCAL DRAFT（本地未提交；R1-01..R1-10 已在本地修复并附红绿证据，待 Governance 审阅；这不是 Review Candidate，不是 CLOSED / PASS；HG-1 = ACCEPTED — NOT EXECUTED；S1 = NOT AUTHORIZED）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
@@ -123,7 +125,7 @@ tests/amane_batch/     conftest.py（autouse：执行类 tripwire，合同 §19.
                        _batch_fault_proxy.py                 故障注入代理（合同 §22.5）
                        _batch_oracles.py                     语义投影 / 树摘要 / 账本断言（真实宿主门与变异测试共用）
                        _ref_simulator.py                     独立参考模拟器（合同 §10.3.4 的 63 条可产生记录，由模拟器计算；与谓词互为独立定义；作者与谓词同为 Designer，独立性 NOT ESTABLISHED）
-                       _ledger_verifier.py                   分段流式账本验证器（合同 §14.4 第 5 点；O1 / O2 / O3）
+                       _ledger_verifier.py                   分段流式账本验证器（合同 §14.4 第 5 点；O1 / O2 / O3；三态 RED / NOT_VERIFIED / GREEN；按身份归属、H3 / H4 矩阵、取消 / 终态网络见证、Harvester 冲突检测与快照全局界限；§20.5 的 Z / W / InFlight 四类不变量）
                        _batch_corpus.py                      ≥10 个号与行为表、图片路由
 tools/                 run_amane_batch_gate.py               真实宿主门 / live smoke（子命令 --hosts / --live / --out）
 docs/                  review/P6_C1_HANDOFF.md  acceptance/evidence/P6_C1_HOST_MATRIX.json  acceptance/evidence/P6_C1_LIVE_SMOKE.json
@@ -189,7 +191,7 @@ S2 退出条件：进程内纵向全绿；`AmaneBatchSummary` 与 P4 `PreviewSum
 * 替身 / 真实宿主对账：把 S2 的核心场景（ALL_OK×10、一个失败条目、取消）同样在真实宿主上运行，两边语义投影必须一致。
 * 可选：HOST-A-WIN / HOST-B-WIN（SC-01 / SC-02）；运行了才记录，没运行记 `UNVERIFIED`。
 * `P6_C1_LIVE_SMOKE.json`：`--live` 尝试（合同 §25）；结果 `VERIFIED` / `UNVERIFIED_ENVIRONMENT` / `NOT_RUN`，**不得**默认写成 PASS。
-* E6-21（全部 59 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.11 最低 / 最新小版本、3.12、**3.13（正式验收项）**、3.14；缺哪个就明示 NOT_RUN，不作该版本的支持声明）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
+* E6-21（全部 65 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.11 最低 / 最新小版本、3.12、**3.13（正式验收项）**、3.14；缺哪个就明示 NOT_RUN，不作该版本的支持声明）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
 
 S3 退出条件：合同 §23 的 E6-01..E6-28 全部按合同第 23.2 节词汇（PASS / FAIL / NOT_RUN / UNVERIFIED / BLOCKED）给出状态：`NOT_RUN` / `UNVERIFIED` / `BLOCKED` 不得计为 PASS，必须进入 evidence gaps；E6-28 在真实宿主上实际触发裁剪之前为 `UNVERIFIED`（或把无法获得的项如实写入 evidence gaps，并且不扩大任何支持声明）；HANDOFF 候选完成；然后**停止，等待 C-level Independent Level 1 Review**。
 
@@ -220,7 +222,7 @@ F   纯状态 Final Closure（Governance v2 §11.1：与 Final Closure 合并，
 
 | 评审 | 时点 | 内容 |
 |---|---|---|
-| **Independent Design Review**（一次，已完成 → FAIL；Design-R1 / Design-R2 之后做增量 Closure Review）| S1 之前 | 三份文档一致性；合同第 30 节 DR-01..DR-35（含 HG-1 精确化、F-1、包位置、重试所有权拆分、宿主事实、取消三层模型与 S/T/C/R 正交组合、宿主库写入、值级内容来源（`raw`）、提交基数、整个包的异常 / 凭据边界、门面调用顺序、跨轮冲突、JSON O(B) 成本与上限、A / K / H 并发 oracle、安全边界、不执行隔离）；L6-01 独占 route 前提 |
+| **Independent Design Review**（一次，已完成 → FAIL；Design-R1 / Design-R2 之后做增量 Closure Review；Design-R5 Candidate 已被 Reviewer C / G / x 独立复核判 FAIL，Design-R5-R1 修复准备中）| S1 之前 | 三份文档一致性；合同第 30 节**完整范围 DR-01..DR-69**（其中 DR-36..DR-63 为 Design-R5 追加：谓词 / 快照 / 乱序 / 取消结果 / 3.11 / 方案 A / 安全 F3·B1·B2·逐层所有权，DR-64..DR-69 为 Design-R5-R1 追加：严格类型 / H3·H4 / Z·W·InFlight / 序号空间 / 收集器守卫 / 取消与终态网络见证；不得删减 DR-36..DR-69；责任边界见合同第 30 节；DR-01..DR-35 含 HG-1 精确化、F-1、包位置、重试所有权拆分、宿主事实、取消三层模型与 S/T/C/R 正交组合、宿主库写入、值级内容来源（`raw`）、提交基数、整个包的异常 / 凭据边界、门面调用顺序、跨轮冲突、JSON O(B) 成本与上限、A / K / H 并发 oracle、安全边界、不执行隔离）；L6-01 独占 route 前提 |
 | **C-level Independent Level 1 Review**（一次） | S3 之后 | 完整线性 diff、合同→实现→测试映射、全部证据与 mutation、安全不变量、真实宿主矩阵、evidence gaps |
 | 统一 R1（必要时） | Level 1 FAIL 之后 | 同一根因 / 范围明确 / 不需要新 authority；一次闭合全部已知 findings 并检查直接回归 |
 | Final Closure | Level 1（或 R1）PASS 之后 | 纯状态 docs；不单独再做 docs-only Review |
@@ -273,13 +275,15 @@ Design-R1                     : SUPERSEDED
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE
 Design-R3                     : SUPERSEDED
 Design-R4                     : SUPERSEDED BY DESIGN-R5 DRAFT（6ccf7d3；独立复核 FAIL）
-Design-R5                     : UNCOMMITTED DRAFT — 含 Governance Security Addendum 与最终致命异常安全架构修复（R5-01..R5-12；R5-11 方案 A = APPROVED FOR DESIGN REVISION ONLY；致命异常 F3 = 确定性所有权清理 + 异常引用脱离 = IMPLEMENTED CANDIDATE（生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；R5-C-01..03 与 R5-EV-01 已独立确认关闭；R5-CL-01 / R5-GOV-01 / R5-NEW-01 = CLOSED CANDIDATE，待独立复核）；X-NARROW 仅用于独立载荷对照，四个植入凭据用例 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1，可达性如实记录，不是 PASS）；调试器 / trace 在任意字节码注入致命异常 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B2；真实信号投递的保证仅限于运行时证据覆盖的范围）；均非 Security PASS；待 Governance 审阅致命异常安全架构修复报告）
+Design-R5                     : COMMITTED REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（Reviewer C / G / x 均 FAIL；候选内容：致命异常 F3 = 确定性所有权清理 + 异常引用脱离，生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；X-NARROW 仅用于独立载荷对照，四个植入凭据用例与 trace 注入 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1 / B2）；Reviewer x 的 Findings Addendum（x-01..x-07）已交付并由 R1-04..R1-10 在本地修复，R5-02..R5-07 与其编号对应由 Governance 保留，均不得视为已关闭；本状态不得改写为 PASS）
+R5 Candidate                  : 22a3fa4922c655cb5ce127ee2825b1678f4855db（已提交并推送的 R5 Review Candidate；不得改写 / amend / reset）
+Design-R5-R1                  : UNIFIED CLOSURE REPAIR — LOCAL DRAFT（本地未提交；R1-01..R1-10 已在本地修复并附红绿证据，待 Governance 审阅；这不是 Review Candidate，不是 CLOSED / PASS；HG-1 = ACCEPTED — NOT EXECUTED；S1 = NOT AUTHORIZED）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
 Tests Modified                : NO
 Risk Class                    : C
-Next                          : GOVERNANCE COORDINATOR 审阅 DESIGN-R5 SECURITY CLOSURE PRE-COMMIT REPORT；批准后才允许形成 R5 docs-only Candidate commit，再交 G / C / x 独立增量复核（独立安全复核的三个 finding R5-C-01..03 已按 CLOSED CANDIDATE 修复；建立 Design Accepted Head 之前禁止 Developer 开始 S1）
+Next                          : Governance Coordinator 审阅 Design-R5-R1 UNIFIED CLOSURE PRE-COMMIT REPORT（批准之前不得 commit / push R5-R1，不得改写 / amend / reset R5 Candidate；建立 Design Accepted Head 之前禁止 Developer 开始 S1）
 ```
 
 唯一 authority 转换：独立 Design Review PASS → 该 Design Candidate SHA 成为 Design Accepted Head（Frozen Contract / Plan Head、Implementation Input）→ 才允许进入 S1。
