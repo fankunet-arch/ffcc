@@ -9,7 +9,8 @@ Construction Plan           : NOT YET ACCEPTED（docs/P6_C1_CONSTRUCTION_PLAN.md
 Design-R1                   : SUPERSEDED（R1-01..R1-09；Design-R1 Head c05c7ebca04ded9e1853b71e82796a419fadc192）
 Design-R2                   : SUPERSEDED BY DESIGN-R3 CANDIDATE（R2-01..R2-05；Design-R2 Head b071d149f8f99385851cb6f8dc38f9904c624262；三份增量审查仍有 7 项 MUST-FIX + 1 项 SHOULD-FIX）
 Design-R3                   : SUPERSEDED BY DESIGN-R4 CANDIDATE（R3-01..R3-08；Design-R3 Head 85d3da8b7450fd50a112e8bbc47a248b9473e9a9；三份增量复核仍有 7 项 MUST-FIX + 2 项 SHOULD-FIX）
-Design-R4                   : VERIFIED CLOSURE CANDIDATE — COMPLETE GOVERNANCE REPAIR（R4-01..R4-09；Design-R4 Base 85d3da8b7450fd50a112e8bbc47a248b9473e9a9；Governance 有条件授权提交；待独立 Design-R4 复核；独立性与真实宿主证明均未建立）
+Design-R4                   : SUPERSEDED BY DESIGN-R5 DRAFT（R4-01..R4-09；Design-R4 Head 6ccf7d38ef637af6e8b481475441b4d1e13dfcca；独立复核 G / C / x：FAIL，C 报告 BLOCKED — SECURITY AUTHORITY）
+Design-R5                   : UNCOMMITTED DRAFT — 含 Governance Security Addendum 与最终致命异常安全架构修复（R5-01..R5-12；R5-11 方案 A = APPROVED FOR DESIGN REVISION ONLY；致命异常 F3 = 确定性所有权清理 + 异常引用脱离 = IMPLEMENTED CANDIDATE（生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；R5-C-01..03 与 R5-EV-01 已独立确认关闭；R5-CL-01 / R5-GOV-01 / R5-NEW-01 = CLOSED CANDIDATE，待独立复核）；X-NARROW 仅用于独立载荷对照，四个植入凭据用例 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1，可达性如实记录，不是 PASS）；调试器 / trace 在任意字节码注入致命异常 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B2；真实信号投递的保证仅限于运行时证据覆盖的范围）；均非 Security PASS；待 Governance 审阅致命异常安全架构修复报告）
 Design Accepted Head        : NOT ESTABLISHED
 Implementation              : NOT STARTED
 Production Modified         : NO
@@ -20,7 +21,7 @@ Governance Authority        : docs/PROJECT_GOVERNANCE_ACCELERATION.md @ 3b9d39e9
 Upstream Final Reviewed Head: 1ef23247c2c65649589e9919c00093901bbcb517（P5-C2 Final Reviewed Technical Head）
 Phase 6 package count       : 1（P6-C1；P6-C2 默认不存在）
 Branch                      : claude/phase6-c1-amane-batch-integration
-Next                        : INDEPENDENT DESIGN-R4 REVIEW（G / C / x；建立 Design Accepted Head 之前禁止 Developer 开始 S1；HG-1 仍为 ACCEPTED — NOT EXECUTED）
+Next                        : GOVERNANCE COORDINATOR 审阅 Design-R5 SECURITY CLOSURE PRE-COMMIT REPORT（通过前不得 commit / push；建立 Design Accepted Head 之前禁止 Developer 开始 S1；HG-1 仍为 ACCEPTED — NOT EXECUTED）
 ```
 
 **Design-R1 修订索引**（三份独立 Design Review 的合并 findings；本文所有改动都在设计文档内，未改 production / tests / Amane 源码）：
@@ -73,6 +74,47 @@ Next                        : INDEPENDENT DESIGN-R4 REVIEW（G / C / x；建立 
 | R4-07 | 取消状态矩阵（1728 穷举 vs 独立模拟器 39 条） | §10.3.1 谓词 + §10.3.4 表 | E6-08 / E6-09、M6-24、I6-28 |
 | R4-08 | 撤销旧“双侧逐字段证据”声明 | §11.3 | L6-01、Master F-5、Plan §3 |
 | R4-09 | 图片裁剪的非空验证 | §18 E6-28 冻结用例 | E6-28、M6-33、§23.2 |
+
+**Design-R5 修订索引**（Design-R4 独立复核 G / C / x 的 12 项 findings；仍然只改三份设计文档，不动 `pyproject.toml`、CLOSED P4 / P5、Amane、production、tests）：
+
+| R5 | 主题 | 唯一规范性定义 | 引用 / 证据 |
+|---|---|---|---|
+| R5-01 | `record_is_legal` 必须接受真实枚举且不抛 `KeyError` | §10.3.1 `gate:host_attempt_record_types` + `gate:record_is_legal` | §20.5、E6-08、M6-35、I6-38、DR-36 |
+| R5-02 | 完整类型 / 见证约束；状态数诚实（63，不是预设 39） | §10.3.1、§10.3.4 | E6-08、M6-35、DR-37 |
+| R5-03 | H3 已送达而 H4 缺席合法；H3 单独不授权取消 | §14.4 4.2 / O2-4、§10.3.1 | E6-10、M6-36、DR-38 |
+| R5-04 | 在途快照与静止快照分开；`Z` 更新点；五个必测场景 | §20.5 | E6-10、M6-37、I6-39、DR-39 |
+| R5-05 | 乱序完成：`completion_seq`、FIFO 窗口、收集器游标、`NOT_VERIFIED` | §20.5、§14.4 第 5 点 | E6-10、M6-38、DR-40 |
+| R5-06 | 取消请求未确认（`NO_RESPONSE`）与已确认非终态（`NOT_TERMINAL` / `OBSERVATION_FAILED`）拆分，严格优先级 | §10.2 第 3 条、§10.3 `CancelOutcome`（10 个成员） | E6-08 / E6-09、M6-34、I6-40、DR-41 |
+| R5-07 | Master F-20 与合同安全范围措辞一致；`FAIL` / `NOT_RUN` / `UNVERIFIED` / `BLOCKED` 不混用 | §10.2 第 8 条、§10.6、§23.2 | Master F-20、L6-23、DR-42 |
+| R5-08 | `map_host_result` 第 7 步做 P5 I22 URL 卫生并精确计 `dropped_url_count` | §11.2 代码块 | §11.4、E6-07、M6-39、I6-41、DR-43 |
+| R5-09 | 宿主展示 poster 裁剪不进入 P6 URL 过滤；`dropped_url_count` 只计 `PluginRaw` 清洗 | §18、§11.4 | L6-10、Master F-8、DR-44 |
+| R5-10 | Python 3.11.0+ 支持：不依赖 `asyncio.timeout` / `wait_for` | §10.2 | E6-25 / E6-08 / E6-09 / E6-17、M6-40、DR-45 |
+| R5-11 | 注入 `transport=`：**方案 A，APPROVED FOR DESIGN REVISION ONLY（治理裁决）**；公共构造面撤销 `transport=`（及衍生的 `_clock` / `_sleep`），故障改由真实回环代理注入；方案 B 否决 | §10.6、§20.3 / §20.4、§22.5 | E6-03 / E6-05 / E6-09 / E6-17、M6-42、DR-46 |
+| R5-12 | 非 `httpx` 的普通 `Exception` 安全分类（catch-all → `HOST_NETWORK`，块外抛出） | §10.2 第 7 条、§8.3.1 C5 | E6-17、M6-41、I6-42、DR-47 |
+
+**Design-R5 治理安全附加裁决（Governance Security Addendum）**：
+
+| 项 | 主题 | 落点 |
+|---|---|---|
+| G-1 | R5-11 方案 A 的设计修订授权（不是豁免）；API 兼容性、故障覆盖矩阵 | §10.6、§22.5、E6-03 / E6-05 / E6-09 / E6-17、M6-42 |
+| G-2 | 致命 `BaseException`：F1 / F2 均未被接受；评估并采用 F3（同一实例，边界净化）；**IMPLEMENTED CANDIDATE（见 C-1..C-4），非 Security PASS** | §10.5、C1 / C5c / C8、L6-21 / L6-24 / L6-25、M6-45..47、DR-48 |
+| G-3 | Python 3.13：正式运行时验收项（设计探针已执行，实现验收 NOT_RUN） | E6-25、L6-23 |
+| G-4 | 非合作服务端：总 deadline（响应头 / 响应体 slowloris），墙钟上界与 `Task.cancelling()` / `uncancel()` 记账 | §10.2、E6-09、M6-43 / M6-44、L6-26、DR-49 |
+| G-5 | 状态机独立性：63 状态仍只是 Designer 的内部验证；脚本与原始输出全部保留供 Reviewer x 独立交叉验证 | §10.3.4、证据包 |
+| G-7 | 取消归属与竞态（Gate C-Final-01）：O1–O5、交错 R1–R11、红孪生、3.11 / 3.13 差异 | §10.2、E6-09、M6-48、DR-51 |
+| G-8 | F3 安全覆盖（Gate C-Final-02）：六个概念分开；抛出方植入的 `args` / `__dict__` / `__notes__`：四个植入凭据用例保留并逐项说明，**不标 X-NARROW PASS**，按 B1 标 `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`（X-NARROW 只保留给独立载荷对照；Y / Z 继续 REJECTED） | §10.5、L6-25、E6-17、DR-52 / DR-57 |
+| C-1 | **R5-C-01** 致命异常落在异常处理体 / `finally` / try 之后的窗口：边界所有权（内联致命处理体、`_transport` 无致命处理体、持有者重绑 + 引用脱离、整条链切断；不访问任何帧）；穷举窗口探针 | §10.5、C9、E6-03 / E6-09 / E6-17、M6-51、DR-54 |
+| C-2 | **R5-C-02** C 级槽位盲区：链整条切断，审计器改用 `gc.get_referents`，红绿孪生 | §10.5、E6-17、M6-52、DR-55 |
+| C-3 | **R5-C-03** 外部取消 + deadline + 内层转换：单点按计数分类，`cancelling() > base` ⇒ 抛出新的 `CancelledError`；RC10 系列 | §10.2、E6-09、M6-53、DR-56 |
+| C-4 | **X-NARROW**（仅独立载荷对照）：六个强制条件、四个植入用例逐项说明（现标 OUT_OF_THREAT_MODEL，见 B1）、受支持依赖矩阵与矩阵守卫；Y / Z REJECTED | §10.5、L6-25 / L6-27、M6-55、DR-57 |
+| C-5 | **R5-CL-01**（重开后的最终修复）`frame.clear()` 终结挂起的生成器 / 协程帧（3.11 / 3.12 运行其 `finally`；3.13 / 3.14 抛 `RuntimeError`）：F3 采用**确定性所有权清理 + 异常引用脱离**——生产路径**不访问任何帧**（不 `clear()`、不枚举引用者、不取栈帧）；拥有响应数据的边界帧自己用纯 `STORE_FAST` 重绑，然后把 `__traceback__` / `__context__` / `__cause__` 置 `None`；红 / 绿孪生（含 `gc.freeze()`）+ Reviewer C `frameclear.py` / `liveness.py` 基线 | §10.5、C8 / C9、E6-09 / E6-17、M6-56、DR-58 |
+| C-9 | **R5-GOV-01** F3 依赖不完整的 `gc.get_referrers()` 枚举（`gc.freeze()` 后存活的协程对其不可见 ⇒ 被清理、`finally` 被执行）：生产路径彻底移除 `gc.get_referrers` / `sys._getframe` / `frame.clear`，不得以 `gc.collect()` / `gc.get_objects()` / 全堆扫描替代；AST 守卫 `fatal_path_guard.py` + 变异；旧版在 `gc.freeze()` 下失败，新版通过 | §10.5、C8、E6-03、M6-56 / M6-58、DR-61 |
+| C-10 | **R5-NEW-01** F3 为清理帧而调用 `sys._getframe` / `gc.get_referrers`，其审计事件把带 `Authorization` 的 `Request` 的帧作为参数交给进程内审计钩子：P6 不得主动把敏感帧作为新增审计事件参数向外暴露；公共 client 与 `aggregate` 两条路径分别验证（Reviewer C `audit_getframe.py` 原样运行 + 派生的 `audit_f3.py`） | §10.5、E6-17、M6-58、DR-62 |
+| C-6 | **R5-EV-01** 审计器仅在头部含测试 canary 时才报告 `Request`：改为检测任何带 `Authorization` 的 `Request` / `Response.request`，与令牌值无关；非 canary 正向对照 + 变异 | §10.5、E6-17、M6-57、DR-59 |
+| C-7 | **B1 进程内信任边界**：P6 不防御同进程恶意代码（`gc` / 帧内省、猴子补丁、私有属性改写、trace / profile、任意异常注入）；不排除正常公共 API、受支持依赖、P6 自身泄漏、普通信号、正常取消 | §10.5 “B1”、L6-29、DR-60 |
+| C-8 | **B2 异步致命异常投递边界**：区分 CPython 真实信号投递（仅 eval-breaker 检查点）与调试器 / trace 在任意字节码注入；保证只声明运行时证据覆盖的范围；不改变进程级 `SIGINT` 策略 | §10.5 “B2”、L6-28 / L6-30、DR-60 |
+| G-9 | 接缝撤销后的验收能力与故障网络独立性（Gate C-Final-03）；`_clock` / `_sleep` 移除已验证 | §10.6、§22.5、E6-03 / E6-05、M6-49 / M6-50、DR-53 |
+| G-6 | 审查证据：保留原 R5 证据包（SHA-256 `e75ed9509a78d63503132567330200a881ae7a80a915cae98ca79ec3b6ea03c9`）；本轮修改后的证据包有新的 SHA-256 | 报告 |
 
 本文是 P6-C1 的 **Frozen Contract 候选**。它只有在独立 Design Review PASS 之后才成为 Frozen Contract；在此之前不得被解读为 FROZEN /
 DESIGN PASS / IMPLEMENTATION AUTHORIZED。唯一 authority 转换：独立 Design Review PASS → 该 Design Candidate SHA 成为 Design Accepted Head
@@ -567,7 +609,7 @@ AmaneHostCredential(token: str)
 **1. 保护面（Protected Surface）——合同承诺的对象，逐项可测：**
 
 * **P1 出口异常**：由 `src/fc2_amane_batch/**` 的任何公共入口（含各类 `__init__`）抛出并到达调用方的每个异常 `E`。
-* **P2 可达集合 `G(E)`**：以 `E` 为根，沿 `__cause__`、`__context__`（链深至多 8 级，visited 集合防环）、`args`（元素；`list` / `tuple` / `dict` / `set` 再展开一层）、`__notes__`、`E.__dict__` 的值（一层）、以及 `__traceback__` 链上**属于本包的栈帧**（`f_code.co_filename` 位于 `fc2_amane_batch` 包目录内）的 `f_locals` 值（浅层：值本身，容器再展开一层）。调用方 / 测试自己的栈帧不在保护面内。**适用对象（Design-R3 / R3-03，诚实边界）**：① 本包创建的全部异常（`AmaneBatchError` 家族）；② 本包在 `_call` 边界新建的 `asyncio.CancelledError` 实例（C5c）。对**原样传播的致命 `BaseException`**（`KeyboardInterrupt` / `SystemExit` / `GeneratorExit`），本包只保证**自己的栈帧**干净（C5a）；其 `__traceback__` 里的 httpx / httpcore / asyncio 第三方栈帧不受本包控制，其局部可能仍持有 `Request`——这部分**不在承诺内**（L6-21），不通过扩大测试豁免来宣称完全安全。
+* **P2 可达集合 `G(E)`**：以 `E` 为根，沿 `__cause__`、`__context__`（链深至多 8 级，visited 集合防环）、`args`（元素；`list` / `tuple` / `dict` / `set` 再展开一层）、`__notes__`、`E.__dict__` 的值（一层）、以及 `__traceback__` 链上**属于本包的栈帧**（`f_code.co_filename` 位于 `fc2_amane_batch` 包目录内）的 `f_locals` 值（浅层：值本身，容器再展开一层）。调用方 / 测试自己的栈帧不在保护面内。**适用对象（Design-R3 / R3-03，诚实边界）**：① 本包创建的全部异常（`AmaneBatchError` 家族）；② 本包在 `_call` 边界新建的 `asyncio.CancelledError` 实例（C5c）。③ **致命 `BaseException`**（`KeyboardInterrupt` / `SystemExit` / `GeneratorExit`；同一对象，F3，第 10.5 节）：净化后其 `__traceback__` 只含本包帧（已结束者局部已清理），`__cause__` / `__context__` 为 `None`，必须通过独立可达性审计（Gate C `reach.py`，含 C 级槽位；**检测任何带 `Authorization` 的 `Request` / `Response.request`，与令牌值无关**，R5-EV-01）；其 `args` / `__dict__` / `__notes__` 由抛出方创建，本包不读取不修改，P2 对它们只断言“本包没有新增”（独立载荷对照按 X-NARROW；抛出方植入当前 P6 凭据的四个用例按 B1 = OUT_OF_THREAT_MODEL，第 10.5 节；L6-21 / L6-25）。
 * **P3 输出文本与结构**：`str(E)`、`repr(E)`、`traceback.format_exception(E)` 的全文；`AmaneBatchPreview` / `AmaneBatchSummary` / `AggregationResult` / `AmaneHostAuditSnapshot` / P4-C9 诊断投影的 `repr` 及可序列化结果。
 
 **2. 禁入内容 `F`**：`G(E)` 与 P3 中不得出现：(a) 任何等于或**包含** token canary 的 `str` / `bytes`；(b) 任何 `httpx.Request`、`httpx.Response`、`httpx.Headers`、`httpx.HTTPError` 及其子类实例；(c) 任何 `UnicodeError` 实例及任何持有其 `.object` 的对象；(d) 响应体 `bytes`；(e) 宿主返回的文本、URL、任务 id（异常文本）。
@@ -578,16 +620,19 @@ AmaneHostCredential(token: str)
 
 | # | 规则 |
 |---|---|
-| C1 | 任何 `except` 处理体内**不得**出现 `raise <表达式>` 或 `raise … from <任何>`（含 `from None`）。允许的唯一例外是 `except (KeyboardInterrupt, SystemExit, GeneratorExit):` 内的**裸** `raise`（致命异常原样传播，身份保持；处理体内只做同步记账与局部重绑，第 10.2 节第 6 条）。`asyncio.CancelledError` **不再有例外**：它在 `except` 里只置标志，离开 `except` 之后抛出 C5c 的新实例。需要转换时：处理体内只做赋值（分类为枚举 / 布尔局部），**离开处理体之后**再 `raise` 固定异常 |
+| C1 | 任何 `except` 处理体内**不得**出现 `raise <表达式>` 或 `raise … from <任何>`（含 `from None`）。允许的唯一例外是 `except (KeyboardInterrupt, SystemExit, GeneratorExit):` 内的**裸** `raise`（同一个致命异常对象，身份保持；处理体按 C9 的内联形式：先 `try: _fatal_scrub(e)`，失败时内联属性赋值，再 `raise`——对**该对象**的 `__traceback__` / `__cause__` / `__context__` 赋值，第 10.2 节第 6 条与第 10.5 节）。`asyncio.CancelledError` **不再有例外**：它在 `except` 里只置标志，离开 `except` 之后抛出 C5c 的新实例。需要转换时：处理体内只做赋值（分类为枚举 / 布尔局部），**离开处理体之后**再 `raise` 固定异常 |
 | C2 | 本包异常的构造实参只允许：闭合枚举成员、固定字符串字面量、整数计数；禁止传入 token、URL、宿主文本、`str(exc)`、`exc.args` 或任何变量字符串（AST 守卫） |
 | C3 | 凭据 / 配置校验必须用**不抛异常的纯谓词**（`str.isascii()`、`str.isprintable()`、`len`、字符区间判断等）；**禁止**对 token 调用 `.encode()` / `.decode()` / `int()` 等可能抛 `UnicodeError` / `ValueError` 的转换，也不得用 `try/except` 包裹对 token 的操作（`UnicodeEncodeError.object` 会保留原始 token） |
 | C4 | **栈帧局部**：接收原始 token 的本包函数（`AmaneHostCredential.__init__` 及其 helper）在校验失败路径上，必须在 `raise` **之前**把持有 token 的局部名（含形参名）重新绑定为 `None`；因此 `E.__traceback__` 中本包帧的 `f_locals` 不含 token。成功路径只把 token 存入凭据对象的私有属性。`httpx.Auth.auth_flow` 内的 token 局部随函数返回而失效 |
-| C5 | **传输两层**：内层 `_transport(...)` 只返回纯数据 `(kind \| None, status \| None, body_bytes \| None)`（`body_bytes` 的处理见 C5b），**永不抛出本包异常**；外层 `_call(...)` 只持有纯数据，**离开全部 `except` 之后**才 `raise AmaneHostCallError(kind)` |
-| C5a | **`_transport` 的局部清理与 Response 关闭**（唯一规范在第 10.2 节第 7 条，此处不再复述机制）：`_transport` 使用显式的“捕获 → 内联有界关闭 → 重绑”结构，**无** `shield`、**无** task；`finally` / 退出路径上把 `request` / `response` / `stream` / `headers` / `body` / `chunk` / `chunks` 等全部白名单局部重绑为 `None`；AST 守卫要求这两个函数内出现的**每一个**局部名都在冻结白名单里，把 httpx 对象赋给白名单外的名字、放入 `list` / `dict` / `tuple` / 闭包、或经别名间接持有，一律被拒绝；运行时以栈帧 `f_locals` 扫描作最终证明。**R3 的“`asyncio.shield` 限时 `aclose`”已撤销**（它会留下仍持有 Response 的 task） |
+| C5 | **传输两层**：内层 `_transport(...)` 只返回纯数据 `(kind \| None, status \| None, body_bytes \| None)`（`body_bytes` 的处理见 C5b），**永不抛出本包异常**；内层的异常处理是封闭完备的（第 10.2 节第 7 条，R5-12：`httpx.TimeoutException` / `httpx.ConnectError` / 其余任何 `Exception` ⇒ 封闭种类，非 `httpx` 异常 ⇒ `HOST_NETWORK`，只在 `except` 块里记一个枚举值）；外层 `_call(...)` 只持有纯数据，**离开全部 `except` 之后**才 `raise AmaneHostCallError(kind)` |
+| C5a | **`_transport` 的局部清理与 Response 关闭**（唯一规范在第 10.2 节第 7 条，此处不再复述机制）：`_transport` 使用显式的“捕获 → 内联有界关闭 → 重绑”结构，**无** `shield`、**无** task；`finally` / 退出路径上把 `request` / `response` / `stream` / `headers` / `body` / `chunk` / `chunks` 等全部白名单局部重绑为 `None`；**致命异常落在 `_transport` 的任何字节码上时，这些局部由边界帧的 `frame.clear()` 清理（第 10.5 节），而不是靠 `_transport` 自己的处理体**；AST 守卫要求这两个函数内出现的**每一个**局部名都在冻结白名单里，把 httpx 对象赋给白名单外的名字、放入 `list` / `dict` / `tuple` / 闭包、或经别名间接持有，一律被拒绝；运行时以栈帧 `f_locals` 扫描作最终证明。**R3 的“`asyncio.shield` 限时 `aclose`”已撤销**（它会留下仍持有 Response 的 task） |
 | C5b | **`_call` 的响应体**：`body_bytes`、解码后的字符串 / 对象、`json.JSONDecodeError`（其 `.doc` 持有完整响应体）只能出现在**纯函数** `_decode(body) -> (kind \| None, obj \| None)` 内部：函数内 `except json.JSONDecodeError` 只给 `kind` 赋值，异常名随处理体结束被清除，返回值不含原始文本。`_call` 在抛出**任何**本包异常之前，必须把 `body_bytes`、`obj` 及全部中间值重新绑定为 `None`（AST 守卫：抛出点之前必有对白名单局部名的重绑）。5xx、JSON 违规、schema 违规、`HOST_RESPONSE_TOO_COMPLEX` 全部适用；成功路径返回的是已通过严格 reader 的纯数据，不含原始字节。F(d) **不放宽** |
-| C5c | **取消的出口（冻结）**：`asyncio.CancelledError` 在 `_transport` / `_call` / engine 内都只被分类为标志（`cancelled = True`）；**离开 `except` 块并完成第 10.2 节的内联处理之后**，抛出一个**新的** `asyncio.CancelledError()` 实例（无参数；`__cause__` 为 `None`；`__traceback__` 从本包帧起算，不含 httpx / httpcore / asyncio 第三方帧；`__context__` 的边界见第 10.2 节第 9 条）。P4 只按**类型**判定取消，`TaskGroup` / `Task.cancel()` 语义不依赖异常对象的同一性；不调用 `Task.uncancel()`。**致命 `BaseException` 不适用**：它们必须保持原异常对象原样传播（不替换、不包装、不吞），其第三方帧的可达性无法由本包消除——合同据实披露（P2 适用范围、L6-21）。若评审认为二者不可兼得，则为 `BLOCKED — SECURITY AUTHORITY` |
+| C5c | **取消的出口（冻结）**：`asyncio.CancelledError` 在 `_transport` / `_call` / engine 内都只被分类为标志（`cancelled = True`）；**离开 `except` 块并完成第 10.2 节的内联处理之后**，抛出一个**新的** `asyncio.CancelledError()` 实例（无参数；`__cause__` 为 `None`；`__traceback__` 从本包帧起算，不含 httpx / httpcore / asyncio 第三方帧；`__context__` 的边界见第 10.2 节第 9 条）。P4 只按**类型**判定取消，`TaskGroup` / `Task.cancel()` 语义不依赖异常对象的同一性；除第 10.2 节第 7 条的“撤销本包自己的 deadline 取消请求”外不调用 `Task.uncancel()`。**致命 `BaseException` 不适用“新实例”规则**：它们保持**同一个异常对象**（不替换、不包装、不吞），本包按 F3 只净化其暴露面（第 10.5 节）：已结束的帧被清理、traceback 只含本包帧、异常链整条切断（不再有允许名单）。F3 若被独立复核否决，则为 `BLOCKED — SECURITY AUTHORITY`，不得退回 F1 / F2 |
 | C6 | engine / `_lifecycle` / facade / models：捕获 `AmaneHostCallError` 只读取 `.kind` 赋给局部；`AmaneHostPreflightError`、`AmaneBatchRetryError`、`AmaneBatchContractError`、`AmaneBatchInputError` 一律在 `except` 之外构造；`aggregate` 的 `except Exception` 兜底只做分类（记录类名常量）并在块外决定返回 FAILED 或抛 `AmaneBatchContractError`（固定文本） |
 | C7 | 本包永不调用 `add_note()`（`__notes__` 恒不存在） |
+| C8 | **asyncio / 帧接口白名单（R5 附加）**：包内只允许 `asyncio.get_running_loop()`、`asyncio.current_task()`、`loop.time()`、`loop.call_at()`（仅 `_transport`，武装在 `finally` 保护的 `try` 内，回调受 `active` 标志约束；`active` 由 `_call` 创建并在其 `finally` 里清除，`_transport` 的 `finally` 里 `active[0] = False` 先于 `timer.cancel()`）、`Task.cancel()`（仅 `_transport` 的 `_expire`，且只作用于当前 task）、`Task.cancelling()` / `Task.uncancel()`（仅 `_transport` 的唯一分类点）、`asyncio.sleep`（观察间隔）、`asyncio.CancelledError`；**生产路径一律禁止**：`import gc` / `import inspect`；`gc.get_referrers` / `gc.get_referents` / `gc.get_objects` / `gc.collect` / `gc.freeze` / `gc.unfreeze`；`sys._getframe` / `sys._current_frames` / `inspect.currentframe`；`frame.clear()`；对 `tb_frame` / `f_back` / `f_locals` / `f_globals` / `cr_frame` / `gi_frame` / `ag_frame` 的任何访问；`except RuntimeError` 与裸 `except:`；也不得以其它手段（字符串形式的 `getattr`、别名、全堆扫描）实现同样的机制（AST 守卫 `fatal_path_guard.py`，E6-03；M6-56 / M6-58；R5-CL-01 / R5-GOV-01 / R5-NEW-01）。独立证据 / 审计脚本可以使用 `gc.get_referents()` 等调试手段，但生产实现不得依赖它们；`asyncio.timeout` / `timeout_at` / `wait_for` / `shield` / `create_task` / `ensure_future` / `gather` / `TaskGroup` / `run_in_executor` / `to_thread` / `threading` 一律禁止（AST 守卫，E6-03，M6-30）。公共构造面不得出现传输 / HTTP 客户端 / mounts / event hooks / sleep / clock 参数（AST + 签名守卫，E6-03，M6-42）；`AmaneHostClient` 的公共名只有 `aclose` 与各公共方法，**不暴露其内部 httpx 客户端**（属性 `_http` 私有；X-NARROW 的受支持边界依赖这一点） |
+| C9 | **致命异常的边界所有权（R5-C-01）**：每个边界帧（公共 client 方法、`_call`、`aggregate`、门面公共方法）的致命处理体**内联**写成第 10.5 节的形式——先用纯 `STORE_FAST` 把本帧持有的响应数据局部（`_call` 的 `body` / `obj`）重绑为 `None`（确定性所有权清理：没有调用，因而没有检查点），然后第一条带调用的语句是 `try: _fatal_scrub(e)`，`except BaseException` 里只有内联的纯属性赋值与 `isinstance` 判定，之后裸 `raise`；不得在 `try` 之前调用任何函数；`_transport` 不得有致命处理体；边界帧的局部变量不得持有凭据 / `Request` / `Response` / 响应体（也不得持有 `Response` 的派生对象）；`aggregate` 的致命记账幂等且失败不遮盖；`_fatal_scrub` 只是三条属性赋值（`__traceback__` / `__cause__` / `__context__` = `None`），**不访问任何帧**（AST 守卫 + 穷举探针 + 逐层所有权证明，E6-03 / E6-09 / E6-17，M6-51 / M6-56 / M6-59） |
+
 
 **5. 强制失败矩阵（E6-17；每一条适用路径逐项检查 `__cause__` / `__context__` / `args` / `__notes__` / 本包帧 `f_locals` / `str` / `repr` / traceback 文本 / 审计·汇总·preview，并断言 `F` 不出现）：**
 
@@ -599,7 +644,7 @@ AmaneHostCredential(token: str)
 | `AmaneAggregationEngine` | 内部契约错误（`AmaneBatchContractError`）、非规范号、未预期 `Exception`、`CancelledError`（含清理期间）、**批量被取消时 HTTP 请求正在进行（batch cancelled while HTTP in flight）**（出口为 C5c 的新实例，且本包帧干净） |
 | `AmaneBatchIntegration` | 非法输入、retry 拒绝（3 个 reason）、`aclose` 之后调用、门面把 `AmaneHostCallError` 转换为 `AmaneHostPreflightError` 的路径 |
 
-**红绿孪生**：① 凭据路径——`try: token.encode("ascii") except UnicodeEncodeError: raise AmaneBatchConfigError(…) from None` 的变体必须被判红（`__context__` 持有带 `.object=token` 的 `UnicodeEncodeError`）；纯谓词 + 块外抛出的实现为绿；② 校验失败时 `token` 形参仍留在本包帧局部的变体为红，已重新绑定为 `None` 的为绿；③ `_transport` 在 `except` 内 `raise AmaneHostCallError(...) from None` 的变体为红；④ 外层 `_call` 帧局部仍持有 `Response` / `Request` 的变体为红；⑨ **（R4-02）** 用 `asyncio.shield` / `create_task` / `ensure_future` 起清理 task，或让清理在取消返回之后继续运行的实现为红（M6-30）；⑤ **（R3-03）** `_transport` 的 `finally` 未重绑 `request` / `response` / `stream` / `chunk`（取消发生在 connect / 等待响应头 / 流中途时本包帧 `f_locals` 仍含 httpx 对象）为红，已全部重绑为绿；⑥ `_call` 在 5xx / 畸形 JSON / schema 违规 / 结构超限路径上抛出时仍持有 `body_bytes`（或经 `JSONDecodeError.doc` 保留响应体）为红，已清理为绿；⑦ `CancelledError` 原样穿过 httpx 栈帧（traceback 含第三方帧且其 `f_locals` 含 `Request`）为红，方案 A 的新实例为绿；⑧ 致命异常路径：断言**原异常对象的身份保持**（`is` 同一对象）、`_transport` 期间**零额外 I/O**、本包帧干净；第三方帧的可达性**不被断言**（已在 L6-21 声明），测试也不把它当作绿灯依据。
+**红绿孪生**：① 凭据路径——`try: token.encode("ascii") except UnicodeEncodeError: raise AmaneBatchConfigError(…) from None` 的变体必须被判红（`__context__` 持有带 `.object=token` 的 `UnicodeEncodeError`）；纯谓词 + 块外抛出的实现为绿；② 校验失败时 `token` 形参仍留在本包帧局部的变体为红，已重新绑定为 `None` 的为绿；③ `_transport` 在 `except` 内 `raise AmaneHostCallError(...) from None` 的变体为红；④ 外层 `_call` 帧局部仍持有 `Response` / `Request` 的变体为红；⑨ **（R4-02）** 用 `asyncio.shield` / `create_task` / `ensure_future` 起清理 task，或让清理在取消返回之后继续运行的实现为红（M6-30）；⑤ **（R3-03）** `_transport` 的 `finally` 未重绑 `request` / `response` / `stream` / `chunk`（取消发生在 connect / 等待响应头 / 流中途时本包帧 `f_locals` 仍含 httpx 对象）为红，已全部重绑为绿；⑥ `_call` 在 5xx / 畸形 JSON / schema 违规 / 结构超限路径上抛出时仍持有 `body_bytes`（或经 `JSONDecodeError.doc` 保留响应体）为红，已清理为绿；⑦ `CancelledError` 原样穿过 httpx 栈帧（traceback 含第三方帧且其 `f_locals` 含 `Request`）为红，方案 A 的新实例为绿；⑧ 致命异常路径（F3）：断言**原异常对象的身份保持**（`is` 同一对象）、类型 / `args` / `__dict__` / `__notes__` 与抛出时逐项相等、`_transport` 期间**零额外 I/O**、无新增 P6 task，并由独立审计器（含 C 级槽位）断言第三方帧与整条异常链**不可达**；红孪生（F1：保留原始 traceback）必须可达 ≥ 2 条路径；⑩ **（Design-R5）** `_transport` 缺少 `finally: timer.cancel()`、未做总 deadline、或在调用方取消时撤销了调用方的取消计数为红（M6-43 / M6-44）。
 
 ### 8.4 响应处理
 
@@ -751,52 +796,91 @@ retry_failed(previous):
 * 取消触发源：调用方取消（`CancelledError`）、批量取消（P4 TaskGroup 拆除）、deadline 到期、连续观察失败、echo 校验失败、未预期异常。
   **没有**其它触发源。
 
-### 10.2 清理生命周期（唯一规范；Design-R4 / R4-02 重写）
+### 10.2 清理生命周期（唯一规范；Design-R4 / R4-02 重写，Design-R5 / R5-06、R5-10、R5-11、R5-12 修订）
 
 **撤销 R3 的做法**：旧稿让清理在“独立的、被 `asyncio.shield` 的 task”里运行，并在 C5a 里用 `shield` 关闭 Response。实测（Python 3.12.10 / 3.14.7，`gateC.py`）证明：`shield` 内层 task 在二次取消或超时后继续存活并持有带 `Authorization` 的 Response；对内层 task `cancel()` 后无限 `await` 会让不配合取消的协程把取消变成无界等待；有界等待则会把仍在运行的 task 留下。这三种结果都被 Governance 拒绝（**允许 detached 清理 task：否决；接受无界取消：否决；用日志 / 计数掩盖泄漏：否决；悄悄削弱冻结要求：否决**）。
 
-**冻结的不可变要求**：有界取消；本包不创建任何游离（detached）清理 task；本包敏感栈帧清理；不泄漏本包异常图；致命 `BaseException` 原样传播；致命路径不做清理 HTTP I/O。
+**R4 → R5：不再使用 `asyncio.timeout` / `asyncio.timeout_at` / `asyncio.wait_for`（R5-10）。** R4 用 `asyncio.timeout_at(deadline_at)` 区分“预算耗尽”与“二次取消”。实测（`t311.py`，CPython 3.11.0 / 3.11.2 与 3.11.3 / 3.11.9 并排运行）：3.11.0–3.11.2 中，在一次已被吞掉（消耗）的取消之后，`asyncio.timeout` 到期会以 `CancelledError` 而不是 `TimeoutError` 浮现（该缺陷在 3.11.3 起修复）。项目的 `requires-python` 是 `>=3.11`（不修改 `pyproject.toml`），3.11.0 属于受支持范围，因此 R5 **不依赖**该上下文管理器的内部计数。
+
+**R5 治理附加裁决 B：每个宿主请求有一个总墙钟 deadline（修订了早先“每个等待只由 `httpx.Timeout` 约束”的说法）。** `httpx.Timeout` 的 `connect / read / write / pool` 是**每次 I/O 操作**的超时，每收到一个字节就重新计时。一个持续滴灌响应头的 slowloris 服务端可让一次请求远超 `request_timeout`：实测（`slow_probe.py`）R5 草案在 `request_timeout = 1.0` 下，响应头每 0.2 s 一个字节的服务端使 `_transport` 在 **62.56 s** 后才返回；红孪生（总 deadline 关闭，服务端滴灌 4 s）复现为 4.47 s / 1.0 s。因此 `_transport` 为每个请求加一个**由事件循环定时器强制的总 deadline**（不是 task，不是 `asyncio.timeout`）：
+
+1. `deadline = loop.time() + t`；`base = task.cancelling()`；`timer = None`；`active` 是 `[False]` 形式的标志，**由调用者 `_call` 创建并传入 `_transport`，`_call` 在自己的 `finally` 里也清除它**（第二个独立所有者：它位于另一个帧、有自己的异常表项；Python 3.14 上的任一字节码探针发现 `_transport` 内存在没有任何异常表项覆盖的指令，致命异常落在那里会跳过 `_transport` 自己的 `finally`，只有第二所有者才能保证不留下活跃的定时器）。**在受 `finally` 保护的 `try` 内部**：`timer = loop.call_at(deadline, _expire)`，然后 `active[0] = True`。`_expire` 在 `active[0]` 为假时直接返回（一个泄漏的句柄永远不会取消无辜的 task）；否则 `fired = True` 并对**当前** task 调用 `cancel()`（本包唯一允许调用 `Task.cancel()` 的位置）。
+2. 内层 `try` 的各个 `except` 只**记录事实**（`ce_seen = True`、`kind = …`），**不在处理体里分类**。`finally` 的第一条语句是 `active[0] = False`，随后撤销定时器；外层 `finally` 再保证一次。
+3. **唯一的分类点**（在定时器撤销之后；R5-C-03）：若 `fired` 且尚未撤销 ⇒ `task.uncancel()` **恰好一次**，无论内层怎样回应了那次取消（传播 / 吞掉 / 转换成别的异常）；然后：`task.cancelling() > base` **或**（`ce_seen` 且未 `fired`）⇒ 存在尚未传播的外部取消 ⇒ `cancelled = True`、`kind = None`（出口抛出新的 `CancelledError`，C5c）；否则若 `fired` ⇒ `kind = "timeout"`（含内层把 deadline 取消转成了别的异常的情形）；否则保留处理体记录的 `kind`。**不再依赖 `await asyncio.sleep(0)` 是否抛出 `CancelledError` 来判断外部取消是否仍然存在**（R5 草案的冲洗在内层转换时会静默丢失调用方的取消，`task.cancelling() == 1` 但没有 `CancelledError` 再被投递）。
+4. 响应关闭之后**再检查一次** `task.cancelling() > base`：关闭层吞掉或转换了一个外部取消时，同样抛出 `CancelledError`。
+5. 响应体循环在每个块之后再检查 `loop.time() >= deadline`；每阶段 `httpx.Timeout(q = max(0.01, t/4))` 保留为次级上界。
+
+**墙钟上界（真实服务端行为，不是 per-read 超时）**：单个请求 ≤ `t + ε`（ε = 一次事件循环迭代 + 本地套接字关闭，空闲机器上实测 ≤ 0.03 s，Gate 允许 0.45 s 调度余量）；清理阶段每个请求的 `t = max(0.05, min(request_timeout, 剩余预算))` 且**每次发出下一个请求之前**检查预算，所以清理（取消请求 + 轮询）≤ `cancel_budget_seconds + 0.05 + ε`；正常路径的一个 aggregate ≤ `aggregate_deadline_seconds + request_timeout + cancel_budget_seconds + 3ε`。依赖的 asyncio 接口只有 `Task.cancelling()` / `Task.uncancel()`（Python 3.11.0 起可用）和 `loop.call_at`，不依赖 `asyncio.timeout` 的内部计数；Gate C 的 D4–D9 在 3.11.0–3.14 上逐项验证（调用方自己的 `asyncio.timeout` 包住 P6 调用仍然工作）。
+
+**取消归属不变量（Design-R5 最终安全闸；治理 Gate C-Final-01）**。设 `base` 为进入 `_transport` 时的 `Task.cancelling()`：
+
+| 编号 | 不变量 |
+|---|---|
+| O1 | 内部 deadline **只拥有它自己发出的那一次**取消请求；`uncancel()` 至多调用一次，且仅当 `fired` |
+| O2 | 调用方取消（含 `TaskGroup` 的取消与调用方 `asyncio.timeout`）**永不被吞掉，也永不被转换成 `HOST_TIMEOUT` / `HOST_NETWORK`**——**即使内层把 `CancelledError` 转换成了普通异常或吞掉了它**；判据是撤销自己那一次之后 `task.cancelling() > base` |
+| O3 | 仅 deadline 到期时不泄漏取消计数：返回时 `cancelling() == base` |
+| O4 | 定时器在每条退出路径上都被撤销，退出后没有挂起的 `must_cancel`，之后的 `await` 没有残留的 `CancelledError` |
+| O5 | deadline 先到而调用方取消随后到达（在调用方的后续协程里）时，该取消被调用方观察到 |
+| O6 | 武装发生在 `finally` 保护的 `try` 内部，回调受 `active` 标志约束；致命异常落在武装前后任一字节码处，都不会留下仍然活跃的 deadline 定时器，也不会让泄漏的句柄取消无辜的 task |
+
+**已记录的确定性交错（Gate C `race_probe.py`，每一步都输出：外部取消次数、内部 deadline 是否触发、`Task.cancelling()` 前后、`uncancel` 调用、观察到的异常、定时器句柄是否已撤销、残留的挂起取消）**：R1 外部取消先于 deadline；R2 deadline 先于外部取消（外部取消随后到达调用方的后续协程）；R3 / R4 同一事件循环轮次内两种先后顺序；R5 / R5b 两次外部取消与 deadline 竞争；R6 `TaskGroup` 兄弟失败的取消与 deadline 竞争（早于 / 同轮次两种顺序）；R7 调用方 `asyncio.timeout()` 与 deadline 竞争（调用方先 / deadline 先 / 同轮次两种顺序）；R8a 请求正常完成而定时器必须被撤销、之后不得触发；R8b 请求完成与定时器回调同一轮次；R9a / R9b / R9c 响应关闭期间的外部取消（含 deadline 已触发之后）；R10 超时处理后调用方继续执行后续协程（两次超时、一次正常调用、`asyncio.timeout`、`TaskGroup`）；R11a / b / c `cancelling()` 基线已为 1（首次取消已被消耗，即清理阶段）时的 deadline、第二次外部取消、二者同轮次；**RC10 系列（Reviewer C 的 R10 反例族，R5-C-03）**：内层把 `CancelledError` 转换成普通异常——RC10-0 仅 deadline ⇒ `HOST_TIMEOUT`（不是 `HOST_NETWORK`）；RC10-1 仅外部取消 ⇒ `CancelledError`；RC10a / a' 同轮次外部 + deadline（两种先后）；RC10b 两次外部取消 + deadline；RC10c `TaskGroup` 取消 + deadline（早于 / 同轮次）；RC10d 调用方 `asyncio.timeout` + deadline（早于 / 同轮次）；RC10e 响应关闭期间到达的外部取消被关闭层转换。Reviewer C 的独立 `race.py`（逐字节保留）在 R5 草案规则下 R9 / R10 / R11 与新增用例变红，`race_c_revised.py`（同一 harness，仅替换 `transport()` 的归属规则，并有 `old` 变异模式）在 3.11.0 / 3.12 / 3.13 / 3.14 全部满足；原型的第五个红孪生 `r5_old_rule` 被 RC10-0 / RC10-1 / RC10a / RC10e 抓到。**红孪生**（三种破坏归属的实现必须使至少一个用例变红）：只按 `fired` 判定超时（会把外部取消转换成 `HOST_TIMEOUT`）、不 `uncancel`（计数泄漏）、无条件 `uncancel`（抹掉调用方取消）。
+
+**R8b 的已知取舍（如实记录）**：响应在与定时器回调相同轮次、略早于它完成时，到期仍然胜出（`Task.cancel()` 在 future 已完成时置 `must_cancel`，`CancelledError` 在该 `await` 处抛出），已完成的响应被丢弃并分类为 `HOST_TIMEOUT`；这对提交请求意味着 `CREATION_UNKNOWN`（保守，且不会丢失“任务可能已创建”的事实）。
+
+**Python 版本差异**：asyncio 自身在 `TaskGroup` 兄弟失败之后，父任务的 `cancelling()` 在 3.11 / 3.12 为 1、在 3.13 / 3.14 为 0（无 P6 代码的控制实验）；R6 的期望取该控制值。其余计数、异常与定时器状态在 3.11.0、3.12、3.13、3.14 逐项相同（race 表摘要一致）。探针接缝（`HOOK_BEFORE_EXPIRE` / `HOOK_AFTER_EXPIRE` / `HOOK_ARMED` / `TRACE`）**只存在于设计探针**，不是合同面；实现不得包含任何模块级测试钩子、开关或环境变量（E6-03，M6-50）。
+
+**冻结的不可变要求**：有界取消；本包不创建任何游离（detached）清理 task；本包持有的敏感局部由其拥有者在致命处理体里重绑，且异常不再引用任何本包帧；不泄漏本包异常图；致命 `BaseException` 原样传播；致命路径不做清理 HTTP I/O。
 
 **冻结的机制：全部清理在 aggregate 自己的 asyncio task 内联执行，包内不存在任何第二个 task。**
 
-1. **所有权**：`src/fc2_amane_batch/**` 内**禁止**出现 `asyncio.shield`、`create_task`、`ensure_future`、`gather`、`TaskGroup`、`run_in_executor`、`to_thread`、`threading`（AST 守卫，E6-03，M6-30）。第 14 节 / 第 6.4 节中“清理 task 例外”一并撤销。
-2. **取消到达**：`asyncio.CancelledError` 在 `except` 块里**只置标志** `cancelled = True`（C1），离开 `except` 块之后再按下表内联处理，处理完毕后以 C5c 抛出同类型新实例。不调用 `Task.uncancel()`，因此调用方 `TaskGroup` / `asyncio.timeout` 对取消计数的判断保持不变。
+1. **所有权**：`src/fc2_amane_batch/**` 内**禁止**出现 `asyncio.shield`、`asyncio.timeout`、`asyncio.timeout_at`、`asyncio.wait_for`、`create_task`、`ensure_future`、`gather`、`TaskGroup`、`run_in_executor`、`to_thread`、`threading`（AST 守卫，E6-03，M6-30）。第 14 节 / 第 6.4 节中“清理 task 例外”一并撤销。
+2. **取消到达**：`asyncio.CancelledError` 在 `except` 块里**只置标志** `cancelled = True`（C1），离开 `except` 块之后再按下表内联处理，处理完毕后以 C5c 抛出同类型新实例。**调用方发起的取消的计数从不被本包改动**：除第 7 条所述“撤销本包自己的 deadline 取消请求”的那一次 `uncancel()` 之外，本包不调用 `Task.uncancel()`，因此调用方 `TaskGroup` / `asyncio.timeout` 对取消计数的判断保持不变。
 
    | 取消到达时的 `S` | 内联动作 |
    |---|---|
    | `SUBMISSION_NOT_ATTEMPTED` | 无 I/O；记录 `C = NOTHING_TO_CANCEL` |
    | `CREATION_UNKNOWN`（`POST` 已交给传输层，尚无合法 `202`） | 无 I/O；`POST` 的等待已被取消（连接被丢弃），**不再等待响应**；记录 `C = UNCERTAIN_SUBMISSION_UNRESOLVED`。后果：取消落在 `POST` 在途期间时，宿主上可能留下孤儿任务（L6-03）；这是不使用游离 task 的代价，据实接受 |
    | `CREATION_CONFIRMED` | 内联取消流程（第 3 条）；即使此前已观察到终态，也仍发送一次精确取消（结果为 `TERMINAL_*_OBSERVED`），保持流程单一 |
-3. **内联取消流程（仅 `S = CONFIRMED`）**：`deadline_at = loop.time() + cancel_budget_seconds`；整个流程包在 `async with asyncio.timeout_at(deadline_at)` 内；① 置 `cancel_post_attempted = True` 并分配 `cancel_event`，再调用 `client.cancel_task(host_task_id)`（超时 `max(0.05, min(request_timeout, deadline_at - now))`）；② 以 `poll_interval`（同样不超过剩余预算）观察该 id，直到终态或预算耗尽。取消请求（`cancel_task`）只发送**一次**。预算耗尽 ⇒ `UNCERTAIN_NOT_TERMINAL`；取消请求失败 ⇒ `UNCERTAIN_NO_RESPONSE`；响应 `missing ≥ 1` 或观察 `404` ⇒ `UNCERTAIN_TASK_VANISHED`。`asyncio.timeout_at` 的到期、`TimeoutError` 与二次取消的区分依赖 Python ≥ 3.11 的取消计数（见第 7 条）。
-4. **二次取消**：清理期间再次收到 `CancelledError`（落在任何一个 `await` 上）⇒ 在清理块的 `except asyncio.CancelledError` 里置 `interrupted = True`，**立即停止一切后续 I/O**，记录 `C = UNCERTAIN_CLEANUP_INTERRUPTED`、`T := CALLER_CANCEL`（二次取消取代原触发，成为终态的决定者），随后以 C5c 抛出新实例。第三次及以后的取消同理（此时已无 I/O 可中断）。`S = UNKNOWN` 时的二次取消不改变 `C = UNCERTAIN_SUBMISSION_UNRESOLVED`（创建未知的事实不丢失）。
-5. **清理期间的异常**：清理里的任何 `Exception`（连接失败、5xx、畸形响应……）只被分类为 `UNCERTAIN_NO_RESPONSE`，**绝不**遮盖正在传播的取消；清理块不吞掉 `CancelledError`。
-6. **致命 `BaseException`**（`KeyboardInterrupt` / `SystemExit` / `GeneratorExit`）：不被捕获为取消，**不做任何清理 HTTP I/O**；`except (KeyboardInterrupt, SystemExit, GeneratorExit)` 内只做**同步**记账（`T := FATAL_BASEEXCEPTION`，`C := UNCERTAIN_CLEANUP_INTERRUPTED` 或按 `S` 取 `NOTHING_TO_CANCEL` / `UNCERTAIN_SUBMISSION_UNRESOLVED`，`R := RAISED`），然后**裸 `raise`** 重新抛出同一个对象（C1 的第二类允许；身份保持）。若致命异常打断一个正在进行的取消尝试，则 `cancel_post_attempted` 已为真。
-7. **Response 关闭（`_transport` 的 `finally` 语义；C5a 引用本条）**：`Response` 的关闭在 `_transport` 内联执行，使用 `asyncio.timeout(RESPONSE_CLOSE_BUDGET_SECONDS)`（私有常量，`1.0`），**不用 `shield`**、不起 task；关闭期间的二次取消被捕获为标志（返回 `cancelled=True`），关闭异常被丢弃；致命路径不关闭（只同步重绑局部）。随后把 `request` / `response` / `stream` / `chunk` / `chunks` / `body` 全部重绑为 `None`。连接池由 httpx 管理：被中断的响应连接由 `httpcore` 关闭或丢弃，实测 50 次流中取消后池仍可用（Gate C 的 S8）。
+3. **内联取消流程（仅 `S = CONFIRMED`）与取消结果的**唯一**分类（R5-06）**：`deadline_at = loop.time() + cancel_budget_seconds`。
+   ① 置 `cancel_post_attempted = True`，分配 `cancel_event`，发送**一次**精确取消 `client.cancel_task(host_task_id)`（超时 `max(0.05, min(request_timeout, deadline_at - now))`；取消请求永不重发）。
+   ② 取消请求得到有效 `200`（严格 reader：`affected` / `skipped` / `missing` 均为 `int`）⇒ 置 `cancel_request_confirmed = True`；否则（超时 / 连接失败 / 非 2xx / 畸形响应）⇒ 结束，`C = UNCERTAIN_NO_RESPONSE`，**不再观察**。
+   ③ 已确认且 `missing ≥ 1` ⇒ `C = UNCERTAIN_TASK_VANISHED`，结束。
+   ④ 已确认且 `missing = 0` ⇒ 观察循环：**每次发出下一个请求（sleep 之前与之后各一次）都先检查** `deadline_at - loop.time() ≤ 0`；`sleep` 不超过剩余预算；单次观察超时不超过剩余预算；观察失败（传输失败 / 畸形响应）**不**结束循环，继续轮询直到预算耗尽；观察到 `queued` / `running` 置 `nonterminal_observed = True`；观察到 `done` / `failed` ⇒ `TERMINAL_DONE_OBSERVED` / `TERMINAL_FAILED_OBSERVED`；观察得 `404` ⇒ `UNCERTAIN_TASK_VANISHED`。
+   ⑤ 预算在没有终态 / 404 时耗尽：**已观察到过 `queued` / `running`** ⇒ `UNCERTAIN_NOT_TERMINAL`；**确认之后没有任何一次成功的状态观察** ⇒ `UNCERTAIN_OBSERVATION_FAILED`（新成员，R5-06）。
+
+   **取消结果的严格优先级**（同一次清理里多条证据同时出现时按序判定，先命中者胜出；谓词 / 模拟器 / 表按此编码）：
+   `被打断（二次取消 / 致命异常）` ＞ `取消请求无有效确认（NO_RESPONSE）` ＞ `missing ≥ 1 / 404（TASK_VANISHED）` ＞ `观察到终态（TERMINAL_*）` ＞ `预算耗尽且见过非终态（NOT_TERMINAL）` ＞ `预算耗尽且无成功观察（OBSERVATION_FAILED）`。
+   含义：`NO_RESPONSE` 只表示**取消请求本身**没有被确认；`NOT_TERMINAL` 与 `OBSERVATION_FAILED` 的前提都是取消请求**已被确认**。二者之外绝不存在“取消没确认却说任务非终态”的组合（谓词规则；E6-08 / E6-09 / M6-34 / M6-35）。
+4. **二次取消**：清理期间再次收到 `CancelledError`（落在任何一个 `await` 上）⇒ 在清理块的 `except asyncio.CancelledError` 里置 `interrupted = True`，**立即停止一切后续 I/O**，记录 `C = UNCERTAIN_CLEANUP_INTERRUPTED`、`T := CALLER_CANCEL`（二次取消取代原触发，成为终态的决定者），`cancel_post_attempted` / `cancel_request_confirmed` / `nonterminal_observed` 如实保留已发生的部分，随后以 C5c 抛出新实例。第三次及以后的取消同理（此时已无 I/O 可中断）。`S = UNKNOWN` 时的二次取消不改变 `C = UNCERTAIN_SUBMISSION_UNRESOLVED`（创建未知的事实不丢失）。
+5. **清理期间的异常**：清理里的任何 `Exception`（连接失败、5xx、畸形响应……）只被分类为取消结果（见第 3 条），**绝不**遮盖正在传播的取消；清理块不吞掉 `CancelledError`。
+6. **致命 `BaseException`**（`KeyboardInterrupt` / `SystemExit` / `GeneratorExit`）：不被捕获为取消，**不做任何清理 HTTP I/O**。`_transport` 没有致命处理体（它只武装 / 撤销 deadline 定时器并重绑局部）；**由边界帧的内联致命处理体**（第 10.5 节“生命周期设计”）先重绑自己持有的响应数据局部，再把 `__traceback__` / `__context__` / `__cause__` 置 `None`（确定性所有权清理 + 异常引用脱离；不访问任何帧），然后**裸 `raise`** 同一个对象（C1 的第二类允许；身份保持）。`aggregate` 的致命分支在此之后做**同步、幂等**的记账（`T := FATAL_BASEEXCEPTION`，`C := UNCERTAIN_CLEANUP_INTERRUPTED` 或按 `S` 取 `NOTHING_TO_CANCEL` / `UNCERTAIN_SUBMISSION_UNRESOLVED`，`R := RAISED`；该 attempt 已有记录则不重复，记账失败不得遮盖致命异常）。若致命异常打断一个正在进行的取消尝试，则 `cancel_post_attempted` 已为真。
+7. **Response 关闭与 `_transport` 的异常分类（C5a / C5b 引用本条；R5-12）**：`Response` 的关闭在 `_transport` 内联执行（`await response.aclose()`），**不用 `shield`、不用 `asyncio.timeout`**、不起 task；关闭发生在定时器撤销之后；关闭期间的二次取消被捕获为标志（返回 `cancelled=True`），关闭异常被丢弃；致命路径不关闭（只同步重绑局部并净化）。关闭本身是本地套接字关闭，由 `httpcore` 保证有界，Gate C 在 5 个受支持解释器上实测。随后把 `request` / `response` / `stream` / `chunk` / `chunks` / `body` 全部重绑为 `None`。
+   **`_transport` 的异常处理是封闭、完备的（R5-12）**：`CancelledError` ⇒ 置标志；致命 `BaseException` ⇒ 重绑局部后裸 `raise`；`httpx.TimeoutException` ⇒ `HOST_TIMEOUT`；`httpx.ConnectError` ⇒ `HOST_CONNECTION`；**其余任何 `Exception`（`httpx.HTTPError` 家族**或**任何非 `httpx` 的异常，例如被替换的传输层 / 第三方库在 `handle_async_request` 里抛出的 `RuntimeError`、`OSError` 子类、`ssl.SSLError`、`ValueError` 等）⇒ 一律 `HOST_NETWORK`**。不使用 `except` 之外的重抛：分类在 `except` 块里只**记一个封闭枚举值**，`HostCallError` 在 `except` 块**之外**由 `_call` 构造抛出，`__cause__` / `__context__` 均不携带原异常（因此不携带其 traceback 与栈帧里的 `Request` / `Response`）。红绿孪生（Gate C，E6-09）：把 `catch-all` 去掉（红）能复现 R4 的泄漏——非 `httpx` 异常带着含 token 的 `httpx` 帧逃出；加上（绿）则只得到 `HostCallError(HOST_NETWORK)`、无 cause / context、存活的带 token `Request` / `Response` 为 0。
 8. **有界性的证据与未决范围（Gate C 覆盖必须分别标注，不得合并为一个无条件 PASS）**：
 
    | 项 | 状态 | 说明 |
    |---|---|---|
-   | 生产 `httpx` 场景（缺省传输 + `httpcore` + `anyio`）：首次取消（等响应头 / 流中途 / 观察期）、二次取消、清理超时、清理请求被对端关闭、清理请求永不返回、50 次流中取消、TLS 握手停滞、致命异常 | **PASS**（已执行：Python 3.12.10 与 3.14.7，`httpx 0.27.2`，结果一致） | 剩余 P6 task = 0；存活的带 token `Request` / `Response` = 0；连接池仍可用；最长清理延迟 0.82 s（预算 0.8 s）；致命异常零额外 HTTP 请求、身份保持。依据：每个 I/O 等待受 `httpx.Timeout` 的 `anyio` deadline 约束，与 `asyncio` 取消送达无关，`httpcore` 的关闭路径是本地套接字关闭 |
-   | Python 3.11 | **NOT_RUN** | 设计期未安装该解释器；`asyncio.timeout` / `timeout_at` 在 3.11 存在，但未运行；E6-25 必须运行 |
-   | DNS 解析线程（`getaddrinfo` 在 `anyio` 工作线程）/ 连接黑洞地址 | **UNVERIFIED** | 未探测；线程不是 P6 的 asyncio task，只含主机名不含凭据，但不可取消 |
-   | 注入的、吞掉 `CancelledError` 的 `transport=`（`httpx.MockTransport` 或自定义传输） | **KNOWN COUNTEREXAMPLE / SCOPE REVIEW REQUIRED** | 实测清理被拖过预算约 2.2 s。这是一个运行时反例；本草案**既不扩大也不收窄**冻结的支持范围来掩盖它：`transport=` 是否属于承诺支持的环境、应被拒绝 / 守卫 / 用其它方式约束，均为**待独立裁决**；在裁决之前，E6-09 把它作为已知反例保留，S1–S3 的验收必须覆盖所有最终承诺支持的环境与安全边界 |
+   | 生产 `httpx` 场景（缺省传输 + `httpcore` + `anyio`）：首次取消（等响应头 / 流中途 / 观察期）、二次取消、多次取消、清理超时、清理请求被对端关闭、清理请求永不返回、取消请求已确认而之后观察全部停滞、50 次流中取消、TLS 握手停滞、连接黑洞、**响应头 / 响应体 slowloris 的总 deadline（D1–D10）**、故障覆盖矩阵（22 项）、取消归属交错 R1–R11（含步骤记录与红孪生）、致命异常（F3 边界所有权，33 项 + 穷举窗口探针 + C 级槽位孪生，四个植入用例按 X-NARROW 逐项说明，见第 10.5 节）、测试接缝撤销后的验收能力（C3-1..C3-7） | **PASS（设计探针）**（已执行：Python 3.11.0 / 3.11.1 / 3.11.2 / 3.11.3 / 3.11.9 / 3.12.10 / 3.13.0 / 3.13.9 / 3.14.7，`httpx 0.27.2`；Gate C 全部 0 失败） | 剩余 P6 task = 0；存活的带 token `Request` / `Response` = 0；连接池仍可用；清理墙钟 ≤ 预算 + 调度余量；致命异常零额外 HTTP 请求。依据：定时器强制的总 deadline + 每阶段 `httpx.Timeout`，`httpcore` 的关闭路径是本地套接字关闭。**这是设计探针结论，不是对 S1 实现的 PASS** |
+   | Python 3.13 | **设计探针 PASS；实现验收 NOT_RUN** | 设计探针已在 3.13.0 与 3.13.9（embeddable）上执行；**E6-25 在 S3 必须对真实 P6 包与其测试运行 3.13**（正式运行时验收计划）。在此之前不对“3.11–3.14 全范围”作出已实测通过的声明 |
+   | `asyncio.timeout` 在 3.11.0–3.11.2 的缺陷 | **已复现并由设计规避**（`t311.py`；5 个 3.11 小版本并排） | R5 不使用 `asyncio.timeout` / `timeout_at` / `wait_for`；AST 守卫禁止（M6-30） |
+   | DNS 解析线程（`getaddrinfo` 在 `anyio` 工作线程） | **UNVERIFIED** | 未探测；线程不是 P6 的 asyncio task，只含主机名不含凭据，但不可取消 |
+   | 任意注入、吞掉 `CancelledError` 的 `transport=` | **方案 A：APPROVED FOR DESIGN REVISION ONLY（治理裁决；第 10.6 节）——DESIGN UPDATED** | 该参数（及 `_clock` / `_sleep`）已从 P6 公共构造面移除，故障改由真实回环代理注入；反例不再可经 P6 入口触发（仅进程级猴子补丁可复现，作为信息项记录）。独立复核尚未进行；不是 Independent PASS |
 
-   `NOT_RUN` / `UNVERIFIED` / `KNOWN COUNTEREXAMPLE` 都**不得**计为 `PASS`（第 23.2 节）。
+   `NOT_RUN` / `UNVERIFIED` / `BLOCKED` 都**不得**计为 `PASS`（第 23.2 节）。
 
    **R3 → R4：提交在途取消行为的变更（不得悄悄删除，取消合同在此处**并非**不变）**：
 
-   | 项 | R3 | R4（待独立审查的候选） |
+   | 项 | R3 | R4（R5 保持，待独立审查） |
    |---|---|---|
-   | `POST /api/tasks` 在途时收到取消 | 清理 task 最多等待 `min(剩余预算, request_timeout)` 取得响应（best-effort response recovery）；若拿到合法 `202` 则取得 id、转入精确取消 | **不再等待响应**：对 `POST` 的等待被取消、连接被丢弃，不尝试恢复 id；记录 `CREATION_UNKNOWN`（`T = CALLER_CANCEL`，`C = UNCERTAIN_SUBMISSION_UNRESOLVED`，表 P04） |
+   | `POST /api/tasks` 在途时收到取消 | 清理 task 最多等待 `min(剩余预算, request_timeout)` 取得响应（best-effort response recovery）；若拿到合法 `202` 则取得 id、转入精确取消 | **不再等待响应**：对 `POST` 的等待被取消、连接被丢弃，不尝试恢复 id；记录 `CREATION_UNKNOWN`（`T = CALLER_CANCEL`，`C = UNCERTAIN_SUBMISSION_UNRESOLVED`，表 P05） |
    | 原因 | — | 恢复响应需要在取消到达之后继续持有在途请求，只能靠游离 / `shield` task。Gate C 实测这类 task 在二次取消 / 超时后继续存活并持有带 token 的 Response，或把取消变成无界等待；Governance 否决 detached 清理 task 与无界取消 |
    | 风险 | 仍可能漏掉在 `202` 之前丢失的响应 | 取消落在 `POST` 在途期间时，宿主上留下孤儿 SCRAPE 任务的概率**上升**；“尽力停止”的能力下降 |
    | 保持不变的安全保证 | `CREATION_UNKNOWN` 严格保守 | **`CREATION_UNKNOWN` 的语义不变且仍严格保守**：没有收到响应**绝不**被解释为“宿主没有创建任务”；任务数只有区间 `[0, ≥1]`，不折算为 0 或 1；计入 `creation_unknown` / `abandoned_attempts` / `uncertain_cancellations`；不自动重试、不找回（第 7.5 节）；调用方必须向用户呈现“可能仍有任务在运行并写入 Amane Metadata”（第 10.4 节）；晚到写入与 L3 `UNVERIFIED` 的声明不变 |
 
-
 9. **`__context__` 的边界（C5c 澄清）**：新实例的 `__cause__` 恒为 `None`；`__context__` 为 `None`，**或**为调用方在调用 `aggregate` 时**已经在处理**的那个异常对象（Python 的隐式链接，实测 `ValueError` 被链入）。该对象是调用方自己的，不是本包引入的，不在保护面内；测试用 `sys.exception()` 在调用入口取样，断言 `e.__context__ is None or e.__context__ is entry_exception`，其它任何 `__context__` 都是违例。
 10. **取消 / 致命的审计窗口**：本包在上述每个出口都同步地写完整条 `HostAttemptRecord`（无 I/O），然后才抛出；`aggregate` 在分配 `seq` 之前被取消 / 失败则**没有记录**。
 
-**探针（Gate C，真实 `httpx 0.27.2`，Python 3.12.10 与 3.14.7，结果一致）**：首次取消（等响应头 / 流中途 / 观察期）、二次取消（取消请求停滞时）、清理超时、清理请求被对端关闭、清理请求永不返回（每请求超时兜底）、50 次流中取消、TLS 握手停滞、致命异常（零额外 HTTP 请求，身份保持）。输出：P6 task 前后差 = 0；最长耗时 = 预算内；`Request` / `Response` 存活 = 0；清理 HTTP 请求数 = 预期。
+**探针（Gate C，真实 `httpx 0.27.2`，Python 3.11.0 / 3.11.1 / 3.11.2 / 3.11.3 / 3.11.9 / 3.12.10 / 3.14.7，结果一致）**：首次取消（等响应头 / 流中途 / 观察期）、二次取消（取消请求停滞时）、清理超时、清理请求被对端关闭、清理请求永不返回（每请求超时兜底）、取消已确认而之后观察全部停滞（`OBSERVATION_FAILED`）、50 次流中取消、TLS 握手停滞、黑洞、slowloris、致命异常（零额外 HTTP 请求，身份保持）。输出：P6 task 前后差 = 0；最长耗时 = 预算内；`Request` / `Response` 存活 = 0；清理 HTTP 请求数 = 预期。
 
 ### 10.3 提交、清理与取消结果的状态机（唯一规范；Design-R4 / R4-07 重写）
 
@@ -810,160 +894,352 @@ retry_failed(previous):
 
 `CONFIRMED_STOPPED` 保持撤销（DIFF-P6-01 / DIFF-P6-05）：`failed` 只证明 L2；**不存在任何会断言 L3 已达成的枚举值**；L3 对每一次放弃 / 取消都是 `UNVERIFIED`。
 
-**R1 的矛盾**：旧稿一边把 `NOT_APPLICABLE` 绑定到 `SUBMISSION_NOT_ATTEMPTED`（§10.3），一边又写“无取消时为 `NOT_APPLICABLE`”（§20.5）。正常成功路径是 `CREATION_CONFIRMED` 且**没有任何取消**，其 `cancel` 应是 `NOT_APPLICABLE`——任务已创建不等于发生了取消。本版把四个维度**正交**冻结：
+**四个维度正交冻结，外加三个取消见证（Design-R5）**：
 
 ```text
 S  SubmissionState     SUBMISSION_NOT_ATTEMPTED | CREATION_CONFIRMED | CREATION_UNKNOWN         （终态记录不得为 SUBMISSION_ATTEMPTED）
 T  CleanupTrigger      NONE | CALLER_CANCEL | DEADLINE | OBSERVATION_FAILURE | ECHO_MISMATCH |
                        SUBMISSION_UNRESOLVED | INTERNAL_ERROR | FATAL_BASEEXCEPTION             终态的**决定性**触发（后到的二次取消 / 致命异常取代先前触发）；NONE = 没有触发
-C  CancelOutcome       见下表（9 个成员）                                                       清理路径的结果；NOT_APPLICABLE ⇔ T == NONE
+C  CancelOutcome       见下表（10 个成员）                                                      清理路径的结果；NOT_APPLICABLE ⇔ T == NONE
 R  AggregateTerminal   SUCCESS | FAILED | RAISED | CANCELLED                                      aggregate 对 P4 的终态
+cpa  cancel_post_attempted      bool   取消请求已“尝试发送”（自报告，L1）
+cf   cancel_request_confirmed   bool   取消请求得到了有效的 200 响应（自报告）
+nt   nonterminal_observed       bool   取消确认之后观察到过 queued / running（自报告）
 ```
 
-#### `CancelOutcome`（封闭枚举，9 个成员；全部来自结构化观察）
+“可产生状态”由 `(S, T, C, R, cpa, cf, nt)` 七元组刻画；**状态数不是预设的**：参考模拟器从控制流穷举得到（下方表），当前为 **63** 条，由独立复算得出，不是 R4 的固定数字 39（R4 的 39 条把“取消已确认”“见过非终态”等见证折叠掉了，遗漏了第 10.2 节第 3 条的全部分类路径，被 R5-02 / R5-06 指出）。
+
+#### `CancelOutcome`（封闭枚举，**10** 个成员；全部来自结构化观察）
 
 | 值 | 含义 | 观察依据 |
 |---|---|---|
 | `NOT_APPLICABLE` | **没有触发任何清理 / 取消路径**（`T == NONE`）。正常成功与未取消的失败（含 `HOST_TASK_FAILED`、`done` 之后的映射失败）都是此值，**不论任务是否已创建** | 无 |
 | `NOTHING_TO_CANCEL` | 清理被触发，但宿主上没有可取消的东西：`S == SUBMISSION_NOT_ATTEMPTED`（`POST` 从未发出） | 请求账本里没有 submit |
-| `TERMINAL_FAILED_OBSERVED` | 取消请求之后，观察到该 id 的数据库终态 `failed`。**仅证明记录为 FAILED；不证明协程已停止，不证明之后不会再有宿主侧写入** | `status == "failed"` |
-| `TERMINAL_DONE_OBSERVED` | 取消请求之后观察到数据库终态 `done`（宿主已写入 Metadata；是否发生在取消之前 P6 无法区分）。**不会**被当作本次 aggregate 的成功使用 | `status == "done"` |
-| `UNCERTAIN_NO_RESPONSE` | 取消请求超时 / 连接失败 / 非预期响应 | 传输 / 状态码 |
-| `UNCERTAIN_NOT_TERMINAL` | 取消请求已确认，但预算耗尽时记录仍是 `queued` / `running` | 结构化 `status` |
+| `TERMINAL_FAILED_OBSERVED` | 取消请求**已确认**之后，观察到该 id 的数据库终态 `failed`。**仅证明记录为 FAILED；不证明协程已停止，不证明之后不会再有宿主侧写入** | `status == "failed"` |
+| `TERMINAL_DONE_OBSERVED` | 取消请求已确认之后观察到数据库终态 `done`（宿主已写入 Metadata；是否发生在取消之前 P6 无法区分）。**不会**被当作本次 aggregate 的成功使用 | `status == "done"` |
+| `UNCERTAIN_NO_RESPONSE` | **取消请求本身**超时 / 连接失败 / 非 2xx / 畸形响应——从未得到有效确认（`cf = 否`）。此时 P6 **不知道**任务是否仍是非终态，**不能**说“任务非终态” | 传输 / 状态码 |
+| `UNCERTAIN_NOT_TERMINAL` | 取消请求**已确认**（`cf = 是`），并且确认之后观察到过 `queued` / `running`（`nt = 是`），预算耗尽时仍无终态 | 结构化 `status` |
+| `UNCERTAIN_OBSERVATION_FAILED`（R5-06 新增） | 取消请求**已确认**（`cf = 是`），但确认之后**没有任何一次成功的状态观察**（`nt = 否`），预算耗尽。P6 不能说任务是否终态 | 控制流（每次观察都失败 / 停滞） |
 | `UNCERTAIN_SUBMISSION_UNRESOLVED` | `S == CREATION_UNKNOWN`：任务 id 从未获得（可能 0 个，也可能 ≥ 1 个），无法取消 | 无 id |
 | `UNCERTAIN_TASK_VANISHED` | 取消响应 `missing ≥ 1` 或观察得到 `404` | 结构化计数 / 状态码 |
 | `UNCERTAIN_CLEANUP_INTERRUPTED` | 清理被第二次取消打断，或致命 `BaseException` 之后未做任何清理 I/O | 控制流 |
 
-#### 10.3.1 规范谓词（`HostAttemptRecord.__post_init__` 的唯一定义）
+#### 10.3.1 规范类型与谓词（`HostAttemptRecord.__post_init__` 的唯一定义；Design-R5 / R5-01、R5-02、R5-03 重写）
 
-下面的代码块是 `HostAttemptRecord` 合法性的**唯一规范性定义**；合同其它章节、Master Plan、Construction Plan 与证据行只引用它，**不得**另写一套条件（旧的 LC1–LC9 / W1–W4 / N1–N5 文字规则全部撤销，其内容已编码于此）。违反 ⇒ `AmaneBatchContractError`（固定文本）。审查证据包（Gate A–E 的源码、命令与输出）从本文件抽取该代码块并直接执行。
+下面两个代码块是 `HostAttemptRecord` 的**唯一规范性定义**：第一个是**真实的**枚举与冻结 `slots` 数据类（`HostAttemptRecord`、`SubmissionState`、`CleanupTrigger`、`CancelOutcome`、`AggregateTerminal`、`HostFailureKind`、`TimestampRelation`、`AmaneBatchContractError`），第二个是 `record_is_legal`。合同其它章节、Master Plan、Construction Plan 与证据行只引用它们，**不得**另写一套条件。违反 ⇒ `AmaneBatchContractError("illegal HostAttemptRecord")`（固定文本）。Gate B 从本文件抽取这两个代码块、用**真实枚举与真实数据类**构造记录并直接执行（不再使用字符串替身；R4 的字符串谓词遇到真实枚举会 `KeyError`，R5-01）。
+
+R5 谓词的性质：① **对任意输入返回 `bool`，不抛出**（`KeyError` / `TypeError` / `AttributeError` 均不会出现在谓词内部：先做类型层检查，再做语义规则）；② 枚举字段必须是**本包的真实枚举成员**（字符串替身、外来枚举、未知值一律拒绝）；③ 布尔见证必须是严格 `bool`（`0` / `1` / `"x"` 拒绝）；④ 整数字段排除 `bool`、范围检查；⑤ `outcome` 必须与触发匹配（例如 `DEADLINE ⇒ HOST_DEADLINE`、`ECHO_MISMATCH ⇒ HOST_SCHEMA_INVALID`、`SUBMISSION_UNRESOLVED ⇒` 传输类、`T = NONE ∧ FAILED ⇒` 传输类或 `TASK_FAILED` 或映射失败类）；⑥ `terminal_status` 必须与路径一致（`T = NONE`：`HOST_TASK_FAILED ⇔ "failed"`，其余 `"done"`；清理路径：`TERMINAL_FAILED_OBSERVED ⇔ "failed"`、`TERMINAL_DONE_OBSERVED ⇔ "done"`，其它必为 `None`；`TERMINAL_FAILED_OBSERVED` 搭配 `terminal_status = "done"` 被拒绝）；⑦ `cancel_request_confirmed ⇒ cancel_post_attempted`、`nonterminal_observed ⇒ cancel_request_confirmed`；⑧ **H3 已送达（取消尝试）而 H4 缺席（`UNKNOWN`）**——合法的是 `cancel_post_attempted = 否`（H3 单独**永不**授权取消，第 14.4 节）；致命 / 取消落在 `H3 ⇒ H4` 之间的窗口都落入 `S = UNKNOWN` 的 P05 / P06 / P07，字段 `host_task_id = None`。
+
+```python gate:host_attempt_record_types
+import dataclasses
+import enum
+
+
+class AmaneBatchContractError(RuntimeError):
+    """P6 内部不变量被破坏（缺陷，不是外部失败）；消息固定。"""
+
+
+class HostFailureKind(enum.Enum):                       # 第 12.1 节：19 个成员；value = 去掉 HOST_ 前缀的小写
+    HOST_TIMEOUT = "timeout"
+    HOST_CONNECTION = "connection"
+    HOST_NETWORK = "network"
+    HOST_AUTH_REJECTED = "auth_rejected"
+    HOST_RATE_LIMITED = "rate_limited"
+    HOST_SERVER_ERROR = "server_error"
+    HOST_HTTP_UNEXPECTED = "http_unexpected"
+    HOST_RESPONSE_TOO_LARGE = "response_too_large"
+    HOST_RESPONSE_TOO_COMPLEX = "response_too_complex"
+    HOST_SCHEMA_INVALID = "schema_invalid"
+    HOST_TASK_VANISHED = "task_vanished"
+    HOST_TASK_FAILED = "task_failed"
+    HOST_DEADLINE = "deadline"
+    HOST_RESULT_INVALID = "result_invalid"
+    HOST_ATTRIBUTION_FOREIGN = "attribution_foreign"
+    HOST_METADATA_MISSING = "metadata_missing"
+    HOST_METADATA_NUMBER_MISMATCH = "metadata_number_mismatch"
+    HOST_METADATA_CONTRACT = "metadata_contract"
+    HOST_METADATA_BELOW_MINIMUM = "metadata_below_minimum"
+
+
+class SubmissionState(enum.Enum):                       # 第 9.2 节
+    SUBMISSION_NOT_ATTEMPTED = "not_attempted"
+    SUBMISSION_ATTEMPTED = "attempted"                  # 仅瞬态；终态记录不得使用
+    CREATION_CONFIRMED = "confirmed"
+    CREATION_UNKNOWN = "unknown"
+
+
+class CleanupTrigger(enum.Enum):                        # 第 10.3 节：终态的决定性触发
+    NONE = "none"
+    CALLER_CANCEL = "caller_cancel"
+    DEADLINE = "deadline"
+    OBSERVATION_FAILURE = "observation_failure"
+    ECHO_MISMATCH = "echo_mismatch"
+    SUBMISSION_UNRESOLVED = "submission_unresolved"
+    INTERNAL_ERROR = "internal_error"
+    FATAL_BASEEXCEPTION = "fatal_baseexception"
+
+
+class CancelOutcome(enum.Enum):                         # 第 10.3 节：10 个成员（无任何断言“执行已停止”的成员）
+    NOT_APPLICABLE = "not_applicable"
+    NOTHING_TO_CANCEL = "nothing_to_cancel"
+    TERMINAL_FAILED_OBSERVED = "terminal_failed_observed"
+    TERMINAL_DONE_OBSERVED = "terminal_done_observed"
+    UNCERTAIN_NO_RESPONSE = "uncertain_no_response"                 # 取消请求本身从未得到有效确认
+    UNCERTAIN_NOT_TERMINAL = "uncertain_not_terminal"               # 取消已确认，且观察到过 queued/running，预算耗尽时仍非终态
+    UNCERTAIN_OBSERVATION_FAILED = "uncertain_observation_failed"   # 取消已确认，但确认之后没有任何一次成功的状态观察
+    UNCERTAIN_SUBMISSION_UNRESOLVED = "uncertain_submission_unresolved"
+    UNCERTAIN_TASK_VANISHED = "uncertain_task_vanished"
+    UNCERTAIN_CLEANUP_INTERRUPTED = "uncertain_cleanup_interrupted"
+
+
+class AggregateTerminal(enum.Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    RAISED = "raised"
+    CANCELLED = "cancelled"
+
+
+class TimestampRelation(enum.Enum):                     # 第 11.3.4 节：仅两个时间戳字符串的比较标签
+    UPDATED_NOT_AFTER_FINISHED = "updated_not_after_finished"
+    UPDATED_AFTER_FINISHED = "updated_after_finished"
+    INDETERMINATE = "indeterminate"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class HostAttemptRecord:                                # 唯一定义；__post_init__ 调用第 10.3.1 节的 record_is_legal
+    seq: int
+    engine_index: int
+    attempt_id: str
+    completion_seq: int                                 # 完成序号（稠密 1..completed），第 20.5 节
+    number: str
+    host_task_id: "int | None"
+    outcome: "HostFailureKind | None"
+    terminal_status: "str | None"                       # "done" | "failed" | None
+    submission: SubmissionState
+    cleanup_trigger: CleanupTrigger
+    cancel: CancelOutcome
+    terminal: AggregateTerminal
+    cancel_post_attempted: bool                         # L1 见证（自报告）
+    cancel_request_confirmed: bool                      # 取消请求得到有效 200 响应（自报告）
+    nonterminal_observed: bool                          # 取消确认之后观察到 queued / running（自报告）
+    begin_event: int
+    task_known_event: "int | None"
+    cancel_event: "int | None"
+    end_event: int
+    polls: int
+    requests: int
+    dropped_url_count: int
+    display_title_diverged: bool
+    timestamp_relation: TimestampRelation
+    metadata_id: "int | None"
+    elapsed_ms: float
+
+    def __post_init__(self):
+        if not record_is_legal(self):
+            raise AmaneBatchContractError("illegal HostAttemptRecord")
+```
 
 ```python gate:record_is_legal
 def record_is_legal(r):
-    """规范谓词：HostAttemptRecord.__post_init__ 的全部合法性规则（R4-06 / R4-07）。r 只需提供下列属性。"""
+    """HostAttemptRecord 合法性的唯一规范谓词。只接受上面真实枚举与严格类型；任何输入都返回 bool，绝不抛出 KeyError / TypeError。"""
+    SS, TT, CC, RR, FK = SubmissionState, CleanupTrigger, CancelOutcome, AggregateTerminal, HostFailureKind
+
+    def is_int(x, lo):                                   # int（排除 bool）且 >= lo
+        return type(x) is int and x >= lo
+
+    def opt_int(x, lo):
+        return x is None or is_int(x, lo)
+
+    # ---- 1. 类型层：枚举必须是真实枚举成员（字符串替身、外来枚举、未知值一律拒绝）
     S, T, C, R = r.submission, r.cleanup_trigger, r.cancel, r.terminal
-
-    def ev(x):                                   # 有效逻辑事件：int（排除 bool）且 >= 1
-        return type(x) is int and x >= 1
-
-    # --- 标识：attempt_id == e{engine_index}-a{seq}（seq 在 engine 内稠密递增，第 10.3.2 节）
-    if not (type(r.seq) is int and r.seq >= 1 and type(r.engine_index) is int and r.engine_index >= 1
+    if not (type(S) is SS and type(T) is TT and type(C) is CC and type(R) is RR and type(r.timestamp_relation) is TimestampRelation):
+        return False
+    if not (r.outcome is None or type(r.outcome) is FK):
+        return False
+    for flag in (r.cancel_post_attempted, r.cancel_request_confirmed, r.nonterminal_observed, r.display_title_diverged):
+        if type(flag) is not bool:                        # 0 / 1 / "x" 都不是 bool
+            return False
+    if not (type(r.number) is str and r.number and type(r.attempt_id) is str):
+        return False
+    if not (is_int(r.seq, 1) and is_int(r.engine_index, 1) and is_int(r.completion_seq, 1)
             and r.attempt_id == "e%d-a%d" % (r.engine_index, r.seq)):
         return False
-    # --- 事件的总体规则
-    if not (ev(r.begin_event) and ev(r.end_event) and r.begin_event < r.end_event):
+    if not (is_int(r.polls, 0) and is_int(r.requests, 0) and is_int(r.dropped_url_count, 0)):
         return False
-    # --- T -> R（终态由决定性触发唯一确定）
-    allowed_R = {"NONE": ("SUCCESS", "FAILED"), "CALLER_CANCEL": ("CANCELLED",), "FATAL_BASEEXCEPTION": ("RAISED",),
-                 "INTERNAL_ERROR": ("RAISED",), "DEADLINE": ("FAILED",), "OBSERVATION_FAILURE": ("FAILED",),
-                 "ECHO_MISMATCH": ("FAILED",), "SUBMISSION_UNRESOLVED": ("FAILED",)}
+    if not (type(r.elapsed_ms) in (int, float) and r.elapsed_ms >= 0 and r.elapsed_ms == r.elapsed_ms and r.elapsed_ms != float("inf")):
+        return False
+    if not (opt_int(r.host_task_id, 1) and opt_int(r.metadata_id, 1) and opt_int(r.task_known_event, 1) and opt_int(r.cancel_event, 1)):
+        return False
+    if not (r.terminal_status is None or r.terminal_status in ("done", "failed")):
+        return False
+    if S is SS.SUBMISSION_ATTEMPTED:                      # 瞬态；终态记录不得使用
+        return False
+    # ---- 2. 事件
+    if not (is_int(r.begin_event, 1) and is_int(r.end_event, 1) and r.begin_event < r.end_event):
+        return False
+    # ---- 3. T -> R（终态由决定性触发唯一确定）与 outcome 的类型一致性
+    allowed_R = {TT.NONE: (RR.SUCCESS, RR.FAILED), TT.CALLER_CANCEL: (RR.CANCELLED,), TT.FATAL_BASEEXCEPTION: (RR.RAISED,),
+                 TT.INTERNAL_ERROR: (RR.RAISED,), TT.DEADLINE: (RR.FAILED,), TT.OBSERVATION_FAILURE: (RR.FAILED,),
+                 TT.ECHO_MISMATCH: (RR.FAILED,), TT.SUBMISSION_UNRESOLVED: (RR.FAILED,)}
     if R not in allowed_R[T]:
         return False
-    if (R == "FAILED") != (r.outcome is not None):          # FAILED 必带失败种类，其余必为 None
+    transport = (FK.HOST_TIMEOUT, FK.HOST_CONNECTION, FK.HOST_NETWORK, FK.HOST_AUTH_REJECTED, FK.HOST_RATE_LIMITED, FK.HOST_SERVER_ERROR,
+                 FK.HOST_HTTP_UNEXPECTED, FK.HOST_RESPONSE_TOO_LARGE, FK.HOST_RESPONSE_TOO_COMPLEX, FK.HOST_SCHEMA_INVALID)
+    allowed_outcome = {TT.NONE: transport + (FK.HOST_TASK_FAILED, FK.HOST_RESULT_INVALID, FK.HOST_ATTRIBUTION_FOREIGN, FK.HOST_METADATA_MISSING,
+                                             FK.HOST_METADATA_NUMBER_MISMATCH, FK.HOST_METADATA_CONTRACT, FK.HOST_METADATA_BELOW_MINIMUM),
+                       TT.SUBMISSION_UNRESOLVED: transport, TT.OBSERVATION_FAILURE: transport + (FK.HOST_TASK_VANISHED,),
+                       TT.ECHO_MISMATCH: (FK.HOST_SCHEMA_INVALID,), TT.DEADLINE: (FK.HOST_DEADLINE,)}
+    if R is RR.FAILED:
+        if r.outcome is None or r.outcome not in allowed_outcome[T]:
+            return False
+    elif r.outcome is not None:
         return False
-    if (C == "NOT_APPLICABLE") != (T == "NONE"):             # NOT_APPLICABLE <=> 未触发清理
+    if (C is CC.NOT_APPLICABLE) != (T is TT.NONE):        # NOT_APPLICABLE <=> 未触发清理
         return False
-    # --- 提交状态
-    if S == "SUBMISSION_NOT_ATTEMPTED":
-        return (r.host_task_id is None and r.task_known_event is None and not r.cancel_post_attempted and r.cancel_event is None
-                and T in ("CALLER_CANCEL", "INTERNAL_ERROR", "FATAL_BASEEXCEPTION") and C == "NOTHING_TO_CANCEL")
-    if S == "CREATION_UNKNOWN":
-        return (r.host_task_id is None and r.task_known_event is None and not r.cancel_post_attempted and r.cancel_event is None
-                and T in ("SUBMISSION_UNRESOLVED", "CALLER_CANCEL", "INTERNAL_ERROR", "FATAL_BASEEXCEPTION")
-                and C == "UNCERTAIN_SUBMISSION_UNRESOLVED")
-    if S != "CREATION_CONFIRMED":                            # SUBMISSION_ATTEMPTED 不得出现在终态记录
+    # ---- 4. 不同提交状态下的字段
+    no_cancel_witness = (not r.cancel_post_attempted and not r.cancel_request_confirmed and not r.nonterminal_observed and r.cancel_event is None)
+    if S is SS.SUBMISSION_NOT_ATTEMPTED:
+        return (r.host_task_id is None and r.task_known_event is None and no_cancel_witness and r.terminal_status is None and r.metadata_id is None
+                and T in (TT.CALLER_CANCEL, TT.INTERNAL_ERROR, TT.FATAL_BASEEXCEPTION) and C is CC.NOTHING_TO_CANCEL)
+    if S is SS.CREATION_UNKNOWN:
+        return (r.host_task_id is None and r.task_known_event is None and no_cancel_witness and r.terminal_status is None and r.metadata_id is None
+                and T in (TT.SUBMISSION_UNRESOLVED, TT.CALLER_CANCEL, TT.INTERNAL_ERROR, TT.FATAL_BASEEXCEPTION)
+                and C is CC.UNCERTAIN_SUBMISSION_UNRESOLVED)
+    # ---- 5. CREATION_CONFIRMED：H4 事件、任务 id
+    if not (is_int(r.host_task_id, 1) and is_int(r.task_known_event, 1) and r.begin_event < r.task_known_event < r.end_event):
         return False
-    # --- CREATION_CONFIRMED：H4 事件、任务 id
-    if not (type(r.host_task_id) is int and r.host_task_id >= 1 and ev(r.task_known_event)
-            and r.begin_event < r.task_known_event < r.end_event):
+    if T is TT.SUBMISSION_UNRESOLVED:
         return False
-    if T == "SUBMISSION_UNRESOLVED":
+    if R is RR.SUCCESS and r.metadata_id is None:
         return False
-    if T == "NONE":                                          # 正常路径：不发取消
-        return C == "NOT_APPLICABLE" and not r.cancel_post_attempted and r.cancel_event is None
-    # --- 清理路径（T != NONE）
-    if C in ("NOT_APPLICABLE", "NOTHING_TO_CANCEL", "UNCERTAIN_SUBMISSION_UNRESOLVED"):
+    if T is TT.NONE:                                      # 正常路径：不发取消；terminal_status 与 outcome 对应
+        if not (C is CC.NOT_APPLICABLE and no_cancel_witness):
+            return False
+        task_failed = (R is RR.FAILED and r.outcome is FK.HOST_TASK_FAILED)
+        return r.terminal_status == ("failed" if task_failed else "done")
+    # ---- 6. 清理路径（T != NONE）
+    if C in (CC.NOT_APPLICABLE, CC.NOTHING_TO_CANCEL, CC.UNCERTAIN_SUBMISSION_UNRESOLVED):
         return False
-    if r.cancel_post_attempted:                              # L1 见证：尝试发送取消请求
-        if not (ev(r.cancel_event) and r.task_known_event < r.cancel_event < r.end_event):
+    if r.cancel_request_confirmed and not r.cancel_post_attempted:
+        return False
+    if r.nonterminal_observed and not r.cancel_request_confirmed:
+        return False
+    if r.cancel_post_attempted:                           # L1 见证：尝试发送取消请求
+        if not (is_int(r.cancel_event, 1) and r.task_known_event < r.cancel_event < r.end_event):
             return False
     else:
-        if r.cancel_event is not None:
-            return False
-        if C not in ("UNCERTAIN_CLEANUP_INTERRUPTED", "UNCERTAIN_TASK_VANISHED"):
-            return False                                     # TERMINAL_* / NO_RESPONSE / NOT_TERMINAL 都必须有取消尝试
-        if C == "UNCERTAIN_TASK_VANISHED" and T != "OBSERVATION_FAILURE":
-            return False                                     # 未发取消而得 404：只来自观察失败
-    if C == "UNCERTAIN_CLEANUP_INTERRUPTED" and T not in ("CALLER_CANCEL", "FATAL_BASEEXCEPTION"):
-        return False                                         # 清理只会被“二次取消”或“致命异常”打断，它们取代 T 成为决定性触发
-    if T == "FATAL_BASEEXCEPTION" and C != "UNCERTAIN_CLEANUP_INTERRUPTED":
-        return False                                         # 致命异常：不做清理 I/O，不会观察到终态
-    return True
+        if r.cancel_event is not None or C not in (CC.UNCERTAIN_CLEANUP_INTERRUPTED, CC.UNCERTAIN_TASK_VANISHED):
+            return False                                  # 其余 C 都以取消尝试为前提
+        if C is CC.UNCERTAIN_TASK_VANISHED and T is not TT.OBSERVATION_FAILURE:
+            return False                                  # 未发取消而得 404：只来自观察失败
+    if (r.outcome is FK.HOST_TASK_VANISHED) != (C is CC.UNCERTAIN_TASK_VANISHED and not r.cancel_post_attempted):
+        return False                                      # 观察得 404（未发取消）⇔ outcome = TASK_VANISHED
+    # 取消结果与“确认 / 观察”见证的对应（R5-06）
+    if C is CC.UNCERTAIN_NO_RESPONSE and (r.cancel_request_confirmed or r.nonterminal_observed):
+        return False                                      # 取消请求从未得到有效确认
+    if C is CC.UNCERTAIN_NOT_TERMINAL and not (r.cancel_request_confirmed and r.nonterminal_observed):
+        return False                                      # 必须确认过取消，且观察到过非终态
+    if C is CC.UNCERTAIN_OBSERVATION_FAILED and not (r.cancel_request_confirmed and not r.nonterminal_observed):
+        return False                                      # 确认之后一次成功观察都没有
+    if C in (CC.TERMINAL_FAILED_OBSERVED, CC.TERMINAL_DONE_OBSERVED) and not r.cancel_request_confirmed:
+        return False                                      # 终态只能在确认取消之后经观察得到
+    if C is CC.UNCERTAIN_TASK_VANISHED and r.cancel_post_attempted and not r.cancel_request_confirmed:
+        return False                                      # 取消响应 missing>=1 或确认后观察 404
+    if C is CC.UNCERTAIN_CLEANUP_INTERRUPTED and T not in (TT.CALLER_CANCEL, TT.FATAL_BASEEXCEPTION):
+        return False                                      # 清理只会被二次取消或致命异常打断，它们取代 T
+    if T is TT.FATAL_BASEEXCEPTION and C is not CC.UNCERTAIN_CLEANUP_INTERRUPTED:
+        return False                                      # 致命异常：不做清理 I/O，不会观察到终态
+    expected_status = {CC.TERMINAL_FAILED_OBSERVED: "failed", CC.TERMINAL_DONE_OBSERVED: "done"}.get(C)
+    return r.terminal_status == expected_status           # 清理路径的 terminal_status = 取消之后观察到的终态
 ```
 
-规则速览（仅帮助阅读，**以代码为准**）：`T→R` 唯一确定（`CALLER_CANCEL→CANCELLED`、`FATAL_BASEEXCEPTION/INTERNAL_ERROR→RAISED`、`DEADLINE/OBSERVATION_FAILURE/ECHO_MISMATCH/SUBMISSION_UNRESOLVED→FAILED`、`NONE→SUCCESS/FAILED`）；`NOT_APPLICABLE ⇔ T=NONE`；`S=CONFIRMED` 必有合法 `task_known_event`（H4）且 `begin < task_known_event < end`；取消尝试的 `cancel_event` 严格落在 `task_known_event` 与 `end` 之间；`TERMINAL_*` / `NO_RESPONSE` / `NOT_TERMINAL` 必须有取消尝试；致命异常不会观察到终态；`UNCERTAIN_CLEANUP_INTERRUPTED` 只来自二次取消或致命异常。
+规则速览（仅帮助阅读，**以代码为准**）：`T→R` 唯一确定（`CALLER_CANCEL→CANCELLED`、`FATAL_BASEEXCEPTION/INTERNAL_ERROR→RAISED`、`DEADLINE/OBSERVATION_FAILURE/ECHO_MISMATCH/SUBMISSION_UNRESOLVED→FAILED`、`NONE→SUCCESS/FAILED`）；`NOT_APPLICABLE ⇔ T=NONE`；`S=CONFIRMED` 必有合法 `task_known_event`（H4）且 `begin < task_known_event < end`；取消尝试的 `cancel_event` 严格落在 `task_known_event` 与 `end` 之间；`TERMINAL_*` 必须在**确认**之后；`NO_RESPONSE ⇒ ¬cf ∧ ¬nt`；`NOT_TERMINAL ⇒ cf ∧ nt`；`OBSERVATION_FAILED ⇒ cf ∧ ¬nt`；致命异常不会观察到终态；`UNCERTAIN_CLEANUP_INTERRUPTED` 只来自二次取消或致命异常。
 
 #### 10.3.2 事件与标识
 
 * 每个 engine 有一个单调递增的逻辑事件计数器 `next_event`（同一 asyncio 事件循环内天然全序）；`begin_event` / `task_known_event` / `cancel_event` / `end_event` 都取自它，因此**同一 engine 内全部记录的事件互不相同且严格递增**；不同 engine 的计数器相互独立，比较只在 engine 内进行。事件值必须是 `int` 且排除 `bool`、`≥ 1`。
-* `seq` 在 engine 内从 1 连续递增（稠密）；`attempt_id == "e{engine_index}-a{seq}"`，`engine_index` 由模块级 `itertools.count` 分配、进程内唯一。稠密的 `seq` 使 `attempt_id` 的唯一性无需保存全部历史 id：分配时断言 `seq == last_seq + 1`（第 20.5 节）。
-* `task_known_event`（H4）在 engine 完成 `202` + 严格 reader 校验、记录 `host_task_id` 的那一刻分配；`cancel_event` 在调用 `client.cancel_task` **之前**分配并置 `cancel_post_attempted = True`（“尝试发送”，**不是**“已送达”）。
+* `seq` 在 engine 内从 1 连续递增（稠密，**按开始顺序**分配）；`attempt_id == "e{engine_index}-a{seq}"`，`engine_index` 由模块级 `itertools.count` 分配、进程内唯一。`completion_seq` 在 engine 内从 1 连续递增（稠密，**按完成顺序**分配）；乱序完成时 `seq` 与 `completion_seq` 不同（第 20.5 节）。分配时断言 `seq == last_seq + 1`、`completion_seq == last_completion_seq + 1`。
+* `task_known_event`（H4）在 engine 完成 `202` + 严格 reader 校验、记录 `host_task_id` 的那一刻分配；`cancel_event` 在调用 `client.cancel_task` **之前**分配并置 `cancel_post_attempted = True`（“尝试发送”，**不是**“已送达”）；`cancel_request_confirmed` 在取得有效 `200` 之后置真；`nonterminal_observed` 在取消确认之后的观察得到 `queued` / `running` 时置真。
 
 #### 10.3.3 取消请求见证（L1；自报告与独立事实的区分）
 
-`cancel_post_attempted` / `cancel_event` / `task_known_event` / `attempt_id` 是 P6 **自报告**的见证；谓词只能验证它们的**内部一致性**。网络事实只由独立故障代理证明：对账规则见第 14.4 节（O2-5：取消请求的精确 id 与请求体键集、`TERMINAL_*` 必须有代理观察到的取消）。绝不把布尔值当作“网络请求真实发生”的独立证明。
+`cancel_post_attempted` / `cancel_request_confirmed` / `nonterminal_observed` / `cancel_event` / `task_known_event` / `attempt_id` 是 P6 **自报告**的见证；谓词只能验证它们的**内部一致性**。网络事实只由独立故障代理证明：对账规则见第 14.4 节（O2-5：取消请求的精确 id 与请求体键集、`TERMINAL_*` 必须有代理观察到的取消）。绝不把布尔值当作“网络请求真实发生”的独立证明。
 
 #### 10.3.4 可产生记录表（独立参考模拟器的输出；谓词接受集合必须与之相等）
 
-下表共 **39** 条，由一个与谓词**分别编写**的控制流步骤机（参考模拟器；其源码已在审查证据包中，可立即检查；不是合同代码）穷举 `POST` 前 / `POST` 在途 / 确认后 × 取消 / 二次取消 / 致命 / 内部错误 / deadline / 观察失败 / echo 不符 / 404 / 正常成功与失败得到。预提交验证对 `3 × 8 × 9 × 4 × 2 = 1728` 个基础组合逐一判定：**谓词接受 ⇔ 在本表中**。命名场景（含旧版“命名场景表”）一律以本表的 ID 引用，不再另立表格。
+下表共 **63** 条，由一个与谓词**分别编写**的控制流步骤机（参考模拟器；其源码已在审查证据包中，可立即检查；不是合同代码）穷举 `POST` 前 / `POST` 在途 / 确认后 × 取消 / 二次取消 / 致命 / 内部错误 / deadline / 观察失败 / echo 不符 / 404 / 正常成功与失败 × 取消确认与否 × 观察到非终态与否得到。Gate B 对 `3 × 8 × 10 × 4 × 2 × 2 × 2 = 7680`（瞬态 `SUBMISSION_ATTEMPTED` 另行单独断言为非法） 个基础组合逐一判定：**谓词接受 ⇔ 在本表中**。命名场景一律以本表的 ID 引用，不再另立表格。
 
-| ID | S | T | C | R | `cancel_post_attempted` | abandoned | uncertain | creation_unknown | `host_task_id` | `task_known_event` | `cancel_event` | `outcome` | 场景 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| P01 | NOT_ATTEMPTED | CALLER_CANCEL | NOTHING_TO_CANCEL | CANCELLED | 否 | 否 | 否 | 否 | 无 | 无 | 无 | 无 | POST 前取消 |
-| P02 | NOT_ATTEMPTED | INTERNAL_ERROR | NOTHING_TO_CANCEL | RAISED | 否 | 否 | 否 | 否 | 无 | 无 | 无 | 无 | POST 前内部错误 |
-| P03 | NOT_ATTEMPTED | FATAL_BASEEXCEPTION | NOTHING_TO_CANCEL | RAISED | 否 | 否 | 否 | 否 | 无 | 无 | 无 | 无 | POST 前致命异常 |
-| P04 | UNKNOWN | CALLER_CANCEL | UNCERTAIN_SUBMISSION_UNRESOLVED | CANCELLED | 否 | 是 | 是 | 是 | 无 | 无 | 无 | 无 | 提交在途被取消（含二次取消） |
-| P05 | UNKNOWN | SUBMISSION_UNRESOLVED | UNCERTAIN_SUBMISSION_UNRESOLVED | FAILED | 否 | 是 | 是 | 是 | 无 | 无 | 无 | 有 | 提交失败 / 超时 / 响应丢失 / 401 / 5xx |
-| P06 | UNKNOWN | INTERNAL_ERROR | UNCERTAIN_SUBMISSION_UNRESOLVED | RAISED | 否 | 是 | 是 | 是 | 无 | 无 | 无 | 无 | 提交在途内部错误 |
-| P07 | UNKNOWN | FATAL_BASEEXCEPTION | UNCERTAIN_SUBMISSION_UNRESOLVED | RAISED | 否 | 是 | 是 | 是 | 无 | 无 | 无 | 无 | 提交在途致命异常 |
-| P08 | CONFIRMED | NONE | NOT_APPLICABLE | FAILED | 否 | 否 | 否 | 否 | 有 | 有 | 无 | 有 | 正常失败（宿主任务 failed / done 之后映射失败） |
-| P09 | CONFIRMED | NONE | NOT_APPLICABLE | SUCCESS | 否 | 否 | 否 | 否 | 有 | 有 | 无 | 无 | 正常成功 |
-| P10 | CONFIRMED | CALLER_CANCEL | TERMINAL_FAILED_OBSERVED | CANCELLED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 无 | CALLER_CANCEL 清理：TERMINAL_FAILED_OBSERVED |
-| P11 | CONFIRMED | CALLER_CANCEL | TERMINAL_DONE_OBSERVED | CANCELLED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 无 | CALLER_CANCEL 清理：TERMINAL_DONE_OBSERVED |
-| P12 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_NO_RESPONSE | CANCELLED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | CALLER_CANCEL 清理：UNCERTAIN_NO_RESPONSE |
-| P13 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_NOT_TERMINAL | CANCELLED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | CALLER_CANCEL 清理：UNCERTAIN_NOT_TERMINAL |
-| P14 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_TASK_VANISHED | CANCELLED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | CALLER_CANCEL 清理：UNCERTAIN_TASK_VANISHED |
-| P15 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_CLEANUP_INTERRUPTED | CANCELLED | 否 | 是 | 是 | 否 | 有 | 有 | 无 | 无 | 取消尝试之前被二次取消打断 |
-| P16 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_CLEANUP_INTERRUPTED | CANCELLED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | 取消尝试之后被二次取消打断 |
-| P17 | CONFIRMED | DEADLINE | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 有 | DEADLINE 清理：TERMINAL_FAILED_OBSERVED |
-| P18 | CONFIRMED | DEADLINE | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 有 | DEADLINE 清理：TERMINAL_DONE_OBSERVED |
-| P19 | CONFIRMED | DEADLINE | UNCERTAIN_NO_RESPONSE | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | DEADLINE 清理：UNCERTAIN_NO_RESPONSE |
-| P20 | CONFIRMED | DEADLINE | UNCERTAIN_NOT_TERMINAL | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | DEADLINE 清理：UNCERTAIN_NOT_TERMINAL |
-| P21 | CONFIRMED | DEADLINE | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | DEADLINE 清理：UNCERTAIN_TASK_VANISHED |
-| P22 | CONFIRMED | OBSERVATION_FAILURE | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 有 | OBSERVATION_FAILURE 清理：TERMINAL_FAILED_OBSERVED |
-| P23 | CONFIRMED | OBSERVATION_FAILURE | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 有 | OBSERVATION_FAILURE 清理：TERMINAL_DONE_OBSERVED |
-| P24 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_NO_RESPONSE | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | OBSERVATION_FAILURE 清理：UNCERTAIN_NO_RESPONSE |
-| P25 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_NOT_TERMINAL | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | OBSERVATION_FAILURE 清理：UNCERTAIN_NOT_TERMINAL |
-| P26 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_TASK_VANISHED | FAILED | 否 | 是 | 是 | 否 | 有 | 有 | 无 | 有 | 观察得到 404（未发取消） |
-| P27 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | OBSERVATION_FAILURE 清理：UNCERTAIN_TASK_VANISHED |
-| P28 | CONFIRMED | ECHO_MISMATCH | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 有 | ECHO_MISMATCH 清理：TERMINAL_FAILED_OBSERVED |
-| P29 | CONFIRMED | ECHO_MISMATCH | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 有 | ECHO_MISMATCH 清理：TERMINAL_DONE_OBSERVED |
-| P30 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_NO_RESPONSE | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | ECHO_MISMATCH 清理：UNCERTAIN_NO_RESPONSE |
-| P31 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_NOT_TERMINAL | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | ECHO_MISMATCH 清理：UNCERTAIN_NOT_TERMINAL |
-| P32 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 有 | ECHO_MISMATCH 清理：UNCERTAIN_TASK_VANISHED |
-| P33 | CONFIRMED | INTERNAL_ERROR | TERMINAL_FAILED_OBSERVED | RAISED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 无 | INTERNAL_ERROR 清理：TERMINAL_FAILED_OBSERVED |
-| P34 | CONFIRMED | INTERNAL_ERROR | TERMINAL_DONE_OBSERVED | RAISED | 是 | 是 | 否 | 否 | 有 | 有 | 有 | 无 | INTERNAL_ERROR 清理：TERMINAL_DONE_OBSERVED |
-| P35 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_NO_RESPONSE | RAISED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | INTERNAL_ERROR 清理：UNCERTAIN_NO_RESPONSE |
-| P36 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_NOT_TERMINAL | RAISED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | INTERNAL_ERROR 清理：UNCERTAIN_NOT_TERMINAL |
-| P37 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_TASK_VANISHED | RAISED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | INTERNAL_ERROR 清理：UNCERTAIN_TASK_VANISHED |
-| P38 | CONFIRMED | FATAL_BASEEXCEPTION | UNCERTAIN_CLEANUP_INTERRUPTED | RAISED | 否 | 是 | 是 | 否 | 有 | 有 | 无 | 无 | 确认后致命异常（无清理 I/O） |
-| P39 | CONFIRMED | FATAL_BASEEXCEPTION | UNCERTAIN_CLEANUP_INTERRUPTED | RAISED | 是 | 是 | 是 | 否 | 有 | 有 | 有 | 无 | 确认后致命异常（打断进行中的取消尝试） |
+| ID | S | T | C | R | cpa | cf | nt | abandoned | uncertain | creation_unknown | 场景 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| P01 | NOT_ATTEMPTED | CALLER_CANCEL | NOTHING_TO_CANCEL | CANCELLED | 否 | 否 | 否 | 否 | 否 | 否 | POST 前 取消 |
+| P02 | NOT_ATTEMPTED | FATAL_BASEEXCEPTION | NOTHING_TO_CANCEL | RAISED | 否 | 否 | 否 | 否 | 否 | 否 | POST 前 致命异常 |
+| P03 | NOT_ATTEMPTED | INTERNAL_ERROR | NOTHING_TO_CANCEL | RAISED | 否 | 否 | 否 | 否 | 否 | 否 | POST 前 内部错误 |
+| P04 | UNKNOWN | SUBMISSION_UNRESOLVED | UNCERTAIN_SUBMISSION_UNRESOLVED | FAILED | 否 | 否 | 否 | 是 | 是 | 是 | 提交在途 失败 / 超时 / 响应丢失 / 401 / 5xx |
+| P05 | UNKNOWN | CALLER_CANCEL | UNCERTAIN_SUBMISSION_UNRESOLVED | CANCELLED | 否 | 否 | 否 | 是 | 是 | 是 | 提交在途 被取消 |
+| P06 | UNKNOWN | FATAL_BASEEXCEPTION | UNCERTAIN_SUBMISSION_UNRESOLVED | RAISED | 否 | 否 | 否 | 是 | 是 | 是 | 提交在途 致命异常 |
+| P07 | UNKNOWN | INTERNAL_ERROR | UNCERTAIN_SUBMISSION_UNRESOLVED | RAISED | 否 | 否 | 否 | 是 | 是 | 是 | 提交在途 内部错误 |
+| P08 | CONFIRMED | NONE | NOT_APPLICABLE | SUCCESS | 否 | 否 | 否 | 否 | 否 | 否 | 正常成功 |
+| P09 | CONFIRMED | NONE | NOT_APPLICABLE | FAILED | 否 | 否 | 否 | 否 | 否 | 否 | 正常失败（宿主 failed / done 之后映射失败） |
+| P10 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_CLEANUP_INTERRUPTED | CANCELLED | 否 | 否 | 否 | 是 | 是 | 否 | 二次取消打断：取消请求发出之前 |
+| P11 | CONFIRMED | FATAL_BASEEXCEPTION | UNCERTAIN_CLEANUP_INTERRUPTED | RAISED | 否 | 否 | 否 | 是 | 是 | 否 | 确认后致命异常（无清理 I/O） |
+| P12 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_NO_RESPONSE | FAILED | 是 | 否 | 否 | 是 | 是 | 否 | OBSERVATION_FAILURE 清理：UNCERTAIN_NO_RESPONSE |
+| P13 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_CLEANUP_INTERRUPTED | CANCELLED | 是 | 否 | 否 | 是 | 是 | 否 | 二次取消打断：取消请求在途 |
+| P14 | CONFIRMED | FATAL_BASEEXCEPTION | UNCERTAIN_CLEANUP_INTERRUPTED | RAISED | 是 | 否 | 否 | 是 | 是 | 否 | 确认后致命异常（打断进行中的取消请求 / 观察） |
+| P15 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 否 | 是 | 是 | 否 | OBSERVATION_FAILURE 清理：UNCERTAIN_TASK_VANISHED（未见非终态） |
+| P16 | CONFIRMED | OBSERVATION_FAILURE | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 否 | 是 | 否 | 否 | OBSERVATION_FAILURE 清理：TERMINAL_FAILED_OBSERVED（未见非终态） |
+| P17 | CONFIRMED | OBSERVATION_FAILURE | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 否 | 是 | 否 | 否 | OBSERVATION_FAILURE 清理：TERMINAL_DONE_OBSERVED（未见非终态） |
+| P18 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_CLEANUP_INTERRUPTED | CANCELLED | 是 | 是 | 否 | 是 | 是 | 否 | 二次取消打断：确认后观察中 |
+| P19 | CONFIRMED | FATAL_BASEEXCEPTION | UNCERTAIN_CLEANUP_INTERRUPTED | RAISED | 是 | 是 | 否 | 是 | 是 | 否 | 确认后致命异常（打断进行中的取消请求 / 观察） |
+| P20 | CONFIRMED | OBSERVATION_FAILURE | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 是 | 是 | 否 | 否 | OBSERVATION_FAILURE 清理：TERMINAL_FAILED_OBSERVED（见过非终态） |
+| P21 | CONFIRMED | OBSERVATION_FAILURE | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 是 | 是 | 否 | 否 | OBSERVATION_FAILURE 清理：TERMINAL_DONE_OBSERVED（见过非终态） |
+| P22 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 是 | 是 | 是 | 否 | OBSERVATION_FAILURE 清理：UNCERTAIN_TASK_VANISHED（见过非终态） |
+| P23 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_CLEANUP_INTERRUPTED | CANCELLED | 是 | 是 | 是 | 是 | 是 | 否 | 二次取消打断：见过非终态后观察中 |
+| P24 | CONFIRMED | FATAL_BASEEXCEPTION | UNCERTAIN_CLEANUP_INTERRUPTED | RAISED | 是 | 是 | 是 | 是 | 是 | 否 | 确认后致命异常（打断进行中的取消请求 / 观察） |
+| P25 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_NOT_TERMINAL | FAILED | 是 | 是 | 是 | 是 | 是 | 否 | OBSERVATION_FAILURE 清理：UNCERTAIN_NOT_TERMINAL（见过非终态） |
+| P26 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_OBSERVATION_FAILED | FAILED | 是 | 是 | 否 | 是 | 是 | 否 | OBSERVATION_FAILURE 清理：UNCERTAIN_OBSERVATION_FAILED（未见非终态） |
+| P27 | CONFIRMED | OBSERVATION_FAILURE | UNCERTAIN_TASK_VANISHED | FAILED | 否 | 否 | 否 | 是 | 是 | 否 | 观察得 404（未发取消） |
+| P28 | CONFIRMED | DEADLINE | UNCERTAIN_NO_RESPONSE | FAILED | 是 | 否 | 否 | 是 | 是 | 否 | DEADLINE 清理：UNCERTAIN_NO_RESPONSE |
+| P29 | CONFIRMED | DEADLINE | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 否 | 是 | 是 | 否 | DEADLINE 清理：UNCERTAIN_TASK_VANISHED（未见非终态） |
+| P30 | CONFIRMED | DEADLINE | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 否 | 是 | 否 | 否 | DEADLINE 清理：TERMINAL_FAILED_OBSERVED（未见非终态） |
+| P31 | CONFIRMED | DEADLINE | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 否 | 是 | 否 | 否 | DEADLINE 清理：TERMINAL_DONE_OBSERVED（未见非终态） |
+| P32 | CONFIRMED | DEADLINE | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 是 | 是 | 否 | 否 | DEADLINE 清理：TERMINAL_FAILED_OBSERVED（见过非终态） |
+| P33 | CONFIRMED | DEADLINE | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 是 | 是 | 否 | 否 | DEADLINE 清理：TERMINAL_DONE_OBSERVED（见过非终态） |
+| P34 | CONFIRMED | DEADLINE | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 是 | 是 | 是 | 否 | DEADLINE 清理：UNCERTAIN_TASK_VANISHED（见过非终态） |
+| P35 | CONFIRMED | DEADLINE | UNCERTAIN_NOT_TERMINAL | FAILED | 是 | 是 | 是 | 是 | 是 | 否 | DEADLINE 清理：UNCERTAIN_NOT_TERMINAL（见过非终态） |
+| P36 | CONFIRMED | DEADLINE | UNCERTAIN_OBSERVATION_FAILED | FAILED | 是 | 是 | 否 | 是 | 是 | 否 | DEADLINE 清理：UNCERTAIN_OBSERVATION_FAILED（未见非终态） |
+| P37 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_NO_RESPONSE | FAILED | 是 | 否 | 否 | 是 | 是 | 否 | ECHO_MISMATCH 清理：UNCERTAIN_NO_RESPONSE |
+| P38 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 否 | 是 | 是 | 否 | ECHO_MISMATCH 清理：UNCERTAIN_TASK_VANISHED（未见非终态） |
+| P39 | CONFIRMED | ECHO_MISMATCH | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 否 | 是 | 否 | 否 | ECHO_MISMATCH 清理：TERMINAL_FAILED_OBSERVED（未见非终态） |
+| P40 | CONFIRMED | ECHO_MISMATCH | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 否 | 是 | 否 | 否 | ECHO_MISMATCH 清理：TERMINAL_DONE_OBSERVED（未见非终态） |
+| P41 | CONFIRMED | ECHO_MISMATCH | TERMINAL_FAILED_OBSERVED | FAILED | 是 | 是 | 是 | 是 | 否 | 否 | ECHO_MISMATCH 清理：TERMINAL_FAILED_OBSERVED（见过非终态） |
+| P42 | CONFIRMED | ECHO_MISMATCH | TERMINAL_DONE_OBSERVED | FAILED | 是 | 是 | 是 | 是 | 否 | 否 | ECHO_MISMATCH 清理：TERMINAL_DONE_OBSERVED（见过非终态） |
+| P43 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_TASK_VANISHED | FAILED | 是 | 是 | 是 | 是 | 是 | 否 | ECHO_MISMATCH 清理：UNCERTAIN_TASK_VANISHED（见过非终态） |
+| P44 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_NOT_TERMINAL | FAILED | 是 | 是 | 是 | 是 | 是 | 否 | ECHO_MISMATCH 清理：UNCERTAIN_NOT_TERMINAL（见过非终态） |
+| P45 | CONFIRMED | ECHO_MISMATCH | UNCERTAIN_OBSERVATION_FAILED | FAILED | 是 | 是 | 否 | 是 | 是 | 否 | ECHO_MISMATCH 清理：UNCERTAIN_OBSERVATION_FAILED（未见非终态） |
+| P46 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_NO_RESPONSE | CANCELLED | 是 | 否 | 否 | 是 | 是 | 否 | CALLER_CANCEL 清理：UNCERTAIN_NO_RESPONSE |
+| P47 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_TASK_VANISHED | CANCELLED | 是 | 是 | 否 | 是 | 是 | 否 | CALLER_CANCEL 清理：UNCERTAIN_TASK_VANISHED（未见非终态） |
+| P48 | CONFIRMED | CALLER_CANCEL | TERMINAL_FAILED_OBSERVED | CANCELLED | 是 | 是 | 否 | 是 | 否 | 否 | CALLER_CANCEL 清理：TERMINAL_FAILED_OBSERVED（未见非终态） |
+| P49 | CONFIRMED | CALLER_CANCEL | TERMINAL_DONE_OBSERVED | CANCELLED | 是 | 是 | 否 | 是 | 否 | 否 | CALLER_CANCEL 清理：TERMINAL_DONE_OBSERVED（未见非终态） |
+| P50 | CONFIRMED | CALLER_CANCEL | TERMINAL_FAILED_OBSERVED | CANCELLED | 是 | 是 | 是 | 是 | 否 | 否 | CALLER_CANCEL 清理：TERMINAL_FAILED_OBSERVED（见过非终态） |
+| P51 | CONFIRMED | CALLER_CANCEL | TERMINAL_DONE_OBSERVED | CANCELLED | 是 | 是 | 是 | 是 | 否 | 否 | CALLER_CANCEL 清理：TERMINAL_DONE_OBSERVED（见过非终态） |
+| P52 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_TASK_VANISHED | CANCELLED | 是 | 是 | 是 | 是 | 是 | 否 | CALLER_CANCEL 清理：UNCERTAIN_TASK_VANISHED（见过非终态） |
+| P53 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_NOT_TERMINAL | CANCELLED | 是 | 是 | 是 | 是 | 是 | 否 | CALLER_CANCEL 清理：UNCERTAIN_NOT_TERMINAL（见过非终态） |
+| P54 | CONFIRMED | CALLER_CANCEL | UNCERTAIN_OBSERVATION_FAILED | CANCELLED | 是 | 是 | 否 | 是 | 是 | 否 | CALLER_CANCEL 清理：UNCERTAIN_OBSERVATION_FAILED（未见非终态） |
+| P55 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_NO_RESPONSE | RAISED | 是 | 否 | 否 | 是 | 是 | 否 | INTERNAL_ERROR 清理：UNCERTAIN_NO_RESPONSE |
+| P56 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_TASK_VANISHED | RAISED | 是 | 是 | 否 | 是 | 是 | 否 | INTERNAL_ERROR 清理：UNCERTAIN_TASK_VANISHED（未见非终态） |
+| P57 | CONFIRMED | INTERNAL_ERROR | TERMINAL_FAILED_OBSERVED | RAISED | 是 | 是 | 否 | 是 | 否 | 否 | INTERNAL_ERROR 清理：TERMINAL_FAILED_OBSERVED（未见非终态） |
+| P58 | CONFIRMED | INTERNAL_ERROR | TERMINAL_DONE_OBSERVED | RAISED | 是 | 是 | 否 | 是 | 否 | 否 | INTERNAL_ERROR 清理：TERMINAL_DONE_OBSERVED（未见非终态） |
+| P59 | CONFIRMED | INTERNAL_ERROR | TERMINAL_FAILED_OBSERVED | RAISED | 是 | 是 | 是 | 是 | 否 | 否 | INTERNAL_ERROR 清理：TERMINAL_FAILED_OBSERVED（见过非终态） |
+| P60 | CONFIRMED | INTERNAL_ERROR | TERMINAL_DONE_OBSERVED | RAISED | 是 | 是 | 是 | 是 | 否 | 否 | INTERNAL_ERROR 清理：TERMINAL_DONE_OBSERVED（见过非终态） |
+| P61 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_TASK_VANISHED | RAISED | 是 | 是 | 是 | 是 | 是 | 否 | INTERNAL_ERROR 清理：UNCERTAIN_TASK_VANISHED（见过非终态） |
+| P62 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_NOT_TERMINAL | RAISED | 是 | 是 | 是 | 是 | 是 | 否 | INTERNAL_ERROR 清理：UNCERTAIN_NOT_TERMINAL（见过非终态） |
+| P63 | CONFIRMED | INTERNAL_ERROR | UNCERTAIN_OBSERVATION_FAILED | RAISED | 是 | 是 | 否 | 是 | 是 | 否 | INTERNAL_ERROR 清理：UNCERTAIN_OBSERVATION_FAILED（未见非终态） |
 
-**证据声明（必须读）**：参考模拟器与谓词**都由同一位 Designer 编写**——`Reference simulator author: Designer`；`Independence: NOT ESTABLISHED`。两者相等（1728 个基础组合、39 个接受、39 个独立模拟的可产生状态、905 个非法字段变异、819 个状态翻转）只说明它们彼此一致，**不是**独立审查的结论；独立复核者应据本表与下面的字段规则自行复算。
+**证据声明（必须读）**：参考模拟器与谓词**都由同一位 Designer 编写**——`Reference simulator author: Designer`；`Independence: NOT ESTABLISHED`。两者相等只说明它们彼此一致，**不是**独立审查的结论；独立复核者应据本表与下面的字段规则自行复算。
 
-**字段值与边界（复算所需的全部规则；与谓词逐条对应）**：① `begin_event`、`end_event` 为 `int`（排除 `bool`）、`≥ 1`，且 `begin_event < end_event`；② `host_task_id`：仅 `S = CONFIRMED` 时存在，且为 `int ≥ 1`（排除 `bool`），否则为 `None`；③ `task_known_event`：仅 `S = CONFIRMED` 时存在，且 `begin_event < task_known_event < end_event`；④ `cancel_event`：存在 ⇔ `cancel_post_attempted = 是`，且 `task_known_event < cancel_event < end_event`；⑤ `outcome`：存在 ⇔ `R = FAILED`；⑥ `seq ≥ 1`、`engine_index ≥ 1`、`attempt_id == "e{engine_index}-a{seq}"`；⑦ `S = ATTEMPTED` 不得出现在终态记录；⑧ 表中未列出的 `(S, T, C, R, cancel_post_attempted)` 组合一律非法。
+**字段值与边界（复算所需的全部规则；与谓词逐条对应）**：① `begin_event`、`end_event` 为 `int`（排除 `bool`）、`≥ 1`，且 `begin_event < end_event`；② `host_task_id`：仅 `S = CONFIRMED` 时存在，且为 `int ≥ 1`（排除 `bool`），否则为 `None`；③ `task_known_event`：仅 `S = CONFIRMED` 时存在，且 `begin_event < task_known_event < end_event`；④ `cancel_event`：存在 ⇔ `cancel_post_attempted = 是`，且 `task_known_event < cancel_event < end_event`；⑤ `outcome`：存在 ⇔ `R = FAILED`，且为与触发匹配的 `HostFailureKind` 真实成员；⑥ `seq ≥ 1`、`completion_seq ≥ 1`、`engine_index ≥ 1`、`attempt_id == "e{engine_index}-a{seq}"`；⑦ `S = ATTEMPTED` 不得出现在终态记录；⑧ 表中未列出的 `(S, T, C, R, cpa, cf, nt)` 组合一律非法；⑨ `SUCCESS ⇒ metadata_id ≠ None`。
 
-说明：① `S=UNKNOWN` 的取消只有 P04 一种表示，同时保留“创建未知”与“被取消”（`T = CALLER_CANCEL`，`C = UNCERTAIN_SUBMISSION_UNRESOLVED`）；二次取消不产生新状态。② 清理被二次取消打断时，`T` 被取代为 `CALLER_CANCEL`，`R = CANCELLED`；被致命异常打断时 `T = FATAL_BASEEXCEPTION`，`R = RAISED`。③ `INTERNAL_ERROR` 触发的清理若再被二次取消打断，终态是 `CANCELLED`（`T = CALLER_CANCEL`），因此 `INTERNAL_ERROR + CANCELLED` 不合法。④ 提交（`POST`）不受 aggregate deadline 约束，仅受 `request_timeout` 约束，所以 `S=UNKNOWN` 没有 `DEADLINE`。⑤ 取消落在 `POST` 在途期间时不再等待响应（第 10.2 节第 2 条），因此没有“取消后取得 `202` 而变为 CONFIRMED”的路径。
+说明：① `S=UNKNOWN` 的取消只有 P05 一种表示，同时保留“创建未知”与“被取消”（`T = CALLER_CANCEL`，`C = UNCERTAIN_SUBMISSION_UNRESOLVED`）；二次取消不产生新状态。② 清理被二次取消打断时，`T` 被取代为 `CALLER_CANCEL`，`R = CANCELLED`；被致命异常打断时 `T = FATAL_BASEEXCEPTION`，`R = RAISED`。③ `INTERNAL_ERROR` 触发的清理若再被二次取消打断，终态是 `CANCELLED`（`T = CALLER_CANCEL`），因此 `INTERNAL_ERROR + CANCELLED` 不合法。④ 提交（`POST`）不受 aggregate deadline 约束，仅受 `request_timeout` 约束，所以 `S=UNKNOWN` 没有 `DEADLINE`。⑤ 取消落在 `POST` 在途期间时不再等待响应（第 10.2 节第 2 条），因此没有“取消后取得 `202` 而变为 CONFIRMED”的路径。⑥ `OBSERVATION_FAILURE` 触发 `HOST_TASK_VANISHED`（观察 404）时**不发送取消**（任务不存在），对应 P27 唯一的 `cpa = 否` 的 `TASK_VANISHED`。
 
 #### 计数口径（精确；`AmaneHostAuditSnapshot` 的字段由记录推导，测试逐项对账）
 
@@ -991,6 +1267,164 @@ uncertain_cancellations = #{ C ∈ UNCERTAIN_* }
 * 取消不确定性是**一等输出**：`AmaneHostAuditSnapshot.abandoned_attempts > 0`（L3 未验证）或 `uncertain_cancellations > 0` 或 `creation_unknown > 0` 时，门面文档与 HANDOFF 要求调用方向用户呈现
   “可能仍有未停止的 Amane SCRAPE 任务，且它们仍可能写入 Amane Metadata”。
 
+### 10.5 致命 `BaseException`：F3（同一实例，边界净化）与方案 X-NARROW（Design-R5 最终致命异常安全架构修复；**待独立复核；不是 Security PASS**）
+
+**治理状态**：F1（保持身份、保留第三方 traceback 中的凭据）与 F2（新实例）均**未被接受**；Y（只检测）与 Z（改写异常参数）继续 **REJECTED**；**X-NARROW 获授权**（带强制条件，见下）。独立安全复核（Reviewer C）对 R5 草案给出 FAIL，三个必须修复的 finding（R5-C-01 / R5-C-02 / R5-C-03，已被独立确认关闭，本轮不重开）、随后的 R5-EV-01（已独立确认关闭）、以及最新独立复核重开 / 新增的三个 finding（R5-CL-01、R5-GOV-01、R5-NEW-01）与本节的对应修复：
+
+| Finding | 内容 | 修复（本节 / 第 10.2 节） |
+|---|---|---|
+| R5-C-01 | 致命异常落在 `_transport` 的 `except Exception` 处理体（或 `finally`、try 之后的代码）里时，兄弟 `except (KeyboardInterrupt, …)` 捕获不到，F3 不运行，`Request` 经 P6 栈帧与 `__context__` 可达；公共 client 与 `aggregate` 两条出口都受影响 | **边界所有权**：引用脱离只在**边界帧**的致命处理体里执行，`_transport` 不再有致命处理体；边界切断异常通向它之下全部帧的引用（任何字节码处被打断都一样；已结束的帧随引用计数释放）；见“生命周期设计” |
+| R5-C-02 | 链成员“允许名单”只看 `args` / `__dict__` / `__notes__`，看不见内置异常的 C 级槽位（`AttributeError.obj`、`OSError.filename`、`ImportError.path`、`StopIteration.value`…）；审计器 `reach.py` 同样有盲区 | **链一律整条切断**（不再有允许名单）；审计器改用 `gc.get_referents`（`tp_traverse`）覆盖 C 级槽位，并有红绿孪生 |
+| R5-C-03 | 外部取消 + 内部 deadline + 内层把 `CancelledError` 转换成普通异常：`task.cancelling() == 1` 但没有 `CancelledError` 再被投递，调用方的取消被吞掉 | 取消归属在**一处**按计数分类（第 10.2 节）；`cancelling() > base` ⇒ 一定存在尚未传播的外部取消 ⇒ 抛出新的 `CancelledError` |
+| R5-CL-01 | `frame.clear()` 对**挂起**的生成器 / 协程帧：Python 3.11 / 3.12 上终结该帧并运行其 `finally`（执行了别的任务 / 生成器的清理代码），3.13 / 3.14 上抛 `RuntimeError`。上一版用 `gc.get_referrers` 判断“帧是否仍被存活的协程持有”来避免清理挂起帧——但该判断不可靠（见 R5-GOV-01），本包自己的挂起帧仍被终结 | **确定性所有权清理 + 异常引用脱离**（见“生命周期设计”第 4 条）：F3 生产路径**不访问任何帧**——不 `clear()`、不枚举引用者、不取栈帧；本帧持有的响应数据由拥有它的边界帧自己用 `STORE_FAST` 重绑；然后异常的 `__traceback__` / `__context__` / `__cause__` 一律置 `None`，所有已结束的帧失去最后一个引用，由引用计数连同局部一起释放；挂起的帧（本包的或第三方的）从不被触碰，因此不会有 `finally` 被执行；红 / 绿孪生 `frame_safety.py`（含 `gc.freeze()`）+ Reviewer C 的 `frameclear.py` / `liveness.py` 基线 |
+| R5-GOV-01 | 上一版生产实现把 `gc.get_referrers()` 当作“帧是否已结束”的证明。`gc.freeze()`（预 fork 服务器常用的公共 API）把对象移入永久代，`gc.get_referrers` 看不到它们，存活的协程因而不可见，其帧被清理并运行 `finally`；该扫描还向进程内审计钩子暴露帧，且代价随堆大小线性增长 | 生产实现**完全不再使用**对象图枚举：禁止 `gc.get_referrers` / `sys._getframe` / `frame.clear`（及 `gc.collect` / `gc.get_objects` / 全堆扫描等替代）；AST 守卫 `fatal_path_guard.py`（16 个变异全部被抓住，干净片段通过）；旧版在 `gc.freeze()` 下失败（本包挂起帧的 `finally` 被执行、`Request` 仍可达），新版通过 |
+| R5-NEW-01 | F3 为了清理帧而调用 `sys._getframe` / `gc.get_referrers`，二者都会触发进程内审计事件，事件参数就是尚未清理的帧——带 `Authorization` 的 `Request` 经 `f_locals` 可达 | F3 不再发出任何此类事件（没有 `sys._getframe`、没有 `gc.*`）；`audit_f3.py` 在公共 client 与 `aggregate` 两条出口上记录**每个**审计事件，要求：由本包代码触发的 `sys._getframe` / `gc.*` 事件为 0，且没有事件的参数能到达带 `Authorization` 的 `Request`；Reviewer C 的 `audit_getframe.py` 原样运行（旧版：两类事件的参数都暴露凭据；新版：不暴露）。验收对象是“P6 不应主动把敏感帧作为新增审计事件参数暴露”，**不是**“审计钩子是否有执行权限”（后者属 B1） |
+| R5-EV-01 | 证据工具缺陷：`reach.py` 只有在请求头含测试 canary 时才报告 `Request`——对任何**其它**凭据失明 | 审计器检测**任何**带 `Authorization` 的 `httpx` / `httpcore` `Request` 与 `Response.request`，与令牌值无关（仅证据工具；不改变生产保护范围）；非 canary 正向对照、负向对照、变异（去掉规则必须变红）：`reach_selftest.py` |
+
+**先区分六个概念（不得混为一谈）**
+
+| 概念 | F3 之下的状态 |
+|---|---|
+| 异常**对象身份** | **保持**：调用方收到的对象 `is` 原始致命异常对象（裸 `raise`；不创建替代实例） |
+| 异常**类型** | **保持** |
+| 异常**参数**（`args`、`__dict__`、`__notes__`） | **不读取、不修改**；它们由抛出方创建，本包只保证“本包没有新增” |
+| **traceback 保真度** | **降低（如实记录）**：第三方帧被移除，只保留本包自己的帧；原始抛出点的文件 / 行号 / 局部变量丢失 |
+| 异常**链**（`__cause__` / `__context__`） | **整条切断**（`__cause__` / `__context__` 置 `None`；链成员不被读取、不被修改，也不被清理）；链上的诊断信息丢失（如实记录） |
+| **P4 可见的致命行为** | **不变**：同一对象、同一类型，按 Python 的规则传播（`KeyboardInterrupt` / `SystemExit` 离开事件循环；`GeneratorExit` 经 `TaskGroup` 成为 `BaseExceptionGroup` 成员）；F1 基线与 F3 的可观察类别逐项相等（Gate C 的 TaskGroup 对照） |
+
+#### 生命周期设计（R5-C-01）：谁拥有清理
+
+1. **边界帧**：每条公共出口上的每个包内帧——`AmaneHostClient` 的公共方法、`_call`、`AmaneAggregationEngine.aggregate`、门面的公共方法——都是边界。边界帧的**局部变量不持有任何凭据 / `Request` / `Response` / 响应体**（AST 守卫 + 审计，C9）。
+2. **`_transport` 没有致命处理体**。它只负责：武装 deadline 定时器、在 `finally` 里撤销（第 10.2 节）、局部重绑。致命异常落在它的任何字节码上（`try` 体、`except Exception` 处理体、`finally` 体、try 之后的分类代码、响应关闭之后）都只是向上传播。
+3. **边界的致命处理体长这样（内联，C9）**：
+
+```text
+except (KeyboardInterrupt, SystemExit, GeneratorExit) as e:
+    body = obj = None                     # （仅 `_call`：本帧持有响应数据的局部由本帧自己重绑。纯 STORE_FAST，没有调用，因此没有检查点）
+    try:                                  # 第一条带调用的语句。此前只有 PUSH_EXC_INFO / STORE_FAST，二者不是异步异常的检查点
+        _fatal_scrub(e)                   # 三条属性赋值：__traceback__ / __cause__ / __context__ = None。其后的每一个检查点（RESUME / CALL / JUMP_BACKWARD …）都在这个 try 里
+    except BaseException as e2:           # 清理器自己的失败，或第二个致命异常
+        e.__traceback__ = e.__context__ = e.__cause__ = None      # 内联的纯属性赋值：没有调用，因此没有检查点，对异步异常是原子的
+        e2.__traceback__ = e2.__context__ = e2.__cause__ = None
+        if not isinstance(e2, Exception):  # 第二个致命异常继续传播（绝不吞掉）；普通异常被丢弃，原致命异常继续
+            raise
+    raise                                  # 裸 raise：同一个对象
+```
+
+4. **`_fatal_scrub(e)` = 确定性所有权清理 + 异常引用脱离（R5-CL-01 / R5-GOV-01 / R5-NEW-01 的最终形式）**：保持原实例；**不读取、不修改** `type`、`args`、`__dict__`、`__notes__`；函数体只有三条属性赋值：`e.__traceback__ = None`、`e.__cause__ = None`、`e.__context__ = None`。
+   ① **它不访问任何帧**：不调用 `frame.clear()`，不调用 `sys._getframe`，不调用 `gc.get_referrers` / `gc.get_referents` / `gc.get_objects` / `gc.collect`，不遍历 `tb_next` / `tb_frame`，不判断“帧是否已结束”，也不导入 `gc` / `inspect`（AST 守卫，C8）。因此：挂起的生成器 / 协程帧（本包的或第三方的）从不被触碰，其 `finally` 不会因 F3 而运行，也不会有别的任务的协程被关闭；无论 `gc.freeze()` 是否启用结果都一样；没有 `except RuntimeError` 可言；也不产生任何会把帧交给审计钩子的事件。
+   ② **所有权由持有者自己清理**：哪个帧持有敏感数据，就由哪一层边界在致命处理体里用纯 `STORE_FAST` 重绑（`_call` 的 `body` / `obj`；见下面的所有权表）。`_transport`、`_run`、`_cleanup` 不是边界，它们的帧在异常离开边界后没有任何引用（见③），随引用计数一起被释放，其中的 `request` / `response` / `chunks` / `body` / `obj` / `md` 也随之释放。
+   ③ **脱离而非清理**：异常是通向帧的**唯一**引用来源（`__traceback__` → `tb_frame`，以及链成员的 `__traceback__`）。把这些引用全部切断后，已结束的帧（`_transport`、`_call`、`_run`、`httpx` / `httpcore` / `anyio` 帧）失去最后一个引用，随其局部一起释放；仍然存活的帧（挂起的协程）由其所有者持有，与本异常无关。实测（`ownership_proof.py`，九个解释器）：到达调用方的异常的 traceback **不含任何本包帧，也不含 `httpx` / `httpcore` / `anyio` 帧**——边界处理体里的裸 `raise` 在 `__traceback__` 已为 `None` 时不会为当前帧重新添加条目。合同不依赖这一实现细节来保证安全（即使将来某个解释器重新添加边界帧条目，边界帧也不持有敏感局部，C9），但证据以实测为准。
+   ④ 若一个致命异常在清理期间被另一个致命异常打断，或清理自己失败（探针注入），回退路径与第 3 条代码块相同：内联属性赋值（对两个异常都做），第二个致命异常继续传播，绝不吞掉。
+5. **为什么在边界脱离而不是在 `_transport` 里清理**：致命异常可以落在 `_transport` 的任何字节码上（`try` 体、`except Exception` 处理体、`finally` 体、try 之后、响应关闭之后），`_transport` 内部的处理体永远有“落在处理体入口之前”的窗口（R5-C-01）。边界帧在它之上，致命异常抵达边界时 `_transport` 已经结束，边界只需切断引用；这同样适用于异常落在 `_call` 自己的局部赋值之后（`_call` 自己在处理体里重绑 `body` / `obj`）。
+
+#### 各层敏感引用所有权（R5 架构修复；逐层证明）
+
+敏感数据 = 带 `Authorization` 的 `httpx.Request` / `Response.request`、凭据字符串、`Response` 对象、响应体字节及其解析结果。验证对象是**到达调用方的那一个异常对象**（`reach.py` 可达性审计，所有权对象为不透明节点），同时对公共 client 与 `aggregate` 两条出口，`ownership_proof.py` 在每一层持有敏感数据的程序点注入致命异常（`sent` / `loop` / `after_close` / `call` / `after_meta`）并断言：同一实例、`args` 不变、凭据路径 0、响应体 canary 路径 0、异常链为空、致命路径零额外 HTTP I/O、零额外 P6 task、traceback 不含本包帧。
+
+| 层 | 持有的敏感数据 | 谁拥有清理 | 处理体 / `finally` / 返回点 / 清理器失败 / 二次致命 |
+|---|---|---|---|
+| `_transport` | `request`、`response`、`chunks`、`chunk`、`body`（以及 httpx / httpcore 帧中的同一批对象） | **不由它自己清理**（它没有致命处理体）：它的帧在异常离开 `_call` 边界之后无引用，随引用计数释放；正常返回路径上它显式重绑 `request = response = chunks = chunk = None` 再返回（C5a） | 致命异常落在它的任何字节码上都只是向上传播；它自己的 `finally` 只撤销 deadline 定时器（`active[0] = False`、`timer.cancel()`），不持有敏感数据；窗口探针对其每个字节码注入（k = 1、2、3） |
+| `_call`（第二边界） | 返回点附近的 `body`（响应体字节）、`obj`（解码结果） | **`_call` 自己**：致命处理体第一组语句 `body = obj = None`（纯 `STORE_FAST`，无调用）；正常路径上 `body = None` 在使用后立即执行 | 处理体里：重绑 → `try: _fatal_scrub(e)` → 内联回退 → 裸 `raise`；`finally` 只做 `active[0] = False`；致命异常落在 `finally` 里时 `_call` 已不持有数据 |
+| `Client.call`（公共，第一边界） | 无（仅有调用方传入的参数与 `self`） | 无需清理；处理体只做引用脱离 | 同上；二次致命：内联回退对两个异常都做属性赋值，第二个致命异常继续传播 |
+| `Engine._run` / `_cleanup` | `obj`（任务 JSON）、`md`（元数据 JSON）、`terminal_obj` | 不由它们自己清理（不是边界）：帧在 `aggregate` 边界脱离引用后释放 | 窗口探针对 `_run` 每个字节码注入；`after_meta` 程序点由 `ownership_proof.py` 专门验证 |
+| `Engine.aggregate`（出口边界） | 无敏感局部（`a` 是账本字典，`number` 是调用方输入） | 无需清理；处理体做引用脱离，再做**幂等**的审计记账（仅当该 attempt 仍在途；记账失败不遮盖致命异常） | 记账失败被丢弃，致命异常继续；`_run` 的 `RETURN` 上落致命时不重复记账 |
+| 门面 `AmaneBatchIntegration` | 无（只持有配置、引擎与结果记录；记录不含异常对象，M6-37） | 无需清理；其公共方法的致命处理体与 `aggregate` 的引用脱离形式相同（C9） | **设计要求，探针未建模**：S1 必须用同一组窗口探针与所有权证明在真实门面上重跑（E6-09 / E6-17）；本设计不声称门面已被探针证明 |
+
+**范围声明**：以上所有权证明针对本包的帧与对象。调用方的帧、P4 worker 的帧、被调用方保存的异常不在保护面内。第三方帧在异常离开边界之后只在“仍被其所有者持有”时存活，P6 不触碰它们。
+6. **审计记账是幂等的**：`aggregate` 的致命分支只在该 attempt 仍在途时记账，且记账自己的失败不得遮盖致命异常（穷举探针发现：致命异常落在 `_run` 的 `RETURN` 上时，重复记账抛 `KeyError` 取代了致命异常，已修复）。
+7. **定时器的武装发生在受 `finally` 保护的 `try` 内部**，且回调受 `active` 标志约束（第 10.2 节）；穷举探针发现并修复了两个窗口：武装与保护之间存在未保护指令；`finally` 内的 seam 先于撤销。
+
+#### 故障模型与证据（R5-C-01；Gate C `window_probe.py`，每个出口 × 每个模型）
+
+* **模型 any**（比 CPython 更强）：异常可在**任一字节码之前**到达。**模型 checkpoint**（CPython 的真实投递点）：只在 eval-breaker 被检查的指令（`RESUME`、`CALL*`、`JUMP_BACKWARD`、`SEND`、`YIELD_VALUE` …）到达。
+* **出口**：直接 client 路径与 `aggregate` 路径各两类——请求在传输层失败（`AttributeError` 携带 `obj = Request`）与对真实回环宿主的正常路径（响应对象、响应体循环、响应关闭、轮询、元数据）。
+* **k = 1**：对包内每个相关函数的**每一个字节码**注入一个 `KeyboardInterrupt`。**k = 2**：第一个致命异常落在 `try` 体 / `except Exception` 处理体 / `finally` / try 之后 / 响应关闭之后 / `_call` / `_run`，第二个落在其后包内处理代码的**每一个字节码**。**k = 3**：第二个落在清理器内部，第三个落在其后的**每一个字节码**。
+* 每次运行后，对**到达调用方的那个异常对象**做独立审计（`reach.py`：帧局部 + `gc` 引用、`args`、`__dict__`、`__notes__`、链、traceback、C 级槽位），并断言：身份（到达的是最后注入的那个）、无额外 P6 task、无“仍然武装且活跃”的 deadline 定时器、无泄漏的定时器取消无辜 task、gc 之后无带 token 的 `Request` / `Response`。
+* **红孪生**：对保存下来的 R5 草案（`p6proto_r5_draft.py`）运行同一探针，k = 1 即出现违例（`_transport` 处理体窗口，路径形如 `exc.__traceback__…tb_frame[_transport].f_locals['request']`、`exc.__context__.<C-slot Request>`）；Reviewer C 的原始脚本 `f3_window.py` / `f3_cslots.py` / `race.py` 逐字节保留（SHA-256 见证据包），在 R5 草案上复现三个 finding，在修订版上通过。
+* **结论（如实；以运行时证据为界）**：见下面的“B2 异步致命异常投递边界”。**CPython 的真实信号投递**只发生在 eval-breaker 检查点；处理体里的每个检查点都在内联的嵌套 `try` 之内，清理器之外只剩原子的属性赋值。穷举验证覆盖 k = 1、2、3；k > 3 依据这一结构论证，**未穷举**。**调试器 / trace 在任意字节码处注入、数量无界**的假想模型属于 B1 所列的恶意进程内访问（`OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`）：公共 client 路径只有两层边界，探针（`window_probe.py --demo-defeat`）构造了一个具体反例——第一个异常在传输层、第二个落在 `_call` 处理体入口的非检查点指令、第三个落在 `call` 处理体入口——此时凭据经 `__context__` 到达调用方；增加边界层数只会抬高所需异常数量。该反例**需要** `sys.settrace` 之类的主动 trace 注入，普通信号做不到，因此不作为产品缺陷，也**不**为此改变进程级 `SIGINT` 策略（屏蔽 `SIGINT` 的候选方案不采用）。
+
+#### B1 进程内信任边界（Governance 裁决；`OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`）
+
+**P6 不需要对同一进程内的恶意代码隐藏凭据——但不得用 B1 / B2 掩盖 P6 自己新增的泄漏或副作用**（例如 F3 为清理而调用 `sys._getframe` / `gc.get_referrers` 并把帧交给审计钩子，或终结别的任务的协程；这两件事已被 R5-GOV-01 / R5-NEW-01 禁止）。 下列手段属于 B1 的“恶意进程内访问”，不在 P6 的保护面内：`gc.get_objects()` / `gc.get_referrers()` 与帧内省、猴子补丁、私有属性改写（例如 `client._http`）、主动的 trace / profile 插桩（`sys.settrace` / `sys.setprofile`）、任意异常注入。**B1 不排除**：正常的公共 API 使用、受支持的 `httpx` / `httpcore` / `anyio` 路径、P6 自身产生的泄漏、普通操作系统信号投递、正常的 asyncio 取消——这些仍然全部在保护面内并有证据。
+
+* **四个植入凭据用例**（见下表）**全部保留，不标 X-NARROW PASS**；它们要求主动改写进程内状态（安装 `event_hooks` 需要私有属性 `_http` 或进程级补丁；`fatal_f3.py` 逐项实际执行），因此标 `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`，**实际可达性如实记录**：`exc.args[0]` / `exc.args[0].headers` / `exc.__dict__['leaked_request']` / `exc.__notes__[0]` 仍可达，F3 不改写抛出方的字段。
+* **同进程的 `gc` 内省**（Reviewer C 的 `inproc_reach.py`，3.11.0 … 3.14.7 全部为 `True`）：无需任何私有 API，只用 `gc.get_objects()`，另一个任务就能找到飞行中的带 `Authorization` 的 `Request`。这是 B1 所列手段，记录为实际可达性，**不是缺陷，也不是 PASS**。
+
+#### B2 异步致命异常投递边界
+
+* 区分 **CPython 的正常信号投递**（`KeyboardInterrupt` 等经 eval-breaker 在检查点 `RESUME` / `CALL*` / `JUMP_BACKWARD` / `SEND` / `YIELD_VALUE` 到达）与**调试器 / trace 在任意字节码处注入**。P6 不要求抵御无限制的恶意 trace（B1）；**不排除**正常的 `KeyboardInterrupt` 与反复的真实信号。
+* 合同**只声明有运行时证据支持的保证**：（i）检查点模型下 k = 1、2、3 的穷举 / 分层验证，每个出口 × 每个解释器；（ii）任一字节码模型下 k = 1 穷举、k = 2 / 3 的分层或抽样验证（含上面的反例边界）；（iii）Reviewer C 的真实信号 fuzz（`fuzz_fatal.py`，无 `settrace`；失败路径 / 正常路径）：失败路径（传输层抛 `AttributeError(obj=Request)`）6 个解释器（3.11.0 / 3.11.9 / 3.12.10 / 3.13.0 / 3.13.9 / 3.14.7）× 300 次 = 1800 次，共有 1795 个 `KeyboardInterrupt` 到达调用方，其中 1729 个经过 P6 的致命处理体，**全部 1795 个**都经 `reach.py` 审计，违例 0；正常路径 6 × 150 = 900 次，898 个到达调用方，其中 225 个经过 P6 的致命处理体，全部审计，违例 0。**说明**：Reviewer C 的原始 `fuzz_fatal.py` 只审计 traceback 含本包帧的异常；引用脱离之后到达调用方的 traceback 不含任何本包帧，它的“经过 P6”指标塌缩、审计变得空洞，所以证据包里**同时**保留原版的未改动运行（`real_signal_fuzz_original_unchanged/`，违例 0，仅作旁证）和派生版 `fuzz_fatal_v2.py`（以 `_fatal_scrub` 调用计数判定“经过 P6”、审计每一个到达调用方的异常；`real_signal_fuzz_v2/`）。各有一次因 harness 自己的 `KeyboardInterrupt` 落在其 `try` 之外而以 130 退出，已重跑并记录。**数千次真实信号 fuzz 不是绝对证明**，只是上面结构论证与穷举验证的旁证。
+* **不改变进程级 `SIGINT` 策略**：P6 不安装信号处理器，不屏蔽信号，不调用 `signal.pthread_sigmask`。
+
+#### 帧安全、GOV-01、NEW-01 与审计完备性证据（R5-CL-01 / R5-GOV-01 / R5-NEW-01 / R5-EV-01；Gate C）
+
+* **`frame_safety.py`**（15 项；`python frame_safety.py types5.py pred5.py mapcode.py [模块]`；环境变量 `P6FREEZE=1` 在每次净化前执行 `gc.freeze()`）：已结束的普通帧、正在执行的帧、挂起的生成器帧、挂起的协程帧、第三方异常链上的挂起生成器、**本包拥有的**挂起帧（直接调用与经公共 client / `aggregate` 两条出口的端到端用例）、P6 已结束帧；断言：无 `finally` 被执行、生成器 / 协程仍可恢复、无不相关协程被关闭、到达调用方的异常经审计无带凭据的 `Request` / token 可达路径、异常身份 / `args` 不变、零额外 P6 task、生产路径静态守卫 0 违例、源码无 `except RuntimeError`。**红孪生**为上一版（`gc.get_referrers` 判定存活）：正常 GC 状态下仅静态守卫失败；**`gc.freeze()` 下**本包挂起帧的 `finally` 被执行、凭据路径 = 2（直接调用与两条出口均然），静态守卫失败。新版在两种 GC 状态下 15/15。
+* **Reviewer C 的独立反例**（原文件保留 SHA-256，原样运行）：`frameclear.py`（`clear()` 对挂起帧的逐解释器行为）、`liveness.py`（基线 / `gc.freeze()` CE1 / 审计钩子 CE2 / 堆规模 CE3：旧版 CE1 本包挂起协程的 `finally` 被执行，CE2 钩子看到 `Request`；新版全部无副作用、无事件、耗时 0 ms）、`audit_getframe.py`（旧版两类事件均暴露凭据；新版不暴露）。派生版 `audit_f3.py` 记录**每个**审计事件并按触发者归因（`asyncio` / `httpx` 等第三方代码自己调用 `sys._getframe` 不算 P6）：公共 client 与 `aggregate` 两条出口上，本包触发的 `sys._getframe` / `gc.*` 事件 = 0，暴露带 `Authorization` 的 `Request` 的事件 = 0。
+* **`ownership_proof.py`**（9 项 × 九个解释器）：见上面的逐层所有权表；变异（致命处理体不脱离，`FATAL_MODE=F1`）使 9 项全部变红（凭据路径 4、响应体 canary 路径 5 等）。
+* **`fatal_path_guard.py`**：生产路径静态守卫；`--selftest` 含 16 个变异（`gc.get_referrers`、别名 `gc`、`from gc import`、`gc.get_objects`、`gc.collect`、`sys._getframe`、`from sys import _getframe`、`getattr(sys,'_getframe')`、`frame.clear()`、`fr.clear()`、`x.f_back.clear()`、`inspect`、`except RuntimeError`、元组形式的 `except RuntimeError`、裸 `except`、`cr_frame`）全部被抓住，干净片段通过；对设计探针 0 违例，对上一版 14 个违例。
+* **`reach_selftest.py`**（10 项）：对**非 canary** 凭据的正向对照（`args`、`__dict__`、`Response.request`、`AttributeError.obj` / `OSError.filename` C 槽位、traceback 帧局部、`httpcore.Request`），一个无 `Authorization` 的 `Request` 作负向对照，以及变异——关掉“任何带 `Authorization`”规则使 ≥ 5 个正向对照变红；Reviewer C 的 `ev01.py` 作回归原样运行。
+
+#### X-NARROW（治理授权，强制条件逐条落实；现仅用于独立载荷对照）
+
+**本轮裁决**：四个植入凭据用例**不得**标为 X-NARROW PASS——它们的凭据取自当前 P6 请求，条件 2 不满足；它们依赖主动的进程内篡改，按 B1 标 `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`，实际可达性已记录。X-NARROW 只保留给**独立载荷对照**（进入 P6 之前就存在于致命异常自身字段里的内容）。
+
+**区分**：*外部预存的独立载荷*（进入 P6 执行路径前已存在于致命异常自身字段中的内容）与 *P6 来源或受支持运行时来源的凭据暴露*。只有前者可以不修改地保留。强制条件与落实：
+
+| 条件 | 落实与证据 |
+|---|---|
+| 1 字段内容在进入 P6 相关路径前已经存在 | 独立载荷对照用例：`SystemExit('shutdown requested', {'code': 3})`——F3 不触碰，审计为 0 |
+| 2 不是当前 P6 请求的 `Authorization`、`Request`、`Response`、响应体的引用或派生 | **四个植入用例都不满足本条**（凭据取自当前 P6 请求）——因此**不能按载荷豁免**，只能分析其注入点是否属于受支持的执行路径 |
+| 3 不是受支持的 httpx / httpcore / anyio 运行路径产生或填充的敏感字段 | 受支持依赖矩阵（见下）的静态扫描：三个包里没有任何位置把请求 / 响应对象放进致命异常的 `args` / `__dict__` / `__notes__`（`anyio` 仅有两处无参 `raise KeyboardInterrupt`）；矩阵守卫 |
+| 4 P6 没有新增敏感引用路径，没有记录 / 序列化 | 审计器（到达调用方的对象）+ `HostAttemptRecord` 不含异常对象 |
+| 5 P6 捕获后不向 `args` / `__dict__` / `__notes__` 添加内容 | 抛出时与到达时的逐项快照相等；C7（永不 `add_note`） |
+| 6 X 不适用于敏感 traceback、异常链、链成员的 C 级槽位或 P6 栈帧 | traceback 与链被脱离、C 级槽位随链切断、P6 帧随引用计数释放且从不被清理或枚举（上面的穷举证据与逐层所有权证明） |
+
+**四个原始植入用例（保留，逐项说明；不重命名为 PASS）**：
+
+| 用例 | Payload origin | Credential ownership | Injection point | Supported / unsupported boundary | Actual reachability | Expected security verdict |
+|---|---|---|---|---|---|---|
+| `args` 含 token 文本 | 收到当前 P6 `Request` 的钩子代码把其 `Authorization` 复制进异常 | 当前 P6 请求的凭据（**条件 2 不满足**） | `httpx` `event_hooks['request']`（需要私有属性 `_http` 或进程级补丁） | **不受支持**：P6 没有任何 API 安装钩子，`AmaneHostClient` 不暴露其 httpx 客户端（公共名只有 `aclose`、`call`；无构造参数；Gate 机检） | `exc.args[0]`（str）仍可达 | **`OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`**（B1；不是 PASS，不是 X-NARROW PASS；可达性保留；F3 不得改写参数） |
+| `args` 含带 `Authorization` 的 `Request` | 钩子代码把当前 `Request` 放进 `SystemExit(request)` | 当前 P6 `Request` 本身（条件 2 不满足） | 同上 | 不受支持（同上） | `exc.args[0]` → `Request` → `Headers` 可达 | 同上 |
+| `__dict__` 含带凭据的 `Request` | 钩子代码把当前 `Request` 挂到异常实例 | 同上 | 同上 | 不受支持（同上） | `exc.__dict__['leaked_request']` 可达 | 同上 |
+| `__notes__` 含 token 文本 | 钩子代码 `add_note()` 当前 `Authorization` | 当前凭据（条件 2 不满足） | 同上 | 不受支持（同上） | `exc.__notes__[0]` 可达 | 同上 |
+
+**独立证据表明这四个用例需要主动的进程内篡改**：`fatal_f3.py` 通过 `client._http.event_hooks = …`（私有属性）安装每个钩子，并断言 `AmaneHostClient` 的公共名只有 `aclose` 与各公共方法、没有任何公共属性暴露 httpx 客户端 / 传输 / auth；无构造参数可注入钩子。**这一归类依赖于该分析**：若将来出现任何受支持的方式让外部代码在 P6 的请求路径上运行（钩子、可注入传输、可替换客户端），这四个用例必须立即重新归类为 BLOCKED。
+
+**受支持依赖矩阵（版本矩阵验证，不依赖 `httpx>=0.27,<0.28` 这一个范围）**：已验证 `httpx==0.27.2`、`httpcore==1.0.9`、`anyio==4.15.1`、`h11==0.16.0`、`sniffio==1.3.1`（`idna==3.20`、`certifi==2026.7.22` 仅作记录）。`dep_matrix.py` 对这些包做 AST 扫描：`raise KeyboardInterrupt / SystemExit / GeneratorExit`、直接继承 `BaseException` 的类、`add_note` 调用——全部包共 2 处无参 `raise KeyboardInterrupt`（`anyio/_backends/_asyncio.py`），0 处涉及 request / response / headers / auth。**S1 必须加入矩阵守卫测试**：安装的版本不在已验证矩阵内时，X-NARROW 的“受支持运行时”声明为 `UNVERIFIED`（并重新运行扫描与 Gate C），而不是默认继承。本设计不修改 `pyproject.toml`。
+
+#### 如实记录的代价与残余
+
+* **诊断能力损失**：致命异常原始抛出点（第三方帧、钩子帧的文件 / 行号 / 局部）与整条异常链不再可见（审计记录里附带“抛出点摘要”的缓解候选需要扩展记录与谓词，未采用）。
+* **抛出方放入致命异常自身字段的凭据**：独立载荷按 X-NARROW 保留；取自当前 P6 请求的凭据（四个植入用例）= `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`，均不改写，可达性保留。
+* **本包以外的帧**（P4 worker、调用方）不在保护面内。
+* **帧处理的副作用（R5-CL-01 / R5-GOV-01）**：F3 不清理、不枚举、不终结任何帧，所以不会执行别的任务或生成器的 `finally`，也不依赖 GC 状态；代价是 traceback 保真度进一步降低——到达调用方的致命异常的 traceback **不含任何本包帧**（只有调用方自己的帧）。仍被第三方对象持有的第三方帧由其所有者管理，不在保护面内。
+* **结论状态**：F3 + 边界所有权 + 帧安全清理 + 完备审计器在设计探针上 **IMPLEMENTED CANDIDATE**（Python 3.11.0 / 3.11.1 / 3.11.2 / 3.11.3 / 3.11.9 / 3.12.10 / 3.13.0 / 3.13.9 / 3.14.7；`httpx 0.27.2`）；这**不是**独立安全复核的 PASS。实现阶段（S1）必须在真实 P6 代码上重跑同一组探针（E6-09 / E6-17）。若独立复核认为不满足，则按治理要求报告 `BLOCKED — SECURITY AUTHORITY` 并给出最小架构调整候选，**不得**退回 F1 / F2。
+
+### 10.6 R5-11：注入式 `transport=` 与取消吞没（方案 A：APPROVED FOR DESIGN REVISION ONLY）
+
+**治理裁决（Governance Security Ruling）**：方案 A 被授权**仅用于设计修订**——允许从新开发的 P6 公共 API 移除任意 `transport=` 注入；故障注入改为使用真实回环 HTTP / TCP 服务与故障代理。**这不是**原有安全要求的豁免，也不是 Independent PASS。不可降低的要求：E6-05 / E6-09 / E6-17 的全部强制能力保留；覆盖首次 / 二次 / 多次取消、响应头停滞、流中断、连接拒绝、丢失 202、401 / 403 / 5xx、非法 JSON、异常路径、凭据 canary（见第 22.5 节“故障覆盖矩阵”）；保留生产 `httpx` 的有界取消与“无 P6 detached task”；**不修改**已 CLOSED 的 P4 / P5 的 `MockTransport` 或其它注入接口；`transport=` 相关的公开签名、测试清单、Mutation、Master / Contract / Construction Plan 必须一致。
+
+**事实**：R4 的 `AmaneHostClient(..., transport=<任意 httpx.AsyncBaseTransport>)` 允许注入一个吞掉 `CancelledError` 的传输；实测（S9）清理被拖过预算约 **2.2 s**——P6 无法在不创建第二个 task 的前提下抢占一个不配合取消的协程。
+
+**公共 API 兼容性（逐一核对 P6 的全部构造 / 注入 / 验收接口）**
+
+| 接口 | R4 | R5（本草案） | 说明 |
+|---|---|---|---|
+| `AmaneHostClient.__init__` | `(config, *, transport=None)` | `(config)` | 撤销 `transport=`；client 在内部创建 `httpx.AsyncClient`（`trust_env=False`、`follow_redirects=False`、固定 `Limits` / `Timeout`、拒绝一切 cookie） |
+| `AmaneAggregationEngine.__init__` | `(client, *, _clock, _sleep)` | `(client)` | **衍生变更（待确认）**：可注入的 `_sleep` 同样可以吞掉 `CancelledError` 而破坏有界取消，`_clock` 可以让 deadline 判断失真；二者与 `transport=` 属同一类风险。确定性单测改用真实回环宿主 + 短间隔（`poll_interval ≥ 0.05 s`、`aggregate_deadline ≥ 1 s`） |
+| `AmaneBatchIntegration.__init__` | `(host, image_client, library_root, *, …, transport=None)` | 去掉 `transport=` | `image_client` 属于调用方（P4 约定，`ImageHttpClient` 是 P4 CLOSED 的接缝，不改动）；它只服务 P4 的图片获取阶段，不进入 P6 的宿主 I/O 路径 |
+| `AmaneHostConfig` 字段 | 8 个字段 | 不变 | 没有 `verify_tls` / `proxy` / `transport` / `client` 旋钮（第 8.2 节） |
+| P4 / P5 的 `MockTransport` 与 `HttpxImageClient(transport=…)` | CLOSED | **不动** | 仅 P4 自有的图片测试接缝 |
+
+**为什么该反例不能再通过 P6 公共入口触发（记录，不是删除）**：构造面上没有任何参数能提供传输、HTTP 客户端、mounts、event hooks、sleep 或 clock（Gate C 的 API 守卫对合同签名文本与原型签名做机检，并有 R4 签名的红孪生）。反例此后只能通过**进程级猴子补丁** `httpx.AsyncHTTPTransport` 复现——这等价于修改被信任的库，不属于 P6 公共入口的威胁模型；Gate C 把该复现作为**信息项**记录（不计入通过标准）：补丁一个吞取消的 `handle_async_request` 时，清理 aggregate 在约 2.8 s 后结束（取消预算 0.5 s），即反例仍然真实，只是不可经 P6 入口到达。
+
+**仍然可达的路径（逐一验证，故障全部来自真实回环套接字）**：连接拒绝、响应头停滞、响应头 / 响应体 slowloris（总 deadline，第 10.2 节）、流中断（截断 / RST）、丢失 `202`（经代理丢弃响应）、`401` / `403` / `429` / `500` / `503` / `404`、非法 JSON、结构错误的 JSON、超大响应、观察期 `503`、元数据 JSON 非法、取消请求本身被 `401` / `500` / 非法 JSON / RST 回应、连续 4 次取消。每个用例同时断言 token 与响应体 canary 不出现在任何异常文本、审计记录或存活的 `Request` / `Response` 对象里。
+
+**方案 B（保留 `transport=` 并证明吞取消不能突破预算）**：**拒绝**——不可满足（S9 的 2.2 s 是反例；抢占需要第二个 task，被治理否决）。
+
+**状态**：R5-11 = **DESIGN UPDATED**（方案 A 已按治理授权写入设计）；独立复核尚未进行。若独立复核或后续裁决否决方案 A，必须回到本节重新设计，**不得**通过缩小范围或减少测试通过。
+
 ---
 
 ## 11. Host → Core 桥（冻结；fail closed）
@@ -1009,21 +1443,37 @@ uncertain_cancellations = #{ C ∈ UNCERTAIN_* }
 
 R3 的 11.2 把“号等价”放在严格键集合与 `PluginRaw` reader 之前，导致缺插件键、插件值为 `null` / 列表、缺 `number`、`number` 非字符串时在解引用处抛出 `KeyError` / `TypeError` / `AttributeError`（Gate A 在 R3 文字顺序上 16 个用例里有 7 个没有单一分类），并且“混合来源 + 插件号错误”会被错误地归为 `NUMBER_MISMATCH`。本节的代码块是**映射入口的唯一规范性定义**（其它章节、Master Plan、Construction Plan 只引用它）；预提交验证从本文件抽取并执行它。
 
-**冻结顺序**：1 任务终态与 `result` 有效性 → 2 任务侧归属 → 3 `HostMetadata` 外层结构 → 4 严格 `raw` 来源键集合 → 5 严格 `PluginRaw` 结构 → 6 号等价 → 7 确定性映射 → 8 最低成功。**任何字段在其前置校验通过之前不得被解引用**；`normalize_fc2_number` 只对已确认是 `str` 的值调用；整个入口对任何输入都不得抛出异常。
+**冻结顺序**：1 任务终态与 `result` 有效性 → 2 任务侧归属 → 3 `HostMetadata` 外层结构 → 4 严格 `raw` 来源键集合 → 5 严格 `PluginRaw` 结构 → 6 号等价 → 7 确定性映射（**含 P5 I22 URL 卫生与精确 `dropped_url_count`，R5-08**） → 8 最低成功。**任何字段在其前置校验通过之前不得被解引用**；`normalize_fc2_number` 只对已确认是 `str` 的值调用；整个入口对任何输入都不得抛出异常。
 
 **错误优先级（由顺序唯一决定）**：缺插件键 / 只有外来来源 / 混合 / 语言后缀 / 未知来源键 ⇒ `HOST_ATTRIBUTION_FOREIGN`；键集合恰好是插件、但值为 `null` / 列表 / 缺 `number` / `number` 非字符串 / 任一字段类型非法 ⇒ `HOST_METADATA_CONTRACT`；结构全部合法而 `number` 不等价或无法识别 ⇒ `HOST_METADATA_NUMBER_MISMATCH`；其后才是 `HOST_METADATA_BELOW_MINIMUM`。代码里的失败名省略 `HOST_` 前缀。
 
 ```python gate:map_host_result
+from urllib.parse import urlsplit
+
 PLUGIN_SOURCE_ID = "ffcc.fc2-metadata"
 
 
+def is_clean_http_url(value):
+    """P5 I22（adapters/amane/fc2_amane_adapter/_outcome.py）的同义判定：带 host 的绝对 http(s) URL；无控制字符、无首尾空白。只判定，不改写。"""
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in value):
+        return False
+    try:
+        parts = urlsplit(value)
+        host = parts.hostname
+    except ValueError:
+        return False
+    return parts.scheme.lower() in ("http", "https") and bool(host)
+
+
 def map_host_result(task, metadata_response, canonical, normalize):
-    """第 11.2 节的唯一映射入口。返回 ("OK", fields) 或 ("FAIL", HostFailureKind 名)；任何输入都不得抛出异常。
+    """第 11.2 节的唯一映射入口。返回 ("OK", fields, dropped_url_count) 或 ("FAIL", HostFailureKind 名, 0)；任何输入都不得抛出异常。
     task：GET /api/tasks/{id} 的 JSON（已通过 HostTask 严格 reader，status 为 done）；
     metadata_response：GET /api/metadata/{id} 的 JSON `.metadata`（已通过 JSON 结构预扫描）；
     normalize(str) -> canonical | None（Core normalize_fc2_number 的包装；只对 str 调用）。"""
     def fail(kind):
-        return ("FAIL", kind)
+        return ("FAIL", kind, 0)
 
     def is_int(x):                                   # int 且排除 bool
         return type(x) is int
@@ -1079,15 +1529,23 @@ def map_host_result(task, metadata_response, canonical, normalize):
     # 6. 号等价：持久化号与 raw 内号都必须被识别且等于请求的 canonical（只对 str 调用 normalize）
     if normalize(md["number"]) != canonical or normalize(pr["number"]) != canonical:
         return fail("METADATA_NUMBER_MISMATCH")
-    # 7. 确定性映射（URL 卫生等在此完成；失败 => METADATA_CONTRACT）
+    # 7. 确定性映射：URL 卫生（P5 I22）只删除不合规项，保序、不改写、不去重；被删数量精确计入 dropped_url_count
+    dropped = 0
+    cleaned = {}
+    for key in ("poster_urls", "thumb_urls", "extrafanart"):
+        kept = [u for u in pr[key] if is_clean_http_url(u)]
+        dropped += len(pr[key]) - len(kept)
+        cleaned[key] = kept
     fields = {"number": canonical, "title": pr["title"], "studio": pr["studio"], "publisher": pr["publisher"], "release": pr["release"],
               "plot": pr["plot"], "runtime": pr["runtime"], "actors": names, "tags": list(pr["tags"]),
-              "poster_urls": list(pr["poster_urls"]), "thumb_urls": list(pr["thumb_urls"]), "extrafanart": list(pr["extrafanart"])}
+              "poster_urls": cleaned["poster_urls"], "thumb_urls": cleaned["thumb_urls"], "extrafanart": cleaned["extrafanart"]}
     # 8. 最低成功
     if not (isinstance(fields["title"], str) and fields["title"].strip()):
         return fail("METADATA_BELOW_MINIMUM")
-    return ("OK", fields)
+    return ("OK", fields, dropped)
 ```
+
+**第 7 步的 URL 卫生（R5-08）**：`is_clean_http_url`（代码块内）与 P5 `adapters/amane/fc2_amane_adapter/_outcome.py` 的 I22 同义——带 host 的绝对 `http` / `https` URL，无控制字符（含 DEL）、无首尾空白；**只判定，不改写**；三个列表的被删元素总数是 `dropped_url_count`。非 `str` 元素仍是第 5 步的 `METADATA_CONTRACT`（结构违规），而“全是非法 URL 的列表”只是被过滤为空（不是失败）。Gate A 的 URL 用例：空白 / 控制字符 / 无 host / 空串 / scheme 相对，混合合法与非法 URL 的精确计数，三个列表合计，全部合法时为 0，以及“去掉 URL 过滤”变异必须被检出。
 
 说明：失败种类到 Core `SourceStatus` / `SourceErrorKind` 的映射见第 12.1 节；第 9.4 节的“`GET /metadata`”步骤返回 `404` ⇒ `HOST_METADATA_MISSING`、其它传输 / 状态码失败按第 8.4 节映射，都发生在进入本入口**之前**。第 8 步对应 DIFF-P6-02（v0.18.0 可能 `done` 但标量全空）。
 
@@ -1169,7 +1627,7 @@ P6 **声称**：读取那一刻的 `raw["ffcc.fc2-metadata"]` 里的值，经确
 | `runtime` | `runtime` | `int \| None`，负数或 `bool` → `HOST_METADATA_CONTRACT` |
 | `actors` | `actors[*]` 的 `name`（或字符串元素本身） | 保持顺序；去除 `gender` |
 | `tags` | `tags` | 保持顺序；元素必须是 `str` |
-| `poster_urls` / `thumb_urls` / `extrafanart` | 同名 | 仅保留“干净的绝对 http(s) URL”（有 host、无控制字符、无首尾空白；与 P5 I22 规则同义，测试逐样本对账）；**被剔除的数量记入审计 `dropped_url_count`**，不静默 |
+| `poster_urls` / `thumb_urls` / `extrafanart` | 同名 | 仅保留“干净的绝对 http(s) URL”（有 host、无控制字符、无首尾空白；与 P5 I22 规则同义，测试逐样本对账）；**被剔除的数量记入审计 `dropped_url_count`**，不静默。**该过滤与计数发生在 `map_host_result` 第 7 步（R5-08；第 11.2 节代码块）**，返回值是 `("OK", fields, dropped_url_count)`；只删除不合规项、保序、不改写、不去重；`dropped_url_count` 只统计 `PluginRaw` 三个 URL 列表里被删的元素个数（宿主展示列的裁剪 / 物化不进入，R5-09） |
 | `fanart_urls` | — | 空元组（Amane 无此概念，P5 同） |
 | `source_urls` / `external_ids` | — | **恒为空**：P6 不重建来源 provenance，NFO 渲染器也不读取它们（`raw` 里的 `source_url` / `external_id` 不映射） |
 | `field_sources` | 派生 | 对每个**非空**的已映射字段 `f`：`{f: ("ffcc.fc2-metadata",)}`（值必须 ⊆ `contributing_source_ids`，P4-C9 诊断校验要求）；内容确实来自插件的原始记录，所以该标签现在有值级证据 |
@@ -1299,7 +1757,7 @@ error_detail),)`，`contributing_source_ids=()`。`error_detail` 是**封闭词�
 
    *4.1 标识*：`attempt_id = "e{engine_index}-a{seq}"`（第 10.3.2 节；`seq` 稠密、`engine_index` 进程内唯一）。该 aggregate 的**全部**宿主请求（submit / observe / cancel / metadata）都携带 `X-FFCC-Attempt: <attempt_id>`；该头不改变任何请求体键集，宿主忽略，P6 不据此做控制。`attempt_id` 的唯一性靠 `seq` 稠密递增保证：分配时断言 `seq == last_seq + 1`，所以不需要保存全部历史 id，**审计溢出后也不可能复用 id**。
 
-   *4.2 已知 id 的四个事件（不得混用）*：`H1` 宿主创建任务（不可直接观察）；`H2` 代理转发并记录宿主的 `202 + task_id`；`H3` 代理把该 `202` 完整写给 P6 的连接（响应丢弃 / 截断则没有）；`H4` P6 收到完整响应并通过 `202` + 严格 reader（审计 `task_known_event`）。只有 `H4` 使 attempt 成为 `CREATION_CONFIRMED` 并进入 `K`；`H2 ≠ H4`。`K` 的进入 = `H4`，退出 = aggregate 返回 / 抛出之前的 `end_event`（取消请求得到 HTTP 响应**不是**退出事件，清理轮询期间仍在 `K` 与 `A` 里）。
+   *4.2 已知 id 的四个事件（不得混用）*：`H1` 宿主创建任务（不可直接观察）；`H2` 代理转发并记录宿主的 `202 + task_id`；`H3` 代理把该 `202` 完整写给 P6 的连接（响应丢弃 / 截断则没有）；`H4` P6 收到完整响应并通过 `202` + 严格 reader（审计 `task_known_event`）。只有 `H4` 使 attempt 成为 `CREATION_CONFIRMED` 并进入 `K`；`H2 ≠ H4`。**H3 已送达而 H4 缺席（R5-03）是合法状态**：代理已把 `202` 写给 P6，但 P6 在 H4 之前被取消 / 致命 / 严格 reader 拒绝；此时 `S = CREATION_UNKNOWN`（`host_task_id = None`），P6 **不得**据 H3 向该 id 发送任何后续请求（H3 单独**永不**授权取消——P6 看不到该 id，也不能从代理账本读取它）；H3 已送达而 H4 缺席时，`cancel_post_attempted` 必须为否，代理账本里该 `attempt_id` 在 `POST /api/tasks` 之后不得出现任何请求（O2-4）。`K` 的进入 = `H4`，退出 = aggregate 返回 / 抛出之前的 `end_event`（取消请求得到 HTTP 响应**不是**退出事件，清理轮询期间仍在 `K` 与 `A` 里）。
 
    *4.3 证据来源及其作用域*（互不替代）：
    | 来源 | 持有者 | 内容 | 作用域 |
@@ -1313,9 +1771,9 @@ error_detail),)`，`contributing_source_ids=()`。`error_detail` 是**封闭词�
    *4.4 对账规则（O2；`Z` / `W` 只用于被 `L` / `Hs` / `Mf` 约束的一方）*：
    * **O2-1** `L` 中每个 `attempt_id` 至多一个 `POST /api/tasks`（单个 aggregate 自动重复提交 ⇒ 红）。
    * **O2-2** 对每个番号 `N`：`L` 中请求体含 `N` 的 `POST` 总数 `≤ calls(N)`（`Hs`）。用于发现“用不同 `attempt_id` 隐藏第二次提交”和“`attempt_id` 被复用”。
-   * **O2-3** `L` 中每个 `attempt_id` 必须能在 P6 侧找到归属：`seq` 在窗口 `W` 内；或 `seq ≤ highest_dropped_seq`（已被窗口丢弃，仅参与累计对账）；或该 attempt 尚在 `in_flight`。其它情形（`seq > last_seq`、格式非法）⇒ 红。
-   * **O2-4** 对窗口内的每条记录：`S = NOT_ATTEMPTED` ⇒ `L` 中该 `attempt_id` 的 `POST` 数为 0；`S = CREATION_CONFIRMED` ⇒ 恰好一个 `POST`、且有 `forwarded` 与 `delivered` 的 `202`、其 `task_id == host_task_id`；`S = CREATION_UNKNOWN` ⇒ `POST` 数为 0 或 1，其中“0”只在下面两种情形之一成立：(a) `outcome ∈ {TIMEOUT, CONNECTION, NETWORK}`（请求在抵达代理前失败）；(b) `terminal ∈ {CANCELLED, RAISED}` 且 `outcome is None`，并且 `Mf` 声明了该 attempt 的 pre-proxy 注入、`L` 的连接级记录显示该 attempt 没有收到任何请求字节。**未被 (a)(b) 解释的“0”⇒ 红**（丢失的 `POST` 不得被伪装成取消）。`POST` 数为 1 且 `202` 只有 `forwarded`（无 `delivered`）= 孤儿 `H2`，合法；`202` 已 `delivered` 而 `S = UNKNOWN` 仅当 `outcome` 属 `SCHEMA_INVALID` / `RESPONSE_TOO_LARGE` / `RESPONSE_TOO_COMPLEX`（P6 收到但无法接受）。
-   * **O2-5（取消见证对账）** 窗口内每条 `cancel_post_attempted = True` 的记录：代理观察到该 `attempt_id` 的取消 `POST /api/tasks/batch` 恰 1 次，请求体键集恰为 `{action, task_ids}`、`action == "cancel"`、`task_ids == [host_task_id]`；观察到 0 次只允许 `C ∈ {UNCERTAIN_NO_RESPONSE（请求在抵达代理前失败）, UNCERTAIN_CLEANUP_INTERRUPTED}`；`cancel_post_attempted = False` 的记录，`L` 中必须没有该 `attempt_id` 的取消 `POST`；`C ∈ TERMINAL_*` ⇒ 其后 `L` 里对该 id 的 `GET` 返回对应终态。
+   * **O2-3** `L` 中每个 `attempt_id` 必须能在 P6 侧找到归属：`seq` 在窗口 `W` 内；或 `seq ≤ highest_dropped_seq`（已被窗口丢弃，仅参与累计对账）；或该 attempt 尚在 `in_flight` 且其阶段 ∈ `{ATTEMPTED, CONFIRMED}`（若代理已看到该 attempt 的 `POST` 而在途明细里它仍是 `BEGUN`，说明 `Z` 落后于线路 ⇒ 红）。其它情形（`seq > last_seq`、格式非法）⇒ 红。
+   * **O2-4** 对窗口内的每条记录：`S = NOT_ATTEMPTED` ⇒ `L` 中该 `attempt_id` 的 `POST` 数为 0；`S = CREATION_CONFIRMED` ⇒ 恰好一个 `POST`、且有 `forwarded` 与 `delivered` 的 `202`、其 `task_id == host_task_id`；`S = CREATION_UNKNOWN` ⇒ `POST` 数为 0 或 1，其中“0”只在下面两种情形之一成立：(a) `outcome ∈ {TIMEOUT, CONNECTION, NETWORK}`（请求在抵达代理前失败）；(b) `terminal ∈ {CANCELLED, RAISED}` 且 `outcome is None`，并且 `Mf` 声明了该 attempt 的 pre-proxy 注入、`L` 的连接级记录显示该 attempt 没有收到任何请求字节。**未被 (a)(b) 解释的“0”⇒ 红**（丢失的 `POST` 不得被伪装成取消）。`POST` 数为 1 且 `202` 只有 `forwarded`（无 `delivered`）= 孤儿 `H2`，合法；`202` 已 `delivered` 而 `S = UNKNOWN` 仅当 (i) `outcome` 属 `SCHEMA_INVALID` / `RESPONSE_TOO_LARGE` / `RESPONSE_TOO_COMPLEX`（P6 收到但无法接受），或 (ii) H3→H4 窗口内被取消 / 致命（`terminal ∈ {CANCELLED, RAISED}` 且 `outcome is None`，R5-03）；两种情形都要求该 `attempt_id` 在 `POST` 之后**没有任何后续请求**（H3 不授权取消）。
+   * **O2-5（取消见证对账）** 窗口内每条 `cancel_post_attempted = True` 的记录：代理观察到该 `attempt_id` 的取消 `POST /api/tasks/batch` 恰 1 次，请求体键集恰为 `{action, task_ids}`、`action == "cancel"`、`task_ids == [host_task_id]`；观察到 0 次只允许 `C ∈ {UNCERTAIN_NO_RESPONSE（请求在抵达代理前失败）, UNCERTAIN_CLEANUP_INTERRUPTED}`；`cancel_request_confirmed = True` 要求代理里该取消 `POST` 有 `delivered` 的 `200`（R5-06）；`cancel_post_attempted = False` 的记录，`L` 中必须没有该 `attempt_id` 的取消 `POST`；`C ∈ TERMINAL_*` ⇒ 其后 `L` 里对该 id 的 `GET` 返回对应终态。
    * **O2-6（累计）** `|{L 中有 POST 的 attempt_id}| ≤ Z.submitted`，且 `Z.submitted ≤ Σ_N calls(N)`。
    * **O2-7** 同一 `previous` 上多次显式 `retry_failed`、重复的主轮 `preview` 都是独立操作：它们产生不同的 `attempt_id`，各自至多一个 `POST`，**合法**。
    * **O2-8（审计溢出）** `W` 之外的历史不得由 `W` 声称可复算；全历史的 O2 / O1 / O3 由第 5 点的分段流式验证提供，缺口 ⇒ `NOT_VERIFIED`，不是 PASS。
@@ -1330,7 +1788,7 @@ error_detail),)`，`contributing_source_ids=()`。`error_detail` 是**封闭词�
    | `CREATION_UNKNOWN` 之后显式重试 | `preview`（响应丢失）→ `retry_failed` | 宿主任务数 ∈ [1, 2]（孤儿可能存在） | 绿 |
    | 用不同 `attempt_id` 隐藏第二次 `POST` | `preview([N])` | `L` 有第二个 `attempt_id` 不在 P6 侧 | 红（O2-2 / O2-3） |
    | `attempt_id` 被两个 aggregate 复用 | `preview` ×2 | 审计里重复 id 或 `seq` 不稠密 | 红（O2-3 / 稠密性） |
-5. **分段流式验证（全历史安全不变量，不依赖无界内存或持久化）**：`peak_in_flight ≤ M` 与“每个 attempt 至多一个 `POST`”是安全不变量，**不因审计溢出而降低**；降低的只是 P6 侧**证据的保留窗口**。测试工具按 `completed` 计数**至少每 `MAX_AUDIT_RECORDS / 2` 条**调用一次 `audit_snapshot()` 取走新记录（按 `seq` 去重），喂给自己的验证器（`L` / `Hs` / `Mf` 同样流式处理），验证器重建全历史并重算 O1（`begin_event` / `end_event` 最大重叠 ≤ `M`）、O2、O3。每次取走必须满足连续性：新记录的最小 `seq` 恰为已验证的最大 `seq` + 1（或之间的 `seq` 仍在 `in_flight`）；出现缺口（记录在被取走前已被丢弃）⇒ 该运行的全历史项记为 `NOT_VERIFIED`（evidence gap），**不得**用保留窗口冒充全历史。验证器对取走记录里重复的 `seq` / `attempt_id`（含溢出后复用旧 id）报红；保留窗口的实现不得以 `seq` 为键折叠记录（否则重复被掩盖）。`Z.peak_in_flight` 始终是权威的历史峰值（第 20.5 节）。
+5. **分段流式验证（全历史安全不变量，不依赖无界内存或持久化）**：`peak_in_flight ≤ M` 与“每个 attempt 至多一个 `POST`”是安全不变量，**不因审计溢出而降低**；降低的只是 P6 侧**证据的保留窗口**。测试工具按 `completed` 计数**至少每 `MAX_AUDIT_RECORDS / 2` 条**调用一次 `audit_snapshot()` 取走新记录（**按 `completion_seq` 去重与排序**；记录按完成顺序保留，乱序完成时 `seq` 不单调，R5-05），喂给自己的验证器（`L` / `Hs` / `Mf` 同样流式处理），验证器重建全历史并重算 O1（`begin_event` / `end_event` 最大重叠 ≤ `M`）、O2、O3。每次取走必须满足连续性：新记录的最小 `completion_seq` 恰为已取走的最大 `completion_seq` + 1；出现缺口（`completion_seq ≤ dropped_records` 中有从未被取走的）⇒ 该运行的全历史项记为 `NOT_VERIFIED`（evidence gap），**不得**用保留窗口冒充全历史。验证器对取走记录里重复的 `seq` / `attempt_id`（含溢出后复用旧 id）报红；保留窗口的实现不得以 `seq` 为键折叠记录（否则重复被掩盖）。`Z.peak_in_flight` 始终是权威的历史峰值（第 20.5 节）。
 6. **O3（K 的可复算区间）**：(O3a) 由窗口 / 取走的记录的 `task_known_event` / `end_event` 重算 `K` 的最大重叠，`≤ M` 且 `≤ |A|`；(O3b) 代理视角：区间 = `[该 attempt 的 202 delivered, 该 attempt 最后一个请求的响应 delivered]`（含取消之后的清理轮询；未 delivered 的 `202` 不产生区间），最大重叠 `≤ M`，它能发现经 HTTP 可见的“aggregate 已返回而清理仍在继续”，**不声称**穷尽所有重叠；(O3c) 测试工具以 ≤ 20 ms 间隔采样宿主任务仅作佐证，离散采样不证明连续峰值。未知 id 不被假装归类。**oracle 自检**：对 `ORPHAN-M1` 与“取消被受理后继续轮询”夹具，把 `H2` 孤儿计入 `K` 的变异 oracle、在取消响应处截止 `K` 的变异 oracle 必须与期望**不一致**（M6-28）。**O4 纯净对照**：仅在没有 `CREATION_UNKNOWN` / 放弃 / 孤儿的场景里，宿主上本批 `queued + running ≤ M`，不推广。
 7. **强制孤儿用例 `ORPHAN-M1`（M = 1）**：宿主返回 `202 + id=101`（H1、H2），代理记录 `101` 但**丢弃该响应**（没有 H3）；P6 没有收到 `101`，记 `CREATION_UNKNOWN`，该 aggregate 返回 `FAILED`；任务 `101` 被 `HOLD` 保持 `running`（孤儿）；随后下一个 aggregate 创建并完成另一个任务。期望：`101 ∈ H`、`101 ∉ K`、`S = CREATION_UNKNOWN`；未变异实现 PASS（`|A| ≤ 1`、`|K| ≤ 1`、每个 `attempt_id` 至多一个 `POST`、`|H| == 2 > M` 被允许）。**必须 FAIL 的实现错误**：绕过 P4 scheduler 使 `|A| > M`（O1）；`UNKNOWN` 之后自动再 `POST`（O2-1）；隐藏 scheduler / 无界 fan-out；孤儿被归入 `K`；取消响应后提前返回而把轮询留给后台（detached，M6-11 / M6-30）。
 8. **三个并发数必须区分**：① P4 metadata 并发 `M = OrchestrationConfig.metadata.max_in_flight_items`（缺省 4；P4 是唯一 owner，不变）；② Amane 宿主**配置的** worker 并发——`WorkerConfig.concurrency` 缺省是 **10**（两个版本相同，`config/manager.py`；`scheduler/worker.py` 构造函数里的 `concurrency=3` 只是类默认），验收宿主若明确配置了其它数值，以**实际配置**为准；③ 孤儿任务占用的并发。当 `M` 大于宿主实际并发，或孤儿任务占满并发时，多出的任务在宿主排队，其排队时间计入 `aggregate_deadline_seconds`（L6-07）。aggregate 返回之后，被放弃 / 取消的任务不再计入 `A` / `K`（清理轮询期间仍计入），但其执行协程可能仍在宿主上运行（第 10.3 节，L3 永远 UNVERIFIED）。
@@ -1380,13 +1838,13 @@ P6-C1 **不新增**：P6 batch 数据库、checkpoint 文件、JSON resume 文�
 * Amane SCRAPE 可能按用户的 `scraping.download_resources` 把图片物化为宿主 Resource，且 `crop_poster` 缺省会把**展示列**里的 poster 替换为宿主内部 URL（`/api/resources/<hash>`）。**P6 的图片候选只来自 `PluginRaw` 的 `poster_urls` / `thumb_urls` / `extrafanart`**（第 11.3 / 11.4 节），它们是插件的原始 URL；Amane 的物化 / 裁剪**不改写 `raw`**（第 11.3.2 节核查）。因此（Design-R3 / R3-08，修正 R1 遗留的历史错误语义）：
   * **宿主展示 poster**（可能被裁剪 / 物化）与 **P6 的 poster 候选**是两个不同的东西。当 plugin `raw` 相同、只有宿主的展示裁剪 / 物化配置不同，**P6 的 URL 候选集合必须逐项相同**（E6-28：同一上游内容，在 `crop_poster` 开 / 关、`download_resources` 开 / 关的宿主配置下，P6 的 URL 候选集合、NFO 字节与产物清单一致）；
   * P6 **不依赖**宿主 Resource 文件，不把它们当作 P4 图片获取的替代；
-  * 候选 URL 仍经“干净的绝对 http(s) URL”过滤（第 11.4 节）；被剔除的数量计入审计 `dropped_url_count`，它只反映**插件原始 URL 本身**不合法的情形，与 Amane 的裁剪无关；
+  * 候选 URL 仍经“干净的绝对 http(s) URL”过滤（第 11.4 节）；被剔除的数量计入审计 `dropped_url_count`（由 `map_host_result` 第 7 步产生，第 11.2 节），它只统计 **`PluginRaw` 里插件原始 URL 本身**不合规而被删除的元素；**Amane 展示 poster 的裁剪 / 物化（`/api/resources/<hash>`）从不进入 P6 的 URL 过滤，也不进入 `dropped_url_count`**（R5-09）；
   * **不修改**用户的 Amane 全局配置（零 `/api/config` 访问）。
 * P4 仍可能因为**原始 URL 缺失、URL 不合法或图片获取失败**产生 `POSTER_ABSENT` / `FANART_ABSENT` / 候选级失败警告；这些警告**不得**被归因于 Amane 展示列的裁剪或物化（L6-10 已修正）。不修改 CLOSED P4 的图片获取 / NFO 实现。
 * **E6-28 冻结用例（Design-R4 / R4-09；只比较配置开关而没有实际展示值变化不算证明）**。依据：两个 pinned 版本的 `media/pipeline.py` 裁剪分支相同——当 `crop_poster = true`、`poster` 在 `download_resources` 里、宿主有 web client、存在可下载的缩略图，且 `should_crop_poster(thumb_size, candidate_size, skip_ratio)` 为真（无海报候选，或 `candidate_height / thumb_height < poster_crop_skip_ratio`）时，展示 poster 被替换为 `/api/resources/<hash>`；缩略图下载成功者前置（`_success_first`）。**固定输入**：缩略图 `T` = 确定性 JPEG 800 × 538（harness 用 Pillow 以固定像素生成，sha256 写入证据）；短海报 `P` = 确定性 JPEG 300 × 300；死 URL `D` 返回 `404`；全部由回环上游夹具提供（回环主机是 Amane 的内置主机）；处理配置 = `download_resources = [poster, thumb]`、`crop_poster = true`、`poster_ratio = 0.7`、`poster_crop_skip_ratio = 0.9`（缺省）。**正向用例**：`X1` 缺海报 + 有效缩略图（`poster_urls = []`，`thumb_urls = [T]`）；`X2` 短海报 + 有效缩略图（`300 / 538 ≈ 0.56 < 0.9`）；`X3` 缩略图重排（`thumb_urls = [D, T]` ⇒ 展示 `[T, D]`）。**对照**：`C1` = `crop_poster = false`；`C2` = `download_resources = []`。**必须同时断言**：① 非空性——`X1` / `X2` 的展示 poster 以 `/api/resources/` 开头且不同于对照组，`GET /api/resources/<hash>` 返回 `200 image/jpeg` 且宽高比符合 `poster_ratio`（±0.02），`X3` 的展示 `thumb_urls` 顺序确实变化；② `raw[ffcc.fc2-metadata]` 在三组配置下逐字节相同；③ P6 的 poster / thumb / extrafanart 候选元组、NFO 字节、产物清单在三组配置下逐项相同；④ `POSTER_ABSENT` 等 P4 警告只随 `raw` 变化。任一非空性断言不成立（宿主无 web client、Pillow 缺失、`acquire` 失败……）⇒ `FAIL（NON-VACUITY）`或`NOT_RUN`，**不得 PASS**。设计期状态：`UNVERIFIED`，待 S3 在真实宿主上实际执行。
 * **验收宿主**可以（也必须）明确关闭 Amane 自身的 resource download（`scraping.download_resources = []`）与演员扇出（`actor_scraping.auto_scrape = false`），
   以减少重复网络与不确定性（第 22 节）；这只发生在测试工具里，对象是一次性的临时宿主。
-* 图片候选级部分失败（P4 §22）保持为条目**警告**；“image partial failure”场景由 P4 的真实 `HttpxImageClient`（`httpx.MockTransport`）驱动，P6 只证明它们
+* 图片候选级部分失败（P4 §22）保持为条目**警告**；“image partial failure”场景由 P4 的真实 `HttpxImageClient`（P4 自有 `ImageHttpClient` 测试接缝；P6 自身不使用 `MockTransport`）驱动，P6 只证明它们
   与真实宿主元数据组合时语义不变。
 
 ---
@@ -1472,8 +1930,9 @@ AmaneBatchError(Exception)                      基类；消息固定、不含 U
 
 ```python
 class AmaneHostClient:
-    def __init__(self, config: AmaneHostConfig, *, transport: httpx.AsyncBaseTransport | None = None) -> None
-    # transport 仅供测试注入 httpx.MockTransport；生产保持 None。构造零 I/O，不发请求。
+    def __init__(self, config: AmaneHostConfig) -> None
+    # R5-11 方案 A（待安全授权，第 10.6 节）：没有 transport= 参数；client 自建 httpx.AsyncClient（trust_env=False、固定 Timeout、无重定向）。构造零 I/O，不发请求。
+    # 故障 / 协议测试通过真实回环套接字上的故障代理（第 22.5 节）执行，而不是替换传输层。
     async def submit_scrape(self, number: str) -> HostTask
     async def observe_task(self, task_id: int) -> HostTask
     async def cancel_task(self, task_id: int) -> HostBatchCancelResult
@@ -1483,8 +1942,9 @@ class AmaneHostClient:
     # 每个方法失败时只抛 AmaneHostCallError(kind)；HostTask / HostMetadata / … 是私有 _wire 类型（不进入 __all__）
 
 class AmaneAggregationEngine:
-    def __init__(self, client: AmaneHostClient, *, _clock=time.monotonic, _sleep=asyncio.sleep) -> None
-    # _clock / _sleep：关键字专用的测试接缝（确定性单测）；生产不得传入
+    def __init__(self, client: AmaneHostClient) -> None
+    # R5-11 治理附加裁决（方案 A 的衍生变更，待确认）：撤销 R4 的 _clock / _sleep 关键字接缝——可注入的 sleep 同样可以吞掉 CancelledError 而破坏有界取消；
+    # 确定性单测改用真实回环宿主 + 短间隔（poll_interval ≥ 0.05 s、aggregate_deadline ≥ 1 s）
     async def aggregate(self, number: str) -> AggregationResult      # 类属性中的普通 async def（P4 静态形态检查要求）
     def audit_snapshot(self) -> AmaneHostAuditSnapshot
 ```
@@ -1498,8 +1958,7 @@ class AmaneAggregationEngine:
 ```python
 class AmaneBatchIntegration:
     def __init__(self, host: AmaneHostConfig, image_client, library_root: str, *,
-                 output_policy=None, image_policy=None, config: OrchestrationConfig | None = None,
-                 transport: httpx.AsyncBaseTransport | None = None) -> None
+                 output_policy=None, image_policy=None, config: OrchestrationConfig | None = None) -> None   # R5-11 方案 A：无 transport= 参数
     # 构造：校验 + 创建 AmaneHostClient / AmaneAggregationEngine / BatchOrchestrator；零网络、零文件系统访问
     # image_client 属于调用方（P4 约定）；门面只拥有自己创建的 AmaneHostClient
     async def preview(self, items) -> AmaneBatchPreview           # items: list|tuple[DiscoveredMediaItem]；先 preflight（9.5）
@@ -1556,59 +2015,54 @@ class AmaneBatchSummary:            # 确定性、纯语义；由最新视图的
 当 `rounds == 1` 时，`total / ready_round_local / blocked / unprepared / warned / stage_counts` 与 `rounds[0].preview.summary` **逐项相等**（交叉校验，E6-19）。
 元组均按枚举声明顺序排序，保证确定性。`ready_round_local` 的命名与文档必须显式表明它是“轮内”口径；任何把它描述为“全局可执行 / 无冲突”的文字都违反本合同（M6-22）。
 
-### 20.5 审计模型（唯一规范；运维，非确定性，与语义分离；Design-R4 / R4-05、R4-06 重写）
+### 20.5 审计模型（唯一规范；运维，非确定性，与语义分离；Design-R4 / R4-05、R4-06 重写，Design-R5 / R5-04、R5-05 修订）
+
+`HostAttemptRecord` 及全部相关枚举（`HostFailureKind`、`SubmissionState`、`CleanupTrigger`、`CancelOutcome`（10 个成员）、`AggregateTerminal`、`TimestampRelation`）的**唯一定义**是第 10.3.1 节的 `gate:host_attempt_record_types` 代码块；本节不再另抄一份（避免两套定义）。记录相对 R4 新增三个字段：`completion_seq`（完成序号）、`cancel_request_confirmed`、`nonterminal_observed`。
 
 ```python
-class HostFailureKind(Enum):  # 第 12.1 节的 19 个 HOST_* 成员；value = 去掉 HOST_ 前缀的小写
-class CancelOutcome(Enum):    # 第 10.3 节的 9 个成员（含 NOT_APPLICABLE / NOTHING_TO_CANCEL；无任何断言“执行已停止”的成员）
-class SubmissionState(Enum):  # SUBMISSION_NOT_ATTEMPTED / SUBMISSION_ATTEMPTED（仅瞬态）/ CREATION_CONFIRMED / CREATION_UNKNOWN
-class CleanupTrigger(Enum):   # NONE / CALLER_CANCEL / DEADLINE / OBSERVATION_FAILURE / ECHO_MISMATCH / SUBMISSION_UNRESOLVED / INTERNAL_ERROR / FATAL_BASEEXCEPTION
-class AggregateTerminal(Enum):# SUCCESS / FAILED / RAISED / CANCELLED
-class TimestampRelation(Enum):# 第 11.3.4 节：UPDATED_NOT_AFTER_FINISHED / UPDATED_AFTER_FINISHED / INDETERMINATE（仅比较标签）
-
-@dataclass(frozen=True, slots=True)
-class HostAttemptRecord:      # __post_init__ = 第 10.3.1 节的 record_is_legal
-    seq: int; engine_index: int; attempt_id: str      # attempt_id == "e{engine_index}-a{seq}"
-    number: str
-    host_task_id: int | None
-    outcome: HostFailureKind | None                   # R == FAILED 时必为某个失败种类，其余为 None
-    terminal_status: str | None                       # 观察到的结构化终态 "done" | "failed" | None
-    submission: SubmissionState                       # S；终态记录不得为 SUBMISSION_ATTEMPTED
-    cleanup_trigger: CleanupTrigger                   # T：终态的决定性触发
-    cancel: CancelOutcome                             # C
-    terminal: AggregateTerminal                       # R
-    cancel_post_attempted: bool                       # L1 见证（自报告，第 10.3.3 节）
-    begin_event: int; task_known_event: int | None; cancel_event: int | None; end_event: int   # 取自 engine 的单一事件计数器
-    polls: int; requests: int; dropped_url_count: int
-    display_title_diverged: bool                      # 展示列 title 与 raw 插件记录的 title 不同（仅审计）
-    timestamp_relation: TimestampRelation             # 两个时间戳字符串的比较标签（仅审计）
-    metadata_id: int | None
-    elapsed_ms: float
-
 @dataclass(frozen=True, slots=True)
 class AmaneHostAuditSnapshot:
-    # ---- 保留窗口 W（至多 MAX_AUDIT_RECORDS 条，按 seq 升序；只含已完成的 aggregate）
+    # ---- 保留窗口 W（至多 MAX_AUDIT_RECORDS 条；按 completion_seq 升序，即按完成顺序；只含已完成的 aggregate）
     records: tuple[HostAttemptRecord, ...]
-    dropped_records: int; highest_dropped_seq: int; overflowed: bool       # overflowed == (dropped_records > 0)
+    dropped_records: int; highest_dropped_completion_seq: int; overflowed: bool   # overflowed == (dropped_records > 0)
     retained_window_peak: int                                              # 仅由窗口内记录重算的并发峰值
+    # ---- 在途明细（R5-04）：此刻尚未完成的 aggregate，按 seq 升序
+    in_flight_detail: tuple[tuple[str, InFlightPhase], ...]                # (attempt_id, 阶段)；InFlightPhase = BEGUN | ATTEMPTED | CONFIRMED
     # ---- 累计状态 Z（权威；在线更新；O(1) 内存；溢出后也精确）
     last_seq: int; last_event: int
     started: int; completed: int; in_flight: int
     peak_in_flight: int                                                    # 全历史并发峰值，在 begin 时更新
-    submitted: int                                                         # == #{S ≠ NOT_ATTEMPTED}：发出 POST 的次数，不是创建的任务数
-    creation_confirmed: int; creation_unknown: int
-    abandoned_attempts: int                                                # == #{T ≠ NONE ∧ S ≠ NOT_ATTEMPTED}
-    uncertain_cancellations: int                                           # == #{C ∈ UNCERTAIN_*}
+    submitted: int                                                         # 发出 POST 的次数（含在途）：在 POST 交给传输层之前递增；不是创建的任务数
+    creation_confirmed: int; creation_unknown: int                         # 仅统计已完成的 aggregate
+    abandoned_attempts: int                                                # == #{T ≠ NONE ∧ S ≠ NOT_ATTEMPTED}（已完成的）
+    uncertain_cancellations: int                                           # == #{C ∈ UNCERTAIN_*}（已完成的）
     failure_counts: tuple[tuple[HostFailureKind, int], ...]
 ```
 
 **两个作用域（冻结）**：
-* **累计状态 `Z`**：在每个 aggregate 的 `begin`（`started`、`in_flight`、`peak_in_flight`）与 `end`（其余计数）**在线更新**；**溢出后不得由保留记录重新求和**。`Z` 是全生命周期计数与峰值的唯一权威。
-* **保留窗口 `W`**：只保存最近完成的至多 `MAX_AUDIT_RECORDS` 条记录；超出时丢弃 `seq` 最小者，更新 `dropped_records` 与 `highest_dropped_seq`，**不**回改 `Z`。
+* **累计状态 `Z`**：在 aggregate 的**更新点**在线更新（下表）；**溢出后不得由保留记录重新求和**。`Z` 是全生命周期计数与峰值的唯一权威。
+* **保留窗口 `W`**：只保存最近完成的至多 `MAX_AUDIT_RECORDS` 条记录；超出时丢弃 **`completion_seq` 最小者**（FIFO，按完成顺序），更新 `dropped_records` 与 `highest_dropped_completion_seq`，**不**回改 `Z`。因此被丢弃的记录恰好是 `completion_seq = 1..dropped_records`，与 `seq`（开始顺序）无关（R5-05）。
 
-**不变量（测试逐项断言）**：① `last_seq == started`，`started == completed + in_flight`，`completed == len(records) + dropped_records`；② `peak_in_flight ≥ retained_window_peak`，历史峰值不会因记录被丢弃而下降；③ `seq` 稠密：分配时 `seq == last_seq + 1`；`last_event` 等于已分配的最大事件值；④ 当 `overflowed == False` 时，由 `W` 重新求出的全部计数必须与 `Z` 相等（自洽性测试）；`overflowed == True` 时只有 `Z` 权威，由 `W` 求出的值只是“窗口值”，必须以 `retained_*` 命名并标注；⑤ 窗口内事件互不相同；⑥ 快照是不可变值，不共享可变状态。
+**`Z` 的更新点（R5-04；每个计数器只在下列时刻改变，且每个时刻在同一个同步段内完成，不含 `await`）**：
 
-**溢出之后哪些验证仍然成立**：`Z` 级别的计数与历史峰值（自报告）；窗口内记录的合法性与对账（独立事实）；全历史的独立复算只能由第 14.4 节第 5 点的分段流式验证提供——该验证要求测试工具在记录被丢弃之前取走它们，否则全历史项为 `NOT_VERIFIED`。
+| 更新点 | 时刻 | 改变的计数器 |
+|---|---|---|
+| `started` | `aggregate` 入口、分配 `seq` 与 `begin_event` 时 | `started += 1`、`in_flight += 1`、`peak_in_flight = max(peak_in_flight, in_flight)`；阶段 = `BEGUN` |
+| `submitted` | 在 `POST /api/tasks` **交给传输层之前** | `submitted += 1`；阶段 = `ATTEMPTED`（`S` 此刻在记录里还不存在；只有终态记录才有 `S`） |
+| H4 | 收到合法 `202` + 严格 reader 通过 | 阶段 = `CONFIRMED`（仅在途明细；`creation_confirmed` 在**完成时**才计数） |
+| `completed` | 终态记录写入时 | `completed += 1`、`in_flight -= 1`、`creation_confirmed` / `creation_unknown` / `abandoned_attempts` / `uncertain_cancellations` / `failure_counts` 按记录增加；记录获得 `completion_seq = completed`；阶段条目移除 |
+
+**不变量（测试逐项断言；分为“任何时刻都成立”和“仅静止（`in_flight == 0`）时成立”两类，R5-04）**：
+
+*任何时刻（包括有 aggregate 在途时）*：① `last_seq == started`；`started == completed + in_flight`；`len(in_flight_detail) == in_flight`；`completed == len(records) + dropped_records`；② `submitted == #{已完成的记录：S ≠ NOT_ATTEMPTED} + #{在途明细：阶段 ∈ {ATTEMPTED, CONFIRMED}}`（溢出后该式只对 `Z` 内部分量成立，不用 `W` 求和）；③ `peak_in_flight ≥ max(in_flight, retained_window_peak)`；④ `seq` 稠密：分配时 `seq == last_seq + 1`；`completion_seq` 稠密：`completion_seq == completed`；⑤ 窗口内事件互不相同；⑥ 快照是不可变值，不共享可变状态。
+
+*仅静止时*：⑦ `in_flight == 0`；⑧ 当 `overflowed == False` 时，由 `W` 重新求出的 `creation_confirmed` / `creation_unknown` / `abandoned_attempts` / `uncertain_cancellations` 必须与 `Z` 相等；`overflowed == True` 时只有 `Z` 权威，由 `W` 求出的值只是“窗口值”，必须以 `retained_*` 命名并标注。**R4 把 ⑧ 当成任何时刻都成立的不变量，在有 aggregate 在途时会错误地报红（`Z.submitted` 已递增而记录尚未存在）——R5-04。**
+
+**在途快照的必测场景（Gate D；五个，每个断言上面“任何时刻”的不变量与 `in_flight_detail` 的阶段）**：(1) `BEGUN`：`aggregate` 已入口、`POST` 尚未发出；(2) `ATTEMPTED`：`POST` 已交给传输层而响应未到；(3) `CONFIRMED`：已收到 `202`，正在观察；(4) 清理中：取消请求已发送、正在轮询；(5) 多个 aggregate 同时处于不同阶段（并断言 `peak_in_flight` 单调不减）。
+
+**乱序完成与流式收集（R5-05）**：`aggregate` 按 `seq`（开始顺序）分配 id，但按**完成顺序**写入记录，所以窗口里的 `seq` 可能不单调。收集器以 `completion_seq` 为游标：每次 `audit_snapshot()` 之后，对窗口内每条记录以 `completion_seq` 去重；**被丢弃的记录恰好是 `completion_seq ≤ dropped_records`**，收集器若在 `1..dropped_records` 中有未见过的 `completion_seq` ⇒ 不可恢复缺口 ⇒ 全历史项 `NOT_VERIFIED`（不是 PASS）。规则：任何记录的 `seq > last_seq`（`> max_seen` 之外且不在途）⇒ 非法；`MAX_AUDIT_RECORDS = 20000` 溢出时按上述 FIFO 丢弃；溢出后继续运行，`Z` 仍精确。
+
+**溢出之后哪些验证仍然成立**：`Z` 级别的计数与历史峰值（自报告）；窗口内记录的合法性与对账（独立事实）；全历史的独立复算只能由第 14.4 节第 5 点的分段流式验证提供——该验证要求测试工具在记录被丢弃之前取走它们（至少每 `MAX_AUDIT_RECORDS / 2` 次完成取走一次），否则全历史项为 `NOT_VERIFIED`。
 
 ---
 
@@ -1677,13 +2131,47 @@ class AmaneHostAuditSnapshot:
 * 行为类别：`ALL_OK`（≥ 10 个互异号）、`DEGRADED_ONE_SOURCE`（一个来源 5xx / 404，其余命中）、`TOTAL_FAILURE`（全部来源失败）、`HOLD`（响应被扣留直到测试释放；
   用于“宿主任务运行中”的取消）、`SLOW`（可控延迟；用于完成顺序反转）。
 * 请求账本只记录（来源、digits、方法、行为），不记录端口 / 时间 / 绝对路径。
-* 图片：`HttpxImageClient(transport=httpx.MockTransport(...))`，对元数据里的绝对 URL 返回确定性图片字节；单个候选的失败行为由 URL 令牌选择（沿用 P4-C10 harness 的约定，只读复用）。
+* 图片：P4 自有的 `HttpxImageClient(transport=httpx.MockTransport(...))` 测试接缝（**属于 CLOSED 的 P4，不是 P6 公共 API；P6 自身不使用 `MockTransport`**，R5-11），对元数据里的绝对 URL 返回确定性图片字节；单个候选的失败行为由 URL 令牌选择（沿用 P4-C10 harness 的约定，只读复用）。
 
 ### 22.5 故障注入代理（测试工具；“真实宿主 + 受控网络 / 响应故障”）
 
 回环 TCP/HTTP 代理，位于 P6 client 与真实宿主之间，按脚本施加**记录在案**的故障：丢弃 / 延迟第 n 个匹配请求的响应、关闭连接、**改写**真实宿主响应中的某个 JSON 字段
 （删除 `result.metadata_id`、改 `metadata.number`、清空 / 删除 / 改写 `raw` 中的插件记录或其键、向任务侧 `field_sources` 注入外来站点、改写展示列的 `field_sources` / `locked_fields` / `updated_at`）、并**同时充当独立 POST 账本**（按到达顺序记录**每个**请求的 `(attempt_id, 方法, 路径, 请求体键集与号 / ids, 响应状态)`，并区分 `forwarded`（代理转发并看到宿主的 `202 + id`，H2）与 `delivered`（代理把响应完整写给了 P6 的连接，H3）两种事件；丢弃 / 截断响应时只有 `forwarded`。账本是**代理自己的观察**，不等同于 P6 已经收到的信息（H4）；供第 14 节 O2 / O3 与第 10.3 节取消见证对账使用）、**挂起**第 n 个匹配请求直到 harness 放行（用于“任务完成之后、P6 读取 Metadata 之前”的手工更新）、以及把响应体替换为**字节数未超限但结构超限**的 JSON（深层嵌套 / 海量节点 / 超大集合）。用途：传输超时、取消不确定性（丢弃取消响应）、DONE 缺 `metadata_id`、
 号不匹配、低于最低成功、外来归属。故障脚本进入证据 JSON。
+
+**故障覆盖矩阵（R5 治理附加 A；方案 A 之下**所有**故障都来自真实回环 TCP / HTTP，不使用任何可注入传输）**。测试宿主（回环 HTTP 服务器）与代理支持的故障模式，以及它们在 Gate C 中的对应检查（每项检查同时断言 token 与响应体 canary 不出现在异常文本、审计记录、存活的 `Request` / `Response` 里）：
+
+| 要求的故障 | 回环故障模式 | Gate C 检查 | 期望 |
+|---|---|---|---|
+| 首次 / 二次 / 多次取消 | 宿主停滞 + 调用方 `cancel()` ×1 / ×2 / ×4 | C1–C8；F “四次连续取消” | `CALLER_CANCEL`；仅 1 个取消 `POST`；`INTERRUPTED` |
+| 响应头停滞 | `stall` | C1；F “响应头永不到达” | `HOST_TIMEOUT` / `UNKNOWN` |
+| 响应头 / 响应体 slowloris | `dribble_hdr` / `dribble` | D1–D2、D10 | 总 deadline 内 `HOST_TIMEOUT` |
+| 流中断 | `partial`（部分响应体后停滞）、`truncated`（Content-Length 不足后关闭）、`reset`（RST） | C2；F 三项 | `HOST_NETWORK` / 取消 |
+| 连接拒绝 | 已关闭端口 | F “connection refused” | `HOST_CONNECTION` |
+| 丢失 `202` | 代理读到宿主 `202` 但不转发（有孤儿任务） | F “lost 202”；Gate D ORPHAN-M1 | `UNKNOWN`；宿主上有任务 |
+| `401` / `403` / `429` / `500` / `503` / `404` | `status:N` | F 六项 | 对应 `HostFailureKind` |
+| 非法 JSON / 结构错误 / 超大 | `badjson` / `badschema` / `toolarge` | F 三项 | `SCHEMA_INVALID` / `RESPONSE_TOO_LARGE` |
+| 观察期故障 | `GET` 全 `503` | F “observation 503” | `OBSERVATION_FAILURE` + `OBSERVATION_FAILED` |
+| 元数据阶段非法 JSON | `GET /api/metadata` `badjson:200` | F “metadata” | `SCHEMA_INVALID`，`terminal_status = done` |
+| 取消请求自身故障 | 取消 `POST` 回 `401` / `500` / 非法 JSON / RST | F 四项 | `NO_RESPONSE`（`cf = 否`） |
+| TLS 握手停滞 / 黑洞地址 | 回环 TLS 服务器不应答 / 不可路由地址 | TLS / blackhole | 超时或取消，无残留 task |
+| 异常路径 | 传输层抛非 `httpx` 异常（`httpx.AsyncHTTPTransport` 补丁点，仅测试） | R5-12 红绿孪生 | `HOST_NETWORK`，无链 |
+| 致命异常 | 第三方钩子 / 网络读抛出（含抛出方植入凭据的反例）；任一字节码 / 检查点注入 | F3 33 项（4 个植入用例 = OUT_OF_THREAT_MODEL，B1）+ 帧安全 11 项 + 审计自检 10 项 + 窗口探针 | 第 10.5 节 |
+| 凭据 canary | 全部用例 | 每项内含 | 不出现 |
+| 迟到 `202` | 代理读到宿主 `202` 后延迟投递，直到客户端早已放弃 | C3-4 | `UNKNOWN`；宿主有孤儿任务；P6 之后不再发任何请求 |
+| 精确 task id 取消 | 代理账本 | C3-5 | 恰 1 个取消 `POST`，体键恰为 `{action, task_ids}`，`task_ids == [202 里的 id]`，旁观任务未被取消，所有请求带同一 `X-FFCC-Attempt` |
+
+**故障网络的独立性（Gate C-Final-03）**：回环故障宿主与代理在独立模块 `faultnet.py` 中，**只导入标准库**（`asyncio`、`json`），不引用被测的生产状态机、记录谓词、合同类型或期望结果；响应只由脚本化模式决定。判定规则（O2 对账、期望的失败种类、取消结果）写在各 Gate 脚本里，不在被测原型、也不在故障网络里；Gate 对 `faultnet.py` 的导入集合与禁用名字做机检（C3-2 / C3-3）。
+
+**测试接缝撤销后的验收能力（`transport=`、`_clock`、`_sleep` 均不存在）**：
+
+| 需要的确定性能力 | 在没有注入点时如何构造 | 检查 |
+|---|---|---|
+| 首次 / 二次 / 多次取消，精确 task id 取消 | 真实宿主停滞 + 调用方 `cancel()`；代理账本核对取消体与 id | C1–C8、F “四次连续取消”、C3-5 |
+| 迟到 `202`、超时、连接失败、流中断 | 代理延迟投递；回环宿主 `stall` / `dribble*` / `truncated` / `reset`；已关闭端口 | C3-4、第 22.5 节矩阵 |
+| aggregate deadline 与观察间隔（原先依赖 `_clock` / `_sleep`） | 真实时间下的最小合法取值：`aggregate_deadline_seconds = 1`、`poll_interval_seconds = 0.05` | C3-6（1.0 s 的 deadline 在约 1.66 s 内以 `DEADLINE` + 清理结束） |
+| 取消 / deadline 竞态 | 原型接缝仅用于设计探针；实现的验收用真实回环 + 调用方的 `call_later` / `asyncio.timeout` / `TaskGroup` 构造同一批交错 | race_probe R1–R11 |
+| 无隐藏 scheduler、额外 P6 task、长期残留资源 | 每个场景之后检查 P6 task、待触发的 deadline 定时器、连接池连接、线程 | C3-7（0 / 0 / 0 / 无新增线程） |
 
 ### 22.6 旁观任务（bystander）
 
@@ -1698,29 +2186,29 @@ class AmaneHostAuditSnapshot:
 |---|---|---|
 | E6-01 | 范围门：`git diff 4189b95…..HEAD` ∪ 工作树 ⊆ P6 allow-list；闭合范围零 diff；**HG-1 精确约束**（第 5.4 节：文件集合恰为两个；唯一移交的两处工作树断言；测试函数名集合 = Base 集合减 1；四个历史常量 AST 逐字相同；无新增 skip / xfail；diff 行数 ≤ 60）；**P6 自有的 C0 控制字符检查覆盖 `4189b95…..HEAD` ∪ 工作树内全部文本文件**（承接被重绑的历史检查） | `tests/amane_batch/test_amane_batch_scope_gate.py` |
 | E6-02 | Contract → implementation → test 映射表（逐条合同条款 / 不变量） | HANDOFF |
-| E6-03 | 架构守卫（AST）：import 允许 / 禁止清单；禁用标识符（19.2）；endpoint 常量集合 **等于** 表 H1；无 logging / 文件 API；控制流不比较 `error` / `detail` / `str(exc)` / `exc.args`；**`host_client.py` / `facade.py` 的 `except` 处理体内不得出现带参数的 `raise`（第 8.3 节）**；JSON 预扫描无递归（无自调用、无递归下降）；门面不直接调用 `engine.aggregate`（第 9.5 节）；**整个包**禁止 `asyncio.shield` / `create_task` / `ensure_future` / `gather` / `TaskGroup` / `run_in_executor` / `to_thread` / `threading`，且 `host_client.py` / `_lifecycle.py` / `engine.py` 的 `except` 内只有一类裸 `raise`（致命三类，第 10.2 节第 6 条） | `test_amane_batch_architecture.py` |
+| E6-03 | 架构守卫（AST）：import 允许 / 禁止清单；禁用标识符（19.2）；endpoint 常量集合 **等于** 表 H1；无 logging / 文件 API；控制流不比较 `error` / `detail` / `str(exc)` / `exc.args`；**`host_client.py` / `facade.py` 的 `except` 处理体内不得出现带参数的 `raise`（第 8.3 节）**；JSON 预扫描无递归（无自调用、无递归下降）；门面不直接调用 `engine.aggregate`（第 9.5 节）；**整个包**禁止 `asyncio.shield` / `asyncio.timeout` / `asyncio.timeout_at` / `asyncio.wait_for` / `create_task` / `ensure_future` / `gather` / `TaskGroup` / `run_in_executor` / `to_thread` / `threading`，`loop.call_at` / `Task.cancel` / `Task.cancelling` / `Task.uncancel` 只允许出现在 `_transport`（C8），`_transport` 的 `try` 必有 `finally: timer.cancel()`，且 `host_client.py` / `_lifecycle.py` / `engine.py` 的 `except` 内只有一类裸 `raise`（致命三类，第 10.2 节第 6 条）；**包内不得有任何测试钩子 / 开关 / 环境变量（模块级可变回调、`TRACE` / `HOOK_*` 之类，M6-50）**；**致命处理体形状守卫（C9：边界帧内联、`_transport` 无致命处理体、边界局部干净）**；**公共构造面签名守卫（R5-11）**：`AmaneHostClient` / `AmaneAggregationEngine` / `AmaneBatchIntegration` 的 `__init__` 与 `AmaneHostConfig` 字段中不得出现 `transport` / `http_client` / `client_factory` / `mounts` / `event_hooks` / `verify` / `proxy` / `trust_env` / `sleep` / `clock` 等注入参数，也不得有 `httpx.` 类型注解（含 R4 签名的红孪生） | `test_amane_batch_architecture.py` |
 | E6-04 | 配置 / 凭据：校验矩阵（base_url 全部非法形态、数值边界、凭据字符集）；redaction；不可 pickle / copy | `test_amane_batch_config.py` |
-| E6-05 | client 协议（`httpx.MockTransport`）：**请求账本逐键断言**（方法 / 路径 / 体键集 / 头集）；无 cookie 回传、无重定向跟随、无环境代理 / `.netrc`、响应上限、状态码映射表穷举 | `test_amane_batch_client.py` |
+| E6-05 | client 协议（**真实回环套接字上的故障代理与测试宿主**，不使用 `httpx.MockTransport`，`AmaneHostClient` 不接受任何传输，R5-11 方案 A）：**请求账本逐键断言**（方法 / 路径 / 体键集 / 头集，由代理独立记录）；无 cookie 回传、无重定向跟随、无环境代理 / `.netrc`、响应上限、状态码映射表穷举；第 22.5 节**故障覆盖矩阵**的全部行（连接拒绝、响应头停滞、slowloris、流中断 / 截断 / RST、丢失 `202`、`401` / `403` / `429` / `500` / `503` / `404`、非法 / 错构 JSON、超大响应） | `test_amane_batch_client.py` |
 | E6-06 | 严格 reader：必需键缺失 / 类型错误 / 额外键容忍（`HostMetadata` 仅 `id` / `number` / `raw`，其余展示列与 `locked_fields` / `field_sources` 被忽略且不保留）；`PluginRaw` reader（第 11.3.3 节）；**有界 JSON（R1-07 / R2-03）**：深度 / 节点 / 集合项各自“恰在上限（绿）/ 超一（红）”孪生，字节数均远低于 8 MiB；输入矩阵覆盖长字符串、长空白、转义引号、连续反斜杠、字符串内部的 `{ } [ ]`、对象键、空对象、空数组、未知嵌套字段；预扫描计数与独立递归参考计数器在小输入上逐项对账；超限在 `json.loads` **之前**拒绝（对 `json.loads` 的 spy 断言未被调用）；深层嵌套不触发 `RecursionError`；超限映射 `HOST_RESPONSE_TOO_COMPLEX` 且不保留原始响应；**成本**：正常通过时扫描的操作计数随 `B` 线性（`B` 与 `2B` 的比值有界，用操作计数而非墙钟），辅助栈深度 ≤ `MAX_JSON_DEPTH`，不物化子串；两个版本的真实合法响应（含 `raw`）实测值低于上限的 1/4 | `test_amane_batch_wire.py` |
-| E6-07 | 映射：字段表穷举（守卫 `PluginRaw` / `NormalizedMetadata` 字段集合）、URL 卫生与 P5 I22 逐样本对账、最低成功、号等价、每个 `HostFailureKind` → 合法 Core 配对（`ALLOWED_ERROR_KINDS`）、产出的 `AggregationResult` 通过 Core 校验且能被 P4-C9 诊断投影接受；**值级 provenance（R2-01）**：输出完全由 `raw["ffcc.fc2-metadata"]` 派生，展示列的任何改动（title / actors / tags / URL / `field_sources` / `locked_fields` / `updated_at`）都不改变输出；第 22.3 节 ①–⑦ 七类反事实的单测层红 / 绿孪生；`source_urls` / `external_ids` 恒为空；`display_title_diverged` / `timestamp_relation` 只进审计；**R4-01 映射入口**：从合同抽取第 11.2 节代码块并执行——≥ 42 个有序优先级用例（含“混合来源 + 插件号错误 ⇒ `ATTRIBUTION_FOREIGN`”“畸形插件值 + 号不符 ⇒ `METADATA_CONTRACT`”“号不符 + 空标题 ⇒ `NUMBER_MISMATCH`”）与 20000 次随机变异 fuzz：无未处理异常，每个输入恰有一个分类；**R3-01** 严格键集合的四用例 + 语言后缀 / 未知键用例；**R3-02** 时间戳 CASE A–D 的结果只由两个字符串决定 | `test_amane_batch_mapping.py` |
-| E6-08 | 生命周期与状态机：deadline（含“至少一次观察”）、观察失败容忍、**提交永不重试**；`SubmissionState`（非规范号 ⇒ 无记录；`202` ⇒ `CREATION_CONFIRMED`；超时 / 连接中断 / 响应丢失 / `401` / `403` / `5xx` / schema 非法 ⇒ `CREATION_UNKNOWN`，不折算为 0 或 1）；**状态机（R4-06 / R4-07，唯一规范 = 第 10.3.1 节谓词 + 第 10.3.4 表）**：从合同抽取谓词并执行——`3 × 8 × 9 × 4 × 2 = 1728` 个基础组合逐一判定，与独立参考模拟器的 39 条可产生记录**相等**（过度接受 0、接受不足 0、矛盾 0）；对每条可产生记录做字段级破坏（事件顺序 / 缺 H4 / 伪造 H4 / `cancel_event` 越界 / `bool` 与浮点伪装的整数 / `attempt_id` 与 `seq` 不符 / 状态 `ATTEMPTED` / `outcome` 错配）全部被拒；单字段状态翻转以“翻转后是否仍是可产生记录”为判据；规则消融（删除任一条规则必有反例变红，即每条规则都非空）；命名反例（`CALLER_CANCEL + RAISED`、`INTERNAL_ERROR + CANCELLED`、`UNKNOWN` 的二次取消、`CONFIRMED` 缺 `task_known_event`、`UNKNOWN + DEADLINE`、致命异常后出现 `TERMINAL_*`）；正常成功带合法 `task_known_event` 被接受；表 10.3.4 与谓词接受集合逐行相等 | `test_amane_batch_lifecycle.py` |
-| E6-09 | 取消与清理（唯一规范 = 第 10.2 节）：精确 id、请求体不含 `status` / `type`、预算、`CancelOutcome` 全部 9 种（无 `CONFIRMED_STOPPED`）、**内联清理且包内无第二个 task**（任何时刻 `asyncio.all_tasks()` 中无 P6 创建的清理 task）、首次取消、二次取消、清理超时、清理请求抛异常、清理请求永不返回（每请求超时兜底）、响应流中取消（连接期 / 等响应头期 / 流中途）、致命 `BaseException`（零额外 HTTP 请求、原异常身份保持）；探针在**每个声明支持的解释器**上运行（Python 3.12 与 3.14；3.11 见 E6-25，未安装则 `NOT_RUN`），输出 P6 task 前后差、耗时、异常类型 / 身份与链、`httpx.Request` / `Response` 存活数、清理 HTTP 请求数、连接池可用性；*claimed-but-not-registered window*、*FAILED recorded while handler may run* 与晚到写入、*normal running cancellation* 正向孪生、*race-DONE*；取消见证对账 O2-5（无取消 `POST` + `TERMINAL_FAILED_OBSERVED` ⇒ FAIL；精确 id 取消 + `failed` / `done` ⇒ PASS；取消 + 无终态 ⇒ `UNCERTAIN_NOT_TERMINAL` / `UNCERTAIN_NO_RESPONSE`）；注入的吞取消 `transport=` 作为**已知反例保留**（记录过冲；是否属于承诺范围待独立裁决，第 10.2 节第 8 条），不得因其存在而改写其它路径的结论 | `test_amane_batch_cancellation.py` |
-| E6-10 | 并发与账本（唯一规范 = 第 14.4 节与第 20.5 节）：O1 / O2-1..O2-8 / O3 / O4；**分段流式验证**——测试工具在记录被丢弃前取走并重建全历史，覆盖 `19999 / 20000 / 20001` 条记录、历史峰值 > 窗口峰值（例如历史 4、窗口 1）、代理仍保留早期 `POST` 而 P6 窗口已丢弃对应记录、缺口 ⇒ `NOT_VERIFIED`；`Z` 与由 `W` 求和在 `overflowed == False` 时必须相等、`overflowed == True` 时只有 `Z` 权威；`attempt_id` 在溢出后仍不可能复用（`seq` 稠密）；pre-proxy 取消 / 致命（`POST` 数 0、`Mf` 已声明）通过，未声明的“0”失败；**强制 `ORPHAN-M1`**（M = 1）；oracle 自检；完成顺序反转 / 慢 / 失败 / 取消下不变；门面并发（一个 `preview` 运行时第二个合法调用被 P4 拒绝且零次 `POST /api/tasks`；非法参数 ⇒ `AmaneBatchInputError`；绕过 P4 的变体变红，M6-20） | `test_amane_batch_concurrency.py` |
+| E6-07 | 映射：字段表穷举（守卫 `PluginRaw` / `NormalizedMetadata` 字段集合）、URL 卫生与 P5 I22 逐样本对账、最低成功、号等价、每个 `HostFailureKind` → 合法 Core 配对（`ALLOWED_ERROR_KINDS`）、产出的 `AggregationResult` 通过 Core 校验且能被 P4-C9 诊断投影接受；**值级 provenance（R2-01）**：输出完全由 `raw["ffcc.fc2-metadata"]` 派生，展示列的任何改动（title / actors / tags / URL / `field_sources` / `locked_fields` / `updated_at`）都不改变输出；第 22.3 节 ①–⑦ 七类反事实的单测层红 / 绿孪生；`source_urls` / `external_ids` 恒为空；`display_title_diverged` / `timestamp_relation` 只进审计；**R5-08 URL 卫生**：从合同抽取的第 11.2 节代码块在第 7 步删除不合规 URL（空白 / 控制字符 / 无 host / 空串 / scheme 相对），三个列表合计的 `dropped_url_count` 精确；混合合法与非法 URL 的精确计数；全部合法为 0；最终字段的后置条件（号规范、标题非空白、每个 URL 干净、`dropped` 为 `int ≥ 0`）；**去掉 URL 过滤的变异必须被检出**；**R4-01 映射入口**：从合同抽取第 11.2 节代码块并执行——≥ 42 个有序优先级用例（含“混合来源 + 插件号错误 ⇒ `ATTRIBUTION_FOREIGN`”“畸形插件值 + 号不符 ⇒ `METADATA_CONTRACT`”“号不符 + 空标题 ⇒ `NUMBER_MISMATCH`”）与 20000 次随机变异 fuzz：无未处理异常，每个输入恰有一个分类；**R3-01** 严格键集合的四用例 + 语言后缀 / 未知键用例；**R3-02** 时间戳 CASE A–D 的结果只由两个字符串决定 | `test_amane_batch_mapping.py` |
+| E6-08 | 生命周期与状态机：deadline（含“至少一次观察”）、观察失败容忍、**提交永不重试**；`SubmissionState`（非规范号 ⇒ 无记录；`202` ⇒ `CREATION_CONFIRMED`；超时 / 连接中断 / 响应丢失 / `401` / `403` / `5xx` / schema 非法 ⇒ `CREATION_UNKNOWN`，不折算为 0 或 1）；**状态机（R4-06 / R4-07 / R5-01 / R5-02 / R5-06，唯一规范 = 第 10.3.1 节类型与谓词 + 第 10.3.4 表）**：从合同抽取**真实枚举与冻结数据类**及谓词并执行（不使用字符串替身）——`3 × 8 × 10 × 4 × 2 × 2 × 2 = 7680` 个基础组合逐一判定，与独立参考模拟器的 **63 条**可产生记录**相等**（过度接受 0、接受不足 0、矛盾 0、崩溃 0；状态数由模拟器重新计算，不预设）；对每条可产生记录做字段级与类型级破坏（事件顺序 / 缺 H4 / 伪造 H4 / `cancel_event` 越界 / `bool` 与浮点伪装的整数 / `attempt_id` 与 `seq` 不符 / 状态 `ATTEMPTED` / `outcome` 错配 / 非严格 `bool` 的 `cancel_post_attempted`（`0`、`"not-bool"`）/ `cancel="BOGUS"` / `outcome="CANARY-SECRET"` / `TERMINAL_FAILED_OBSERVED` + `terminal_status="done"`）共 12890 个全部被拒且无崩溃；`outcome × context` 1260 组合、`terminal_status` 189 组合与模拟器一致；规则消融（28 条独立 `return False` 规则逐条删除，必有反例变红）；命名反例与 **R5-06 三用例**（取消未确认 + 非终态 ⇒ 拒绝；取消未确认 ⇒ `NO_RESPONSE` 接受；确认后无任何成功观察 ⇒ `OBSERVATION_FAILED` 接受）；表 10.3.4 与谓词接受集合逐行相等；**Python 3.11.0（最低）与最新可用 3.11.x、3.12、3.14 都执行；3.13 未安装 ⇒ `NOT_RUN`（R5-10）** | `test_amane_batch_lifecycle.py` |
+| E6-09 | 取消与清理（唯一规范 = 第 10.2 节）：精确 id、请求体不含 `status` / `type`、预算、`CancelOutcome` 全部 **10** 种（无 `CONFIRMED_STOPPED`）、**内联清理且包内无第二个 task**（任何时刻 `asyncio.all_tasks()` 中无 P6 创建的清理 task）、首次取消、**第二次与多次取消（50 次流中取消后连接池可用）**、清理超时、清理请求抛异常、清理请求永不返回（每请求超时兜底）、**取消已确认而之后每次观察都停滞 ⇒ `UNCERTAIN_OBSERVATION_FAILED`**、响应流中取消（连接期 / 等响应头期 / 流中途）、TLS 握手停滞 / 黑洞地址 / slowloris、致命 `BaseException`（零额外 HTTP 请求、原异常身份保持；第三方帧可达性作为**披露项**输出，第 10.5 节）；**取消结果的严格优先级与 `NO_RESPONSE` / `NOT_TERMINAL` / `OBSERVATION_FAILED` 的拆分（R5-06）**；探针在**每个声明支持的解释器**上运行：Python 3.11 的**最低小版本（3.11.0）与最新可用小版本**、3.12、**3.13（正式运行时验收，S3 必须运行；设计探针已在 3.13.0 / 3.13.9 通过，但实现验收在运行前为 `NOT_RUN`）**、3.14；**响应头 / 响应体 slowloris 的总 deadline**（R5 附加 B：请求超时 1.0 / 2.0 s 下被滴灌的响应头 / 响应体在 `超时 + 余量` 内以 `HOST_TIMEOUT` 返回；红孪生：关闭总 deadline 时同一服务端使请求远超超时）、**deadline 定时器的取消记账**（调用方取消在定时器武装期间到达 / 与到期同时 / 到期之后：调用方取消永远胜出且 `cancelling()` 恰为 1；仅到期时 `cancelling()` 回到 0；内层把取消转成其它异常时无残留 `CancelledError`；调用方自己的 `asyncio.timeout` 包住 P6 调用仍工作）；取消请求本身被 head-dribble 时清理墙钟 ≤ 预算 + 余量；输出 P6 task 前后差、耗时、异常类型 / 身份与链、`httpx.Request` / `Response` 存活数、清理 HTTP 请求数、连接池可用性；*claimed-but-not-registered window*、*FAILED recorded while handler may run* 与晚到写入、*normal running cancellation* 正向孪生、*race-DONE*；取消见证对账 O2-5（无取消 `POST` + `TERMINAL_FAILED_OBSERVED` ⇒ FAIL；精确 id 取消 + `failed` / `done` ⇒ PASS；取消未确认 ⇒ `UNCERTAIN_NO_RESPONSE`；确认后见过非终态 ⇒ `UNCERTAIN_NOT_TERMINAL`）；**取消归属交错 R1–R11**（第 10.2 节 O1–O5，逐步记录外部取消次数 / 内部 deadline / `cancelling()` 前后 / `uncancel` 调用 / 异常 / 定时器句柄 / 残留挂起取消，三个破坏归属的红孪生，Python 3.11 / 3.13 差异记录）；**故障网络独立性与接缝撤销后的验收能力**（第 22.5 节，C3-1..C3-7）；**不测试任意注入的吞取消传输**——R5-11 方案 A（治理授权，仅设计修订）把该参数从公共 API 移除，故障由回环代理注入；该反例仅可经进程级猴子补丁复现，作为**信息项**记录（不计入通过标准）；**致命 `BaseException` 采用 F3**（同一实例，边界所有权，第 10.5 节；**抛出方植入的 `args` / `__dict__` / `__notes__` 四个用例保留，标 `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS` 并逐项说明 payload 来源 / 凭据归属 / 注入点 / 受支持边界 / 实际可达性 / 预期裁决，不重命名为 PASS，不标 X-NARROW PASS**）：**穷举窗口探针（`window_probe.py`）**——两种中断模型（任一字节码 / CPython 检查点）× 四个出口（直接 client、`aggregate`、两者的正常路径）× k = 1 / 2 / 3，每次运行后对到达调用方的对象做独立审计；**帧安全红绿孪生（R5-CL-01 / R5-GOV-01；`frame_safety.py` 15 项 × 正常 GC 与 `gc.freeze()`，Python 3.11.0 … 3.14.7 全部解释器；红孪生 = 上一版 `gc.get_referrers` 判定，`gc.freeze()` 下本包挂起帧的 `finally` 被执行；Reviewer C 的 `frameclear.py` / `liveness.py` 原样运行作独立基线；静态守卫 `fatal_path_guard.py` 16 个变异）**；**审计事件暴露（R5-NEW-01；Reviewer C 的 `audit_getframe.py` 原样运行 + 派生 `audit_f3.py`，公共 client 与 `aggregate` 两条出口，本包触发的 `sys._getframe` / `gc.*` 事件 = 0，暴露凭据的事件 = 0）**；**逐层所有权证明（`ownership_proof.py`；变异使 9 项全部变红）**；**审计完备性（R5-EV-01；`reach_selftest.py` 10 项：非 canary 正向对照 + 负向对照 + 变异）**；**Reviewer C 真实信号 fuzz `fuzz_fatal.py`（失败路径 / 正常路径；数字见证据包，不是绝对证明，B2）**；**C 级槽位红绿孪生**（`AttributeError.obj` / `OSError.filename` / `ImportError.path` / `StopIteration.value` / 嵌套链；R5 草案的审计器对它们为盲区）；**Reviewer C 的原始 `f3_window.py` / `f3_cslots.py` / `race.py` 逐字节保留并在 R5 草案上复现**；受支持依赖矩阵与静态扫描（`dep_matrix.py`）；5 个第三方注入点 × `KeyboardInterrupt` / `SystemExit`（可行处加 `GeneratorExit`），红孪生（F1）可达 ≥ 2 条路径、F3 为 0，链成员（`httpx` 异常 / 含 token 文本 / 普通异常）保留与切断，`args` / `__dict__` / `__notes__` / 类型逐项不变，净化失败与第二个致命异常的传播，`asyncio.TaskGroup` 对照 | `test_amane_batch_cancellation.py` |
+| E6-10 | 并发与账本（唯一规范 = 第 14.4 节与第 20.5 节）：O1 / O2-1..O2-8 / O3 / O4；**分段流式验证**——测试工具在记录被丢弃前取走并重建全历史，覆盖 `19999 / 20000 / 20001` 条记录、历史峰值 > 窗口峰值（例如历史 4、窗口 1）、代理仍保留早期 `POST` 而 P6 窗口已丢弃对应记录、缺口 ⇒ `NOT_VERIFIED`；**R5-03**：H3 已送达而 H4 缺席（取消 / 致命落在 H3→H4 窗口）合法且 H3 之后无任何请求，把 H3 当作授权取消的实现变红；**R5-04**：在途快照五场景（`BEGUN` / `ATTEMPTED` / `CONFIRMED` / 清理中 / 多阶段混合）与“任何时刻 / 仅静止”不变量分开断言，对在途快照断言静止不变量的变体变红；**R5-05**：乱序完成（后开始者先完成）下 `completion_seq` 稠密、收集器以 `completion_seq` 为游标、`seq > last_seq` 非法、20000 溢出、不可恢复缺口 ⇒ `NOT_VERIFIED`；重复显式 `retry_failed` 与 ORPHAN-M1 在乱序下仍成立；`Z` 与由 `W` 求和在 `overflowed == False` 时必须相等、`overflowed == True` 时只有 `Z` 权威；`attempt_id` 在溢出后仍不可能复用（`seq` 稠密）；pre-proxy 取消 / 致命（`POST` 数 0、`Mf` 已声明）通过，未声明的“0”失败；**强制 `ORPHAN-M1`**（M = 1）；oracle 自检；完成顺序反转 / 慢 / 失败 / 取消下不变；门面并发（一个 `preview` 运行时第二个合法调用被 P4 拒绝且零次 `POST /api/tasks`；非法参数 ⇒ `AmaneBatchInputError`；绕过 P4 的变体变红，M6-20） | `test_amane_batch_concurrency.py` |
 | E6-11 | **真实宿主纵向门**：≥ 10 个 FC2，HOST-A-SRC 与 HOST-B-SRC 各一次，完整链（scan → … → BatchPreview → summary） | `tools/run_amane_batch_gate.py` → `P6_C1_HOST_MATRIX.json` |
 | E6-12 | 真实宿主失败矩阵：来源降级仍可用；整体失败；混合；宿主任务 FAILED；宿主 API 传输失败；图片部分失败；坏 / 缺 metadata（经代理改写）；精确的条目隔离 | 同上 |
 | E6-13 | 真实宿主重试（任务数由脚本历史 `calls(N)` 决定，第 14.4 节 4.5 用例表）：一次初始 + 一次重试；一次初始 + 两次显式重试；两次独立 generation=0 预览；单 aggregate 自动重复 `POST`（红）；`CREATION_UNKNOWN` 之后显式重试（宿主任务数 ∈ [1, 2]）；用不同 `attempt_id` 隐藏第二次提交（红）；`attempt_id` 复用（红）。仅失败子集被选中、成功条目不重跑 | 同上 |
 | E6-14 | 真实宿主取消：准入前、运行中、终态已观察（`TERMINAL_*_OBSERVED`）、不确定（代理丢弃取消响应）、旁观任务未受影响；*claimed-but-not-registered window* 与晚到写入在真实宿主上尽力复现（HOLD 上游 + 立即取消），无法稳定复现则以替身证据为准并在 evidence gaps 中如实标注，**不得**因此写“已停止” | 同上 |
 | E6-15 | 真实宿主确定性：完成顺序反转 → 语义投影 / NFO 字节 / artifact requests / issue 顺序 / summary 相等；上游内容变化 → 投影变化（非空性） | 同上 |
 | E6-16 | route ownership 与**值级**内容来源的机械证明（22.3，含 ①–⑦ 七类反事实） | 同上 |
-| E6-17 | 安全 canary（R2-02，**整个包**）：保护面 P1–P3 与禁入内容 `F`（第 8.3.1 节）——对第 8.3.1 节第 5 点“强制失败矩阵”中**每一条适用路径**（`AmaneHostCredential` / `AmaneHostConfig` 的非法 ASCII、非 ASCII、空白、超长；`AmaneHostClient` 全部 5 个公共方法的 `401` / `403` / `5xx` / 超时 / 连接失败 / 畸形响应 / 结构超限；`AmaneHostPreflightError` 全部 4 个 reason；`AmaneAggregationEngine` 内部契约错误；`AmaneBatchIntegration` 的非法输入 / retry 拒绝 / 门面转换）递归检查 `__cause__` / `__context__`（visited 集合、深度 ≤ 8）、`args`、`__notes__`、本包栈帧 `f_locals`（浅层）、`str` / `repr` / traceback 文本、审计 / 汇总 / preview，断言 `F` 不出现；所有权对象（credential / config / client / engine / facade）作为不透明节点不遍历，且测试明确区分“新引入的泄漏”与“对象自身持有认证状态”。**红绿孪生**：凭据路径 `try: token.encode(...) except UnicodeEncodeError: raise … from None` 变体判红、纯谓词 + 块外抛出为绿；校验失败时 `token` 形参仍留在本包帧局部为红、已重新绑定 `None` 为绿；`_transport` 内 `raise … from None` 为红；外层 `_call` 帧局部仍持有 `Response` / `Request` 为红；响应的 `files` 字段含 canary 路径时，该路径不出现在任何输出；cookie 不回传；跨源重定向不带凭据；`.netrc` / 环境代理被忽略；TLS 不可降级（自签证书 → `HOST_CONNECTION`，上游零请求）；结构超限响应经真实宿主代理映射为封闭失败且不泄漏响应体；**R3-03**：5 个公共方法 × {连接期取消、等待响应头期取消、流中途取消、请求进行中致命 `BaseException`、带响应体的 5xx、带响应体的畸形 JSON、schema 违规、`HOST_RESPONSE_TOO_COMPLEX`}，以及 engine / facade 的“批量被取消时 HTTP 正在进行”；取消出口为 C5c 的新实例（本包帧干净、无第三方帧），致命异常保持原身份、第三方帧可达性已在 L6-21 声明（**不得**据此声称所有异常路径均无凭据可达；安全证据对致命异常只断言本包帧与身份） | `test_amane_batch_security.py` + 真实宿主 canary |
+| E6-17 | 安全 canary（R2-02，**整个包**）：保护面 P1–P3 与禁入内容 `F`（第 8.3.1 节）——对第 8.3.1 节第 5 点“强制失败矩阵”中**每一条适用路径**（`AmaneHostCredential` / `AmaneHostConfig` 的非法 ASCII、非 ASCII、空白、超长；`AmaneHostClient` 全部 5 个公共方法的 `401` / `403` / `5xx` / 超时 / 连接失败 / 畸形响应 / 结构超限；`AmaneHostPreflightError` 全部 4 个 reason；`AmaneAggregationEngine` 内部契约错误；`AmaneBatchIntegration` 的非法输入 / retry 拒绝 / 门面转换）递归检查 `__cause__` / `__context__`（visited 集合、深度 ≤ 8）、`args`、`__notes__`、本包栈帧 `f_locals`（浅层）、`str` / `repr` / traceback 文本、审计 / 汇总 / preview，断言 `F` 不出现；所有权对象（credential / config / client / engine / facade）作为不透明节点不遍历，且测试明确区分“新引入的泄漏”与“对象自身持有认证状态”。**红绿孪生**：凭据路径 `try: token.encode(...) except UnicodeEncodeError: raise … from None` 变体判红、纯谓词 + 块外抛出为绿；校验失败时 `token` 形参仍留在本包帧局部为红、已重新绑定 `None` 为绿；`_transport` 内 `raise … from None` 为红；外层 `_call` 帧局部仍持有 `Response` / `Request` 为红；响应的 `files` 字段含 canary 路径时，该路径不出现在任何输出；cookie 不回传；跨源重定向不带凭据；`.netrc` / 环境代理被忽略；TLS 不可降级（自签证书 → `HOST_CONNECTION`，上游零请求）；结构超限响应经真实宿主代理映射为封闭失败且不泄漏响应体；**R3-03**：5 个公共方法 × {连接期取消、等待响应头期取消、流中途取消、请求进行中致命 `BaseException`、带响应体的 5xx、带响应体的畸形 JSON、schema 违规、`HOST_RESPONSE_TOO_COMPLEX`}，以及 engine / facade 的“批量被取消时 HTTP 正在进行”；取消出口为 C5c 的新实例（本包帧干净、无第三方帧），致命异常保持原身份、第三方帧可达性已在 L6-21 / 第 10.5 节声明（**不得**据此声称所有异常路径均无凭据可达；安全证据对致命异常只断言本包帧与身份）；**R5-12**：传输层（第三方或被替换者）在 `httpx.AsyncHTTPTransport.handle_async_request` 之内抛出的**非 `httpx` 异常**（`RuntimeError` / `OSError` 子类 / `ValueError`）⇒ `HostCallError(HOST_NETWORK)`，无 `__cause__` / `__context__`，存活的带 token `Request` / `Response` = 0；去掉 catch-all 的红孪生必须复现泄漏；**测试通过回环故障代理与 `httpx` 补丁点注入，不通过公共 API 的 `transport=`**（R5-11 方案 A）；运行于 Python 3.11 最低 / 最新小版本、3.12、3.13、3.14；**致命异常路径使用边界所有权 + F3 的独立可达性审计（`reach.py` 同类工具；任何带 `Authorization` 的 `Request` / `Response.request` 都算命中，与令牌值无关）**，不再以“第三方帧可达性已披露”作为绿灯依据；`_fatal_scrub` **不得访问任何帧**（无 `frame.clear()`、无 `gc.get_referrers`、无 `sys._getframe`，不得以 `except RuntimeError` 取得通过；R5-CL-01 / R5-GOV-01 / R5-NEW-01）；植入凭据用例按 B1 标 `OUT_OF_THREAT_MODEL`，不得标 X-NARROW PASS | `test_amane_batch_security.py` + 真实宿主 canary |
 | E6-18 | 不执行：S6-1..S6-5 三层机检（静态 / tripwire / 文件系统树摘要） | 架构测试 + 宿主场景 |
 | E6-19 | `AmaneBatchSummary` 精确计数，并与 P4 `PreviewSummary` 逐项交叉校验；**跨轮（R1-06）**：`ready_round_local` / `per_round` / `cross_round_verified` 精确；用 CLOSED S-10 的 hardlink 反例构造“前轮 READY + 重试轮 READY 实为同一源文件”，汇总在 `rounds > 1` 时 `cross_round_verified == False`，不虚增全局 READY，单轮孪生由 P4 报告冲突 | `test_amane_batch_summary.py` + 宿主场景 |
 | E6-20 | 语义 / 运维分离：语义投影中不含任何运维字段 | `test_amane_batch_determinism.py` |
-| E6-21 | mutation / non-vacuity：第 24 节全部 33 项 M6-xx 必须使对应门**变红**，且未变异孪生保持绿 | `test_amane_batch_mutation_nonvacuity.py` |
+| E6-21 | mutation / non-vacuity：第 24 节全部 59 项 M6-xx 必须使对应门**变红**，且未变异孪生保持绿 | `test_amane_batch_mutation_nonvacuity.py` |
 | E6-22 | 全量回归：既有全部套件（adapter / compat（HG-1 之后）/ contract / unit / phase4_acceptance …）通过，**与 Frozen Base 的基线通过数对账**（S1 第一件事是在 `4189b95…` 上记录各目录基线） | HANDOFF |
 | E6-23 | 构件同一性：sidecar wheel sha256 == P5 台账 pin；plugin zip 由 CLOSED 构建器产出且 P5 构件零变化 | 宿主矩阵 JSON |
 | E6-24 | live-network smoke 记录（第 25 节） | `P6_C1_LIVE_SMOKE.json` |
-| E6-25 | 解释器覆盖：P6 包与其测试在 Python 3.12 与 3.14 上运行（受影响测试）；只覆盖一个则作为 evidence gap 明示 | HANDOFF |
+| E6-25 | 解释器覆盖（R5-10 / 治理附加 A）：项目 `requires-python >= 3.11`（不修改 `pyproject.toml`）。P6 包与其测试在 **Python 3.11 最低小版本（3.11.0）与最新可用 3.11.x**、**3.12**、**3.13**、**3.14** 上运行（受影响测试），并另有 3.11.2 / 3.11.3 并排运行证明 `asyncio.timeout` 缺陷（3.11.0–3.11.2）被设计规避。**3.13 是正式验收项**：设计阶段的探针不等于 P6 实现已通过；S3 若没有 3.13 解释器则该项为 `NOT_RUN`、列入 evidence gaps，并**不作出 3.13 支持声明**。任一受支持版本缺失则明示，不得用已有版本的结果宣布整个 3.11–3.14 范围已实测通过 | HANDOFF |
 | E6-26 | 证据 JSON 自洽 + 禁止声明校验（状态只能取第 23.2 节词汇 `PASS` / `FAIL` / `NOT_RUN` / `UNVERIFIED` / `BLOCKED`，后三者不得被统计为 `PASS`，不得被写成 SUPPORTED；坐标级声明；无“durable resume / 已执行整理 / 全版本支持”字样） | `test_amane_batch_matrix_json.py` |
 | E6-27 | HANDOFF：Contract 映射、完整 diff scope、命令与输出、evidence gaps、known limitations（L6-xx）、Phase 7 输入；**不得把尚未执行的证据写成已 PASS** | `docs/review/P6_C1_HANDOFF.md` |
 | E6-28 | 图片裁剪 / 物化的**非空**验证（R3-08 / R4-09）：在一次性宿主（E6-28 专属例外，第 22.2 节；结束后销毁，生产 P6 仍不访问 `/api/config`）上按第 18 节冻结的 X1 / X2 / X3 正向用例与 C1 / C2 对照执行；必须同时断言 ① 宿主展示 poster **实际改变**为 `/api/resources/<hash>` 且该资源可取回（尺寸 / 比例符合 `poster_ratio`）；② `raw` 不变；③ P6 的 poster / thumb / extrafanart 候选集合、NFO 字节、产物清单与对照组逐项相同；④ 只改 P4 `ImageHttpClient` 的 `MockTransport` 不算证明。展示值未改变 ⇒ `FAIL（NON-VACUITY）` 或 `NOT_RUN`，**不得 PASS**（M6-33）。设计期状态：用例由两个 pinned 版本的 `media/pipeline.py` 推导，**待 S3 阶段在真实宿主上实际执行**，此前为 `UNVERIFIED` | 宿主矩阵 |
@@ -1782,10 +2270,36 @@ class AmaneHostAuditSnapshot:
 | M6-27 | 取消见证失真：不发取消 `POST` 却报告 `TERMINAL_*_OBSERVED`；`cancel_post_attempted` 为真而代理 0 次且 `C` 不属允许集合；取消请求的 task id 不是自己的 | E6-09（代理对账 (a)–(d)） |
 | M6-28 | oracle 自检变异：O2 以 `(番号, generation)` 为粒度；`K` 把 H2（仅被代理转发）的孤儿计入；`K` 在取消响应处截止——这些变异 oracle 必须在对应夹具上与期望不一致；生产侧变体：取消响应后即返回而把清理轮询留给后台 | E6-10 / E6-13 |
 | M6-29 | 映射入口在校验之前解引用（先做号等价、先读 `raw[plugin].number`）；混合来源时返回 `NUMBER_MISMATCH`；畸形插件值抛出未处理异常 | E6-07（Gate A 用例与 fuzz） |
-| M6-30 | 清理使用 `asyncio.shield` / `create_task` / `ensure_future`，或在取消返回之后仍有 P6 清理 task 存活；对 task 无界 `await`；Response 关闭用 `shield` | E6-03 / E6-09 / E6-17 |
+| M6-30 | 清理使用 `asyncio.shield` / `asyncio.timeout` / `asyncio.timeout_at` / `asyncio.wait_for`（3.11.0–3.11.2 缺陷）/ `create_task` / `ensure_future`，或在取消返回之后仍有 P6 清理 task 存活；对 task 无界 `await`；Response 关闭用 `shield` | E6-03 / E6-09 / E6-17 |
 | M6-31 | 溢出后由保留记录重新求和（计数 / 峰值）；`peak_in_flight` 被窗口峰值取代；丢弃记录时回改累计状态 | E6-10（19999 / 20000 / 20001） |
 | M6-32 | `CONFIRMED` 缺 `task_known_event` 仍被接受；事件顺序 / 类型不被校验；`attempt_id` 与 `seq` 不一致或可复用；pre-proxy `POST = 0` 被无条件接受或无条件拒绝 | E6-08 / E6-10 |
 | M6-33 | E6-28 在宿主展示 poster 没有实际改变时仍报告 PASS，或只用 `MockTransport` 的 P4 图片获取证明 | E6-28 |
+| M6-34 | 取消请求**未确认**却报告 `UNCERTAIN_NOT_TERMINAL`（把 `NO_RESPONSE` 与 `NOT_TERMINAL` 合并）；确认后没有任何成功观察却报告 `NOT_TERMINAL`（应为 `OBSERVATION_FAILED`）；优先级被打乱（先于 `NO_RESPONSE` 判终态） | E6-08 / E6-09 |
+| M6-35 | 谓词用字符串比较或 `dict` 查表（真实枚举 ⇒ `KeyError`）；接受字符串替身枚举；非严格 `bool` 的 `cancel_post_attempted` / `cancel_request_confirmed` / `nonterminal_observed`；`cancel="BOGUS"`、`outcome="CANARY-SECRET"`、`TERMINAL_FAILED_OBSERVED` 搭配 `terminal_status="done"` 被接受；可产生状态集合被硬编码为固定数字 | E6-08 |
+| M6-36 | H3 已送达而 H4 缺席的记录被判非法，或实现据 H3 向未确认的 id 发送取消 / 轮询请求；`cancel_post_attempted` 在 `S = UNKNOWN` 为真 | E6-10 |
+| M6-37 | 对在途快照断言“静止”不变量（`Z.submitted` 与记录求和）；`submitted` 在完成时才递增；`peak_in_flight` 在完成时更新；在途明细缺失 | E6-10 |
+| M6-38 | 收集器以 `seq` 连续性判缺口（乱序完成时漏记录 / 误报）；窗口按 `seq` 而非 `completion_seq` 丢弃；`seq > last_seq` 的记录被接受；不可恢复缺口仍报 PASS | E6-10 |
+| M6-39 | `map_host_result` 第 7 步不做 URL 卫生；`dropped_url_count` 与实际删除数不符；把宿主展示 poster 的裁剪计入 `dropped_url_count` | E6-07 / E6-28 |
+| M6-40 | 清理依赖 `asyncio.timeout` 的取消计数语义，在 3.11.0–3.11.2 上把到期报告为 `CancelledError`；E6-25 不含 3.11 最低小版本 | E6-09 / E6-25 |
+| M6-41 | `_transport` 没有 catch-all：非 `httpx` 异常带着含 token 的 `httpx` 帧逃出；或在 `except` 块内构造并抛出 `HostCallError`（`__context__` 携带原异常） | E6-17 |
+| M6-42 | 公共构造面保留或新增可注入的传输 / HTTP 客户端 / mounts / event hooks / `_sleep` / `_clock`，并仍声称有界取消已被证明；或在发现取消失败之后把注入传输排除出支持范围而不经授权（R5-11） | E6-03 / E6-05 / E6-09 |
+| M6-43 | 去掉总 deadline，只依赖每次 I/O 的 `httpx.Timeout`：响应头 / 响应体 slowloris 使请求远超 `request_timeout`（R5 附加 B） | E6-09（D1 / D2 红孪生） |
+| M6-44 | 定时器没有在**每条**退出路径上 `cancel()`（无 `finally`），随后取消一个无辜的 task；或 `fired` 时没有 `uncancel()` 自己的请求、或错误地撤销了调用方的取消计数、或调用方取消与到期竞速时吞掉了调用方取消 | E6-03 / E6-09（D4–D9） |
+| M6-45 | 致命异常不做净化（第三方帧保留）；或异常链没有整条切断（含 `httpx` 异常 / 含 token 文本 / 内置异常 C 级槽位的 `__context__` 仍可达）；或净化后的 traceback 仍引用第三方帧 | E6-09 / E6-17（F3 红孪生） |
+| M6-46 | 净化抛出的普通异常遮盖了原致命异常；净化期间的第二个致命异常被吞掉；或 `except BaseException` 吞掉了致命异常 | E6-17 |
+| M6-47 | 致命路径替换了异常实例 / 改写 `args` / `__dict__` / `__notes__` / 类型 / 添加 note，或发出额外 HTTP 请求 / 创建 P6 task，或改变 `TaskGroup` 对致命异常的处理类别 | E6-09 / E6-17 |
+| M6-48 | 内部 deadline 只按 `fired` 判定超时，把外部取消转换成 `HOST_TIMEOUT`；或 `fired` 时不 `uncancel`（取消计数泄漏）；或无条件 `uncancel`（抹掉调用方取消）（治理 Gate C-Final-01） | E6-09（R1–R11 红孪生） |
+| M6-49 | 故障网络（`faultnet`）导入或引用被测的生产状态机 / 谓词 / 合同类型，或判定规则写在被测代码里（测试与被测不独立）；或接缝撤销后仍保留 `_clock` / `_sleep` / `transport=` 的等价后门 | E6-03 / E6-05（C3-2 / C3-3） |
+| M6-50 | 包内保留测试钩子、模块级可变回调、`TRACE` 开关或环境变量开关，使生产路径可被外部改变取消 / 超时行为 | E6-03 |
+| M6-51 | 致命异常的净化只放在 `try` 体的兄弟 `except` 里（够不到 `except Exception` / `finally` / try 之后的窗口）；`_transport` 保留自己的致命处理体而边界帧缺失；公共 client 出口缺边界；边界致命处理体在 `try` 之前调用函数；边界局部持有 `Request`；净化失败遮盖 / 吞掉致命异常；记账不幂等致使致命异常被 `KeyError` 取代（R5-C-01） | E6-03 / E6-09 / E6-17（窗口探针；R5 草案红） |
+| M6-52 | 异常链按“允许名单”保留成员（含内置异常的 C 级槽位）；审计器不覆盖 C 级槽位（`gc.get_referents` 之类缺失）；只因为 canary 文本没出现就忽略带 `Authorization` 的 `Request`（R5-C-02） | E6-17（C 级槽位红绿孪生） |
+| M6-53 | 取消分类依赖一次 `await asyncio.sleep(0)` 是否抛出，或在 `except CancelledError` 里就地分类：内层把取消转换 / 吞掉时调用方取消丢失或被分类为 `HOST_TIMEOUT` / `HOST_NETWORK`；响应关闭层吞掉外部取消后不再检查计数（R5-C-03） | E6-09（RC10 系列；`race_c_revised.py old`） |
+| M6-54 | deadline 定时器武装在受保护区域之外，或回调没有 `active` 标志，或该标志只有 `_transport` 一个所有者（`_call` 的 `finally` 不清除它；Python 3.14 任一字节码探针红），使致命异常落在武装前后任一字节码处留下活跃的定时器去取消无辜 task；`finally` 内先做别的事再撤销 | E6-09 / E6-17（窗口探针 + 泄漏定时器检测） |
+| M6-55 | 缺少受支持依赖矩阵守卫：安装版本不在已验证矩阵内仍声称 X-NARROW 的“受支持运行时”；X-NARROW 应用于来源于当前 P6 请求的凭据；或把四个植入用例改名为 PASS / 移出测试 | E6-17 / E6-25（`dep_matrix.py`、矩阵守卫） |
+| M6-56 | F3 生产路径对任何帧调用 `frame.clear()`（Python 3.11 / 3.12 上运行了别人的生成器 / 协程 `finally`），或用 `gc.get_referrers` / `gc.get_objects` / `gc.collect` / 全堆扫描判断帧是否结束（`gc.freeze()` 下失效），或为取得通过而 `except RuntimeError` 后忽略，或为避免 `clear()` 而保留敏感的第三方 traceback | E6-03 / E6-09 / E6-17（`fatal_path_guard.py`；`frame_safety.py` ×（正常 GC / `gc.freeze()`）；Reviewer C `frameclear.py` / `liveness.py`） |
+| M6-57 | 审计器只在头部含测试 canary 时才报告 `Request`（对非 canary 的 `Authorization` 失明），或不检查 `Response.request` | E6-17（`reach_selftest.py` 变异） |
+| M6-58 | F3 生产路径调用 `sys._getframe` / `gc.get_referrers`（二者的审计事件把带 `Authorization` 的 `Request` 的帧作为参数交给审计钩子） | E6-17（`audit_f3.py`；Reviewer C `audit_getframe.py`；`fatal_path_guard.py`） |
+| M6-59 | 拥有响应数据的边界帧（`_call` 的 `body` / `obj`）的致命处理体不重绑这些局部，或致命处理体没有脱离 `__traceback__` / `__context__` / `__cause__`（敏感引用经异常到达调用方） | E6-09 / E6-17（`ownership_proof.py`，变异 `FATAL_MODE=F1`） |
 
 ---
 
@@ -1846,7 +2360,14 @@ I6-34  映射入口只有一个定义（11.2 代码块）：校验顺序 reader 
 I6-35  清理在 aggregate 自己的 task 内联执行；包内无 shield / create_task / ensure_future / gather / TaskGroup / run_in_executor / to_thread / threading；每个等待有界；二次取消停止一切后续 I/O；致命异常零清理 I/O 且原对象原样传播
 I6-36  任务基数由独立调用脚本的实际操作历史 calls(N) 决定；重复显式重试合法；单 aggregate 自动重复 POST 非法
 I6-37  审计分累计状态 Z（在线更新、精确）与保留窗口 W（≤ MAX_AUDIT_RECORDS）；溢出后只有 Z 权威；全历史验证靠分段流式取走，缺口 ⇒ NOT_VERIFIED
-I6-38  HostAttemptRecord 的合法性只有 record_is_legal 一个定义；其接受集合等于独立参考模拟器产生的记录集合（39 条）
+I6-38  HostAttemptRecord 的合法性只有 record_is_legal 一个定义；其接受集合等于独立参考模拟器产生的记录集合（63 条，由模拟器计算，不预设）；谓词对任意输入返回 bool，不抛出，接受真实枚举
+I6-39  审计 Z 在 begin / POST 交给传输层之前 / 完成三个更新点在线更新；在途快照与静止快照的不变量分开；窗口按 completion_seq FIFO；乱序完成下收集器以 completion_seq 为游标，缺口 ⇒ NOT_VERIFIED
+I6-40  CancelOutcome 共 10 个成员；NO_RESPONSE ⇒ 取消请求未确认；NOT_TERMINAL ⇒ 已确认且见过非终态；OBSERVATION_FAILED ⇒ 已确认且无成功观察；严格优先级
+I6-41  map_host_result 第 7 步做 P5 I22 URL 卫生并精确计 dropped_url_count；展示 poster 裁剪不进入该计数
+I6-42  _transport 的异常分类封闭完备：非 httpx 异常 ⇒ HOST_NETWORK，只在 except 块内记枚举值，块外抛出，无 cause / context；包内不使用 asyncio.timeout / timeout_at / wait_for
+I6-43  每个宿主请求有定时器强制的总墙钟 deadline（loop.call_at，finally 撤销；fired 时恰好 uncancel 一次；调用方取消永远胜出且计数不被改动）；不依赖 asyncio.timeout 的内部计数
+I6-44  致命 BaseException 保持同一对象（F3）：只切断暴露面（traceback 与异常链全部脱离，到达调用方的 traceback 不含本包帧；生产路径不访问任何帧）；args / __dict__ / __notes__ / 类型不被读取或修改；净化失败不遮盖、不吞掉致命异常；公共构造面没有任何传输 / 客户端 / sleep / clock 注入点
+I6-45  致命异常由边界帧的内联致命处理体处理（持有响应数据的边界先重绑局部，再 try 引用脱离，失败时内联属性赋值，再裸 raise）；_transport 没有致命处理体；边界局部不持有凭据；异常链整条切断；取消归属在一处按计数分类（cancelling() > base ⇒ 外部取消，即使内层转换 / 吞掉）；定时器武装在受保护的 try 内且回调受 active 标志约束
 I6-26  门面调用顺序冻结（9.5）：本地校验 → preflight → P4 公开 preview；busy claim 只在 P4 入口；门面不复制 P4 锁、不绕过 P4 并发控制、不承诺零网络访问或 busy 优先级
 I6-27  每个 BatchPreview 的 READY / 冲突结论仅对本轮有效；P6 不提供跨轮全局 READY 保证；汇总区分逐轮计数与 cross_round_verified
 ```
@@ -1866,7 +2387,7 @@ I6-27  每个 BatchPreview 的 READY / 冲突结论仅对本轮有效；P6 不�
 | L6-07 | 宿主排队时间计入 `aggregate_deadline_seconds`；Amane 宿主 worker 并发的**缺省是 10**（`WorkerConfig.concurrency`，两个版本；验收宿主若明确配置其它值则以实际配置为准）；M 大于宿主实际并发、或被遗弃的孤儿任务占用并发时，任务会排队；P4 并发 M 与宿主并发是两个独立的数。**P6 只保证 `\|A\| ≤ M` 与 `\|K\| ≤ \|A\|`，不保证宿主上与本批相关的全部任务数 `\|H\| ≤ M`**（孤儿任务可使 `\|H\| > M`，第 14 节） |
 | L6-08 | SCRAPE 会 **upsert 宿主 Metadata 库**：P6 的 preview 对用户**媒体 / library 文件系统**只读，但对 **Amane 数据库不是只读**；宿主可能扇出 `ACTOR_SCRAPE` 后继任务（`actor_scraping.auto_scrape` 缺省 True），P6 不跟踪也不取消 |
 | L6-09 | 重试只覆盖 METADATA 阶段失败；图片候选级部分失败是警告，不重试 |
-| L6-10 | **宿主展示裁剪与 P6 无关**（R3-08）：Amane 的 `crop_poster` / Resource 物化只改展示列，不改 `raw`；P6 的图片候选来自 plugin `raw` 的原始 URL，同一上游内容在不同宿主裁剪 / 物化配置下候选集合相同。P4 的 `POSTER_ABSENT` / `FANART_ABSENT` / 候选级警告只可能由原始 URL 缺失、不合法或图片获取失败引起，不得归因于宿主展示列的裁剪 |
+| L6-10 | **宿主展示裁剪与 P6 无关**（R3-08 / R5-09）：Amane 的 `crop_poster` / Resource 物化只改展示列，不改 `raw`；P6 的图片候选来自 plugin `raw` 的原始 URL，同一上游内容在不同宿主裁剪 / 物化配置下候选集合相同；展示 poster 的裁剪**不**进入 P6 的 URL 过滤，`dropped_url_count` 只计 `PluginRaw` 里被第 11.2 节第 7 步删除的元素。P4 的 `POSTER_ABSENT` / `FANART_ABSENT` / 候选级警告只可能由原始 URL 缺失、不合法或图片获取失败引起，不得归因于宿主展示列的裁剪 |
 | L6-11 | 公网证据可能是 `UNVERIFIED_ENVIRONMENT` / `NOT_RUN` |
 | L6-12 | SC-01 / SC-02（冻结桌面）可选；macOS / Linux / Docker `UNVERIFIED` |
 | L6-13 | `use_cache=[]` 强制刷新：对来源站点的请求量更大，每次运行都会重写宿主 Metadata |
@@ -1877,9 +2398,16 @@ I6-27  每个 BatchPreview 的 READY / 冲突结论仅对本轮有效；P6 不�
 | L6-18 | **内容来源的保证范围**（R2-01，第 11.3.4 节）：P6 声称“输出值完全由 Amane `raw` 中插件的原始记录确定性派生，而公开 PATCH / 字段锁 / merge 不能改写 `raw`”；**不**声称：① 该 `raw` 是刚完成的这个任务独占写入的——并发的同号插件 SCRAPE（含遗留孤儿任务）可在任务完成后整体替换 `raw`，内容仍是插件的一次独立抓取，证据上无法与本任务区分；② Amane `raw` 与插件 Core 输出逐字节相同（S1 第 0 步用确定性夹具核对，不符 ⇒ U6-6）；③ 防住对 Amane 数据库的直接篡改或 Amane 自身缺陷；④ `raw` 的形状在 v0.15.0 / v0.18.0 之外的版本上成立。`source_urls` / `external_ids` 恒为空（NFO 不读取它们） |
 | L6-19 | `timestamp_relation` 只是两个时间戳字符串的比较标签，**不是**记录是否被修改的事实，也不是因果证明：墙钟回拨会使“任务之后的写入”得到 `updated_at ≤ finished_at`，同一时刻精度会掩盖先后，任务内部“写入 → 标 done”之间的极短间隔内他人的写入不可分辨；时间戳缺失 / 不可解析 / 时区或精度不一致时为 `INDETERMINATE`。它不改变语义输出，也不得被当作字段来源的唯一或充分证据 |
 | L6-20 | 当 P4 已忙时，被拒绝的门面调用可能已完成本地校验与一次只读 preflight `GET`（第 9.5 节）：不声称零网络访问，也不承诺 busy 与参数错误之间的全局优先级；宿主可能记录 preflight 的访问日志 |
-| L6-21 | **致命异常的第三方栈帧不在承诺内**（R3-03 / R4-02）：`CancelledError` 由包内以同类型新实例替换（C5c，其出口不含第三方帧）；**致命 `BaseException`**（`KeyboardInterrupt` / `SystemExit` / `GeneratorExit`）必须保持原对象原样传播，其 `__traceback__` 中 httpx / httpcore / asyncio 帧的局部可能仍持有带 `Authorization` 的 `Request`，本包只保证**自己的栈帧**干净。进程因致命异常退出时这些对象随进程消失；若调用方捕获并继续运行，则其引用的是第三方帧，不是本包创建的新泄漏。这是对“保留原始异常身份”与“完全不泄漏”无法同时满足部分的诚实披露。**不得**把本包的保证解释成“所有异常路径上都没有凭据可达”：致命异常路径只保证本包栈帧干净、身份保持、零额外 I/O；其第三方帧的可达性是已知且未消除的风险（Governance 风险项） |
+| L6-21 | **致命异常（F3 + X-NARROW）的边界**（R3-03 / R4-02 / R5 治理附加 / R5 安全闭合）：`CancelledError` 由包内以同类型新实例替换（C5c）；**致命 `BaseException`** 保持**同一对象**，由边界帧清理它之下**已证明结束的本包帧**（第三方 / 挂起帧不触碰，只移出 traceback）、把 traceback 缩减为本包帧、整条切断异常链（第 10.5 节）。对 **P6 自行产生与第三方帧产生**的暴露，设计探针上 **IMPLEMENTED CANDIDATE**（穷举窗口探针 + C 级槽位红绿孪生 + 5 个第三方注入点，红孪生 F1 可达 ≥ 2 条路径，F3 为 0）；**抛出方植入致命异常自身字段的当前 P6 凭据 = `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`（B1），F3 不改写，可达性保留**（L6-25）；上述都**不是**独立安全复核的 PASS。F1 与 F2 均**未被治理接受**。**不得**把本包的保证解释成“所有异常路径上都没有凭据可达”：抛出方放入 `args` / `__dict__` / `__notes__` 的内容、本包以外的帧（P4 worker、调用方）不在保护面内 |
 | L6-22 | 并发 oracle 的观察范围（R3-05 / R4-05）：代理账本是**代理自己的观察**（H2 / H3），不等同于 P6 已收到的信息（H4）；O3b 只能发现经 HTTP 可见的区间重叠；20 ms 宿主采样是离散采样；`CREATION_UNKNOWN` 的孤儿 id 不归类为 `K`，也不用于 `\|H\|` 断言；全历史验证依赖测试工具在窗口丢弃前取走记录（缺口 ⇒ `NOT_VERIFIED`） |
-| L6-23 | **清理有界性的证据范围**（R4-02；与第 10.2 节第 8 条的状态表一致，分别标注）：生产 `httpx` 场景 **PASS**；Python 3.11 **NOT_RUN**；DNS 解析线程与连接黑洞地址 **UNVERIFIED**；注入的吞取消 `transport=` **KNOWN COUNTEREXAMPLE / SCOPE REVIEW REQUIRED**（实测过冲约 2.2 s，范围待独立裁决，本草案不扩大也不收窄）。这四项不得合并成一个无条件的 PASS |
+| L6-23 | **清理有界性的证据范围**（R4-02 / R5-07；与第 10.2 节第 8 条的状态表一致，**分别标注，不混用状态词**）：生产 `httpx` 设计探针（Python 3.11.0 / 3.11.1 / 3.11.2 / 3.11.3 / 3.11.9 / 3.12.10 / 3.13.0 / 3.13.9 / 3.14.7）**PASS**；P6 实现在 3.13 上的验收 **NOT_RUN**（E6-25 在 S3 必须运行）；DNS 解析线程 **UNVERIFIED**；3.11.0–3.11.2 的 `asyncio.timeout` 缺陷**已复现并由设计规避**；任意注入的吞取消 `transport=`：**方案 A，APPROVED FOR DESIGN REVISION ONLY（治理裁决）——DESIGN UPDATED**（第 10.6 节；该参数已从公共构造面移除，反例仅可经进程级猴子补丁复现，作信息项记录）。这些项不得合并成一个无条件的 PASS |
+| L6-24 | **F3 的代价与残余**（第 10.5 节）：① traceback 保真度降低——致命异常原始抛出点（第三方帧、用户钩子帧的文件 / 行号 / 局部）**以及本包自己的帧**都不再可见（到达调用方的 traceback 只有调用方的帧；实测，九个解释器）；② 链保真度降低——**整条** `__context__` / `__cause__` 被切断；③ **调试器 / trace 在任意字节码处注入、数量无界的假想模型 = `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`（B1 / B2）**：公共 client 路径有两层边界，探针构造了一个具体反例（传输层第一个异常、`_call` 处理体入口第二个、`call` 处理体入口第三个），它需要 `sys.settrace` 的主动注入；真实信号只在 eval-breaker 检查点投递，内联嵌套 `try` + 原子属性赋值使保证对检查点模型成立（k ≤ 3 穷举，k > 3 为结构论证，未穷举）；真实信号 fuzz 只是旁证；**不改变进程级 `SIGINT` 策略**；④ 抛出方放入 `args` 的凭据对象不被改写（独立载荷 X-NARROW；当前 P6 凭据的植入用例 = OUT_OF_THREAT_MODEL）；⑤ 帧不被清理、不被枚举（R5-CL-01 / R5-GOV-01）：仍被第三方持有的第三方帧由其所有者管理；F3 不使用 `gc` 或 `sys._getframe`（R5-NEW-01）。缓解候选“审计记录附带封闭格式的抛出点摘要”未采用（需扩展记录与谓词）。这些是已披露的残余，不是通过项 |
+| L6-25 | **致命异常的 `args` / `__dict__` / `__notes__` 由抛出方拥有——方案 X-NARROW**（R5 治理附加 / 安全闭合；第 10.5 节）：P2 对它们只断言“本包没有新增、没有修改”。Gate C 的四个植入用例（`args` 含 token 文本、`args` 含带 `Authorization` 的 `Request`、`__dict__` 含 `Request`、`__notes__` 含 token 文本）**保留**，逐项记录 payload 来源 / 凭据归属 / 注入点 / 受支持边界 / 实际可达性 / 预期裁决：它们的凭据都取自**当前 P6 请求**，条件 2 不满足，**不能按载荷豁免，不标 X-NARROW PASS**；其注入点（`httpx` `event_hooks`，需要私有属性 `_http` 或进程级补丁）要求主动的进程内篡改，**标 `OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS`（B1）**，可达性保留且不被改写。Y（只检测）与 Z（改写参数）继续 REJECTED。若将来出现任何受支持的方式让外部代码在 P6 请求路径上运行，这四个用例必须立即重新归类为 BLOCKED |
+| L6-26 | **总 deadline 的上界是墙钟近似**（R5 治理附加 B）：上界 = 请求超时 + 一次事件循环迭代 + 本地套接字关闭；事件循环被同线程的阻塞代码长时间占用时不成立（这对任何 asyncio 超时都一样）；DNS 解析线程（`getaddrinfo`）仍为 UNVERIFIED。Gate 的 0.45 s 调度余量是测试容忍度，不是产品保证 |
+| L6-27 | **受支持依赖矩阵**（X-NARROW 条件 3）：已验证 `httpx==0.27.2`、`httpcore==1.0.9`、`anyio==4.15.1`、`h11==0.16.0`、`sniffio==1.3.1`；`httpx>=0.27,<0.28` 不代表 `httpcore` / `anyio` 可以未经核验地变化。S1 的矩阵守卫在安装版本不在矩阵内时把 X-NARROW 的受支持运行时声明降为 `UNVERIFIED` 并要求重新运行扫描与 Gate C；本设计不修改 `pyproject.toml` |
+| L6-28 | **穷举探针的覆盖范围**：探针对包内函数的每个字节码注入（任一字节码模型，比 CPython 的真实投递更强）；对第三方库内部的 C 代码 / 第三方字节码不注入（它们的帧在边界切断引用后无引用者，随引用计数释放，从不被清理）；正常路径出口在每第 4 个字节码上做 k = 2 抽样（每次运行都轮询真实宿主）。证据包保留全部脚本与原始输出，供独立复核者自行构造场景 |
+| L6-29 | **B1 进程内信任边界**（第 10.5 节）：P6 不对同进程恶意代码（`gc` / 帧内省、猴子补丁、私有属性改写、trace / profile、任意异常注入）隐藏凭据——`gc.get_objects()` 即可找到飞行中的带 `Authorization` 的 `Request`（Reviewer C `inproc_reach.py`），记录为实际可达性。B1 不排除正常公共 API 使用、受支持依赖、P6 自身泄漏、普通信号、正常取消 |
+| L6-30 | **B2 异步致命异常投递边界**（第 10.5 节）：保证只覆盖有运行时证据的范围（检查点模型 k ≤ 3 穷举；任一字节码模型 k = 1 穷举、更高 k 分层 / 抽样；真实信号 fuzz 旁证，不是绝对证明）；调试器 / trace 任意字节码注入 = `OUT_OF_THREAT_MODEL`；不改变进程级 `SIGINT` 策略 |
 
 ---
 
@@ -1919,8 +2447,9 @@ Phase 6 package count         : 1
 HG-1 (historical gate rebind) : ACCEPTED（三份独立 Design Review 一致裁决）— NOT EXECUTED（未来 S1 test-only repair；本轮 Tests Modified = NO）
 Design-R1                     : SUPERSEDED（c05c7eb）
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE（b071d14）
-Design-R3                     : SUPERSEDED BY DESIGN-R4 CANDIDATE（85d3da8）
-Design-R4                     : VERIFIED CLOSURE CANDIDATE（R4-01..R4-09；待独立复核）
+Design-R3                     : SUPERSEDED（85d3da8）
+Design-R4                     : SUPERSEDED BY DESIGN-R5 DRAFT（6ccf7d3；独立复核 FAIL）
+Design-R5                     : UNCOMMITTED DRAFT — 含 Governance Security Addendum 与最终致命异常安全架构修复（R5-01..R5-12；R5-11 方案 A = APPROVED FOR DESIGN REVISION ONLY；致命异常 F3 = 确定性所有权清理 + 异常引用脱离 = IMPLEMENTED CANDIDATE（生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；R5-C-01..03 与 R5-EV-01 已独立确认关闭；R5-CL-01 / R5-GOV-01 / R5-NEW-01 = CLOSED CANDIDATE，待独立复核）；X-NARROW 仅用于独立载荷对照，四个植入凭据用例 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1，可达性如实记录，不是 PASS）；调试器 / trace 在任意字节码注入致命异常 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B2；真实信号投递的保证仅限于运行时证据覆盖的范围）；均非 Security PASS；待 Governance 审阅致命异常安全架构修复报告）
 ```
 
 本文不得被解读为 FROZEN / DESIGN PASS / IMPLEMENTATION AUTHORIZED / CLOSED。唯一 authority 转换：独立 Design Review PASS → 该 Design Candidate SHA 成为
@@ -1972,7 +2501,35 @@ DR-29  R4-01：第 11.2 节映射入口的校验顺序、唯一错误分类、�
 DR-30  R4-02：第 10.2 节内联清理生命周期——无 shield / 无 task / 有界 / 二次取消 / 致命原样传播；有界性的作用域（生产传输路径）与 UNVERIFIED / NOT_RUN 项是否被诚实标注；是否需要 BLOCKED — SECURITY AUTHORITY
 DR-31  R4-03 / R4-04：第 14.4 节请求账本模型（O2-1..O2-8、pre-proxy 注入清单、`calls(N)`、attempt_id 跨记录唯一）
 DR-32  R4-05：第 20.5 节累计状态 Z 与保留窗口 W 的分离；分段流式验证；溢出后哪些验证仍成立
-DR-33  R4-06 / R4-07：第 10.3.1 节谓词与独立参考模拟器（39 条）相等、H4 事件有效性、事件全序；规则消融
+DR-33  R4-06 / R4-07：第 10.3.1 节谓词与独立参考模拟器相等（R4 为 39 条，R5 重新计算为 63 条，见 DR-37）、H4 事件有效性、事件全序；规则消融
 DR-34  R4-08：L6-01 与 Master / Plan 不再声称“逐字段双侧证据”
 DR-35  R4-09：E6-28 的冻结输入与非空断言；第 23.2 节证据状态词汇
+DR-36  R5-01：谓词接受真实枚举与冻结数据类，任意输入不抛出（Gate B 从合同抽取并执行）
+DR-37  R5-02：类型 / 见证约束齐全；63 条可产生状态由模拟器重新计算；独立性仍为 NOT ESTABLISHED
+DR-38  R5-03：H3 已送达 / H4 缺席合法；H3 单独不授权取消；O2-4 的对应分支
+DR-39  R5-04：在途 / 静止快照分开；Z 更新点；五个必测场景
+DR-40  R5-05：乱序完成、completion_seq、FIFO 窗口、收集器游标、溢出、NOT_VERIFIED
+DR-41  R5-06：NO_RESPONSE / NOT_TERMINAL / OBSERVATION_FAILED 拆分与严格优先级；第 10.2 / 10.3 节、状态表、谓词、E6-08 / E6-09、M6-34 一致
+DR-42  R5-07：Master F-20 与合同安全范围措辞一致；FAIL / NOT_RUN / UNVERIFIED / BLOCKED 不混用
+DR-43  R5-08：map_host_result 第 7 步 URL 卫生与精确 dropped_url_count
+DR-44  R5-09：宿主展示 poster 裁剪不进入 P6 URL 过滤（Master F-8 / §18 / L6-10）
+DR-45  R5-10：Python 3.11.0+；不依赖 asyncio.timeout；E6-25 / E6-08 / E6-09 / E6-17 含 3.11 最低小版本
+DR-46  R5-11：方案 A 的设计修订（transport= 与衍生的 _clock / _sleep 一并移除）是否充分、故障覆盖矩阵是否保留 E6-05 / E6-09 / E6-17 的全部强制能力、反例“不可经 P6 入口触发”的论证是否成立（进程级猴子补丁属于库被篡改的威胁模型）
+DR-47  R5-12：非 httpx Exception 安全分类；红绿孪生；致命 traceback 风险（第 10.5 节）披露是否精确
+DR-48  治理附加 G-2：F3（同一实例、边界净化）是否满足全部 12 项证明要求；六个概念（对象身份 / 类型 / 参数 / traceback 保真度 / 异常链 / P4 可见行为）是否被区分；诊断能力损失是否如实记录；净化失败与第二个致命异常是否不遮盖 / 不吞掉；若不满足则必须报告 BLOCKED — SECURITY AUTHORITY，不得退回 F1 / F2
+DR-49  治理附加 G-4：总 deadline 机制（loop.call_at + Task.cancel + cancelling()/uncancel() 记账）是否正确、是否在 Python 3.11.0–3.14 都成立、finally 撤销、与调用方取消的竞速、墙钟上界公式
+DR-50  治理附加 G-1：公共构造面的全部注入点清单（含 image_client 属 P4 CLOSED 接缝）与 API 守卫是否完备
+DR-51  治理 Gate C-Final-01：取消归属不变量 O1–O5 是否被 R1–R11 的逐步记录证明；红孪生是否真的变红；3.11 / 3.13 的差异是否只来自 asyncio 自身（控制实验）；R8b 的取舍是否可接受
+DR-52  治理 Gate C-Final-02：六个概念（身份 / 类型 / 参数 / traceback 保真度 / 链 / P4 行为）是否被分开验证；抛出方植入字段按 X-NARROW 处理是否满足全部强制条件（见 DR-57）
+DR-53  治理 Gate C-Final-03：接缝撤销后 E6-05 / E6-08 / E6-09 / E6-17 的确定性能力是否仍可构造；故障网络是否独立于被测代码；无隐藏 scheduler / task / 资源残留
+DR-54  R5-C-01：边界所有权的生命周期设计是否对所有有效退出路径成立（try 体 / except Exception / except CancelledError / 致命处理体 / finally / try 之后 / 公共 client 出口 / engine / facade）；穷举窗口探针（任一字节码 / 检查点两种模型，k = 1 / 2 / 3）与 R5 草案红孪生；“任一字节码且数量无界”（trace 注入）模型是否被正确归入 B1 / B2 的 OUT_OF_THREAT_MODEL，且没有借此降低检查点模型的保证
+DR-55  R5-C-02：链整条切断是否足以覆盖 C 级槽位；审计器（gc.get_referents）是否仍有盲区（受控遍历，不执行用户代码，不遍历整个进程对象图）；C 级槽位红绿孪生
+DR-56  R5-C-03：取消归属的单点分类（cancelling() > base）是否在全部竞态上正确（外部先 / 内部先 / 同轮次 / 两次外部 / TaskGroup / 调用方 asyncio.timeout / 完成竞争 / 响应关闭 / 内层转换），Python 3.11–3.14 的差异；Reviewer C 原始 race.py 与 race_c_revised.py 的对应关系
+DR-57  X-NARROW（仅独立载荷）：六个强制条件是否逐条落实；四个植入用例是否保留并标 OUT_OF_THREAT_MODEL 而非 X-NARROW PASS，“需要主动进程内篡改”的独立证据是否成立（_http 私有、无钩子 API）；Y / Z 是否仍被拒绝；受支持依赖矩阵与矩阵守卫
+DR-58  R5-CL-01：F3 生产路径是否访问任何帧（`frame.clear()` / `gc.*` / `sys._getframe`）、是否依赖 `except RuntimeError`；红 / 绿孪生是否覆盖已结束帧 / 正在执行帧 / 挂起生成器 / 挂起协程 / 第三方链 / 本包拥有的挂起帧，且分别在正常 GC 与 `gc.freeze()` 下、在 3.11 / 3.12 / 3.13 / 3.14 上；公共 client 与 `aggregate` 两条路径；Reviewer C `frameclear.py` / `liveness.py` 基线
+DR-59  R5-EV-01：审计器是否检测任何带 `Authorization` 的 `Request` / `Response.request`（与令牌值无关）；非 canary 正向对照与变异是否真实变红；是否未改变生产保护范围
+DR-60  B1 / B2：进程内信任边界与异步致命异常投递边界的措辞是否只声明有运行时证据的保证；真实信号 fuzz 是否被当作绝对证明；是否改变了进程级 `SIGINT` 策略
+DR-61  R5-GOV-01：生产实现是否仍依赖不完整的 GC 引用者枚举；静态守卫是否拒绝 `gc.get_referrers` / `sys._getframe` / `frame.clear` 及其别名、字符串形式、替代手段（`gc.collect` / `gc.get_objects`）；旧版在 `gc.freeze()` 下是否确实失败、新版是否通过
+DR-62  R5-NEW-01：F3 是否为清理帧而触发 `sys._getframe` / `gc.get_referrers`；是否有任何审计事件的参数能到达带 `Authorization` 的 `Request`；公共 client 与 `aggregate` 是否分别验证；是否把“审计钩子有执行权限”误当作解决方式
+DR-63  逐层所有权：`_transport` / `_call` / 公共 client / `_run` / `aggregate` / 门面是否各自说明了持有什么、谁清理、处理体 / `finally` / 返回点 / 清理器失败 / 二次致命各自如何；门面一栏是否如实标注“设计要求，探针未建模”
 ```

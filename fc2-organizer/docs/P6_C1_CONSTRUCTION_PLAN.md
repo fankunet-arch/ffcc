@@ -17,7 +17,7 @@ Internal Stages                    : S1 / S2 / S3
 Independent Review Plan            : Independent Design Review once before S1 + one C-level Independent Level 1 Review after complete implementation
 Owner Question Gate                : BUSINESS DECISIONS ONLY
 Evidence Gate                      : 合同第 23 节 E6-01..E6-28 全部满足（含：≥10 FC2 的两个真实宿主纵向门、失败 / 重试 / 取消 / 并发 / 确定性、route ownership 机械证明、
-                                     安全 canary（整个包的异常图递归检查与强制失败矩阵）、不执行三层机检、33 项 mutation / non-vacuity、值级 provenance 七类反事实、有界 JSON（O(B)）、孤儿安全并发 oracle（A / K / H、attempt 粒度 POST 账本、H1–H4、ORPHAN-M1）、提交 / 取消 / 致命组合合同与取消请求见证、严格 raw 键集合、图片裁剪语义对照（E6-28）、全量回归与基线对账、live smoke 记录、HANDOFF）
+                                     安全 canary（整个包的异常图递归检查与强制失败矩阵）、不执行三层机检、59 项 mutation / non-vacuity、值级 provenance 七类反事实、有界 JSON（O(B)）、孤儿安全并发 oracle（A / K / H、attempt 粒度 POST 账本、H1–H4、ORPHAN-M1）、提交 / 取消 / 致命组合合同与取消请求见证、严格 raw 键集合、图片裁剪语义对照（E6-28）、全量回归与基线对账、live smoke 记录、HANDOFF）
 ```
 
 ```text
@@ -27,8 +27,9 @@ Frozen Contract               : NOT YET ACCEPTED（docs/specifications/PHASE6_C1
 Construction Plan             : NOT YET ACCEPTED（本文）
 Design-R1                     : SUPERSEDED（Design-R1 Head c05c7ebca04ded9e1853b71e82796a419fadc192）
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE（Design-R2 Head b071d149f8f99385851cb6f8dc38f9904c624262）
-Design-R3                     : SUPERSEDED BY DESIGN-R4 CANDIDATE（Design-R3 Head 85d3da8b7450fd50a112e8bbc47a248b9473e9a9）
-Design-R4                     : VERIFIED CLOSURE CANDIDATE — COMPLETE GOVERNANCE REPAIR（R4-01..R4-09；Design-R4 Base 85d3da8b7450fd50a112e8bbc47a248b9473e9a9；待独立复核）
+Design-R3                     : SUPERSEDED（Design-R3 Head 85d3da8b7450fd50a112e8bbc47a248b9473e9a9）
+Design-R4                     : SUPERSEDED BY DESIGN-R5 DRAFT（Design-R4 Head 6ccf7d38ef637af6e8b481475441b4d1e13dfcca；独立复核 FAIL，C 报告 BLOCKED — SECURITY AUTHORITY）
+Design-R5                     : UNCOMMITTED DRAFT — 含 Governance Security Addendum 与最终致命异常安全架构修复（R5-01..R5-12；R5-11 方案 A = APPROVED FOR DESIGN REVISION ONLY；致命异常 F3 = 确定性所有权清理 + 异常引用脱离 = IMPLEMENTED CANDIDATE（生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；R5-C-01..03 与 R5-EV-01 已独立确认关闭；R5-CL-01 / R5-GOV-01 / R5-NEW-01 = CLOSED CANDIDATE，待独立复核）；X-NARROW 仅用于独立载荷对照，四个植入凭据用例 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1，可达性如实记录，不是 PASS）；调试器 / trace 在任意字节码注入致命异常 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B2；真实信号投递的保证仅限于运行时证据覆盖的范围）；均非 Security PASS；待 Governance 审阅致命异常安全架构修复报告）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
@@ -121,7 +122,7 @@ tests/amane_batch/     conftest.py（autouse：执行类 tripwire，合同 §19.
                        _batch_upstream.py                    确定性回环上游（合同 §22.4）
                        _batch_fault_proxy.py                 故障注入代理（合同 §22.5）
                        _batch_oracles.py                     语义投影 / 树摘要 / 账本断言（真实宿主门与变异测试共用）
-                       _ref_simulator.py                     独立参考模拟器（合同 §10.3.4 的 39 条可产生记录；与谓词互为独立定义）
+                       _ref_simulator.py                     独立参考模拟器（合同 §10.3.4 的 63 条可产生记录，由模拟器计算；与谓词互为独立定义；作者与谓词同为 Designer，独立性 NOT ESTABLISHED）
                        _ledger_verifier.py                   分段流式账本验证器（合同 §14.4 第 5 点；O1 / O2 / O3）
                        _batch_corpus.py                      ≥10 个号与行为表、图片路由
 tools/                 run_amane_batch_gate.py               真实宿主门 / live smoke（子命令 --hosts / --live / --out）
@@ -150,14 +151,14 @@ docs/                  review/P6_C1_HANDOFF.md  acceptance/evidence/P6_C1_HOST_M
 交付（对应合同 §8-§12、§20.2-§20.3、§20.5）：
 
 * `errors.py` / `credential.py` / `config.py` / `audit.py`（枚举与记录模型）/ `_wire.py` / `host_client.py` / `_lifecycle.py` / `_mapping.py` / `engine.py`。
-* 测试：E6-01、E6-03（AST：整个包的 C1–C7）、E6-04、E6-05、E6-06（含有界 JSON 与 O(B) 成本对账）、E6-07（含值级 provenance 与七类反事实）、E6-08（含 `SubmissionState` 与 `S×T×C×R` 组合穷举）、E6-09、E6-10（引擎层，含 O1/O2 与 `ORPHAN-M1` 的替身版）、E6-17（安全 canary：整个包的强制失败矩阵、异常图递归检查、`files` 路径 canary、凭据校验路径红绿孪生、`_transport` / `_call` 取消与致命矩阵（C5a–C5c）、`record_is_legal`（合同 §10.3.1）的 `__post_init__` 校验与映射入口（合同 §11.2）的抽取执行，基于 `httpx.MockTransport` 与一个真实的回环 TLS / 重定向 / cookie 测试服务器）。
+* 测试：E6-01、E6-03（AST：整个包的 C1–C7）、E6-04、E6-05、E6-06（含有界 JSON 与 O(B) 成本对账）、E6-07（含值级 provenance 与七类反事实）、E6-08（含 `SubmissionState` 与 `S×T×C×R` 组合穷举）、E6-09、E6-10（引擎层，含 O1/O2 与 `ORPHAN-M1` 的替身版）、E6-17（安全 canary：整个包的强制失败矩阵、异常图递归检查、`files` 路径 canary、凭据校验路径红绿孪生、`_transport` / `_call` 取消与致命矩阵（C5a–C5c）、`record_is_legal`（合同 §10.3.1）的 `__post_init__` 校验与映射入口（合同 §11.2）的抽取执行，基于真实回环套接字上的故障代理与一个真实的回环 TLS / 重定向 / cookie 测试服务器；**不使用 `httpx.MockTransport`，`AmaneHostClient` 不接受 `transport=`**，R5-11 方案 A 待授权）。
 * 本阶段 mutation（进程内）：M6-03 / M6-04 / M6-05 / M6-06 / M6-09 / M6-12 / M6-13 / M6-15 / M6-16 / M6-17 / M6-18 / M6-19 / M6-21 / M6-23 / M6-24 / M6-25 / M6-26 / M6-27 的**单测层**对应项，每项带未变异孪生。
 
 要点（合同条款的落实顺序）：
 
-1. 先写 `_wire.py` 与 `host_client.py` 并用 `MockTransport` 钉死“请求账本”（方法 / 路径 / 体键集 / 头集 / 无 cookie / 无重定向 / 响应上限）。
+1. 先写 `_wire.py` 与 `host_client.py` 并用**回环故障代理**（真实套接字；不是 `MockTransport`）钉死“请求账本”（方法 / 路径 / 体键集 / 头集 / 无 cookie / 无重定向 / 响应上限）。
    * `_wire.py` 先实现**迭代式 JSON 结构预扫描**（`MAX_JSON_DEPTH` / `MAX_JSON_NODES` / `MAX_JSON_COLLECTION_ITEMS`）再接 `json.loads`；`host_client.py` 的 httpx 异常只在 `except` 块内分类、离开后才抛出安全异常，凭据只经 `httpx.Auth` 附加（合同 §8.3）。
-2. 再写 `_lifecycle.py`：状态机、deadline（至少一次观察）、观察失败容忍、清理预算、`SubmissionState` 四态、`CleanupTrigger` / `CancelOutcome`（9 个成员，无 `CONFIRMED_STOPPED`）/ `AggregateTerminal` 的状态机（**唯一规范 = 合同 §10.3.1 谓词与 §10.3.4 表**；取消 / 清理按合同 §10.2 的内联生命周期实现，**包内不得出现 shield / create_task / ensure_future / gather / TaskGroup**；`attempt_id` / `X-FFCC-Attempt` 与审计累计状态 Z / 保留窗口 W 按合同 §14.4、§20.5）；**提交永不重试**。
+2. 再写 `_lifecycle.py`：状态机、deadline（至少一次观察）、观察失败容忍、清理预算、`SubmissionState` 四态、`CleanupTrigger` / `CancelOutcome`（10 个成员，含 `UNCERTAIN_OBSERVATION_FAILED`；无 `CONFIRMED_STOPPED`）/ `AggregateTerminal` 的状态机（**唯一规范 = 合同 §10.3.1 谓词与 §10.3.4 表**；取消 / 清理按合同 §10.2 的内联生命周期实现，**包内不得出现 shield / asyncio.timeout / timeout_at / wait_for / create_task / ensure_future / gather / TaskGroup**（R5-10：支持 Python 3.11.0）；**每个宿主请求有定时器强制的总墙钟 deadline**（合同 §10.2：`loop.call_at` + `finally` 撤销 + `Task.cancelling()` / `uncancel()` 记账）；**致命 `BaseException` 采用 F3**（合同 §10.5）；**公共构造面没有任何传输 / HTTP 客户端 / sleep / clock 注入参数**（合同 §10.6，AST + 签名守卫），**包内没有任何测试钩子 / 开关**（M6-50）；取消归属不变量 O1–O5（合同 §10.2）；故障网络 `faultnet` 只依赖标准库（合同 §22.5）；致命异常采用边界所有权 + F3（内联致命处理体、`_transport` 无致命处理体、整条链切断，合同 §10.5 / C9）；取消归属单点按计数分类（合同 §10.2）；X-NARROW 与受支持依赖矩阵守卫（合同 §10.5 / L6-27）；`attempt_id` / `X-FFCC-Attempt` 与审计累计状态 Z / 保留窗口 W 按合同 §14.4、§20.5）；**提交永不重试**。
 3. 再写 `_mapping.py`：字段表穷举守卫（`PluginRaw` ↔ `NormalizedMetadata`）、URL 卫生与 P5 I22 对账、最低成功、号等价、任务侧归属（必要条件）+ **值只来自 `raw["ffcc.fc2-metadata"]`**（展示列、持久化 `field_sources` / `locked_fields` 不参与；`source_urls` / `external_ids` 恒为空）、`HostFailureKind` → Core 配对表（用 `ALLOWED_ERROR_KINDS` 穷举验证）、产出的 `AggregationResult` 通过 Core 校验并被 P4-C9 诊断投影接受。
 4. 最后写 `engine.py`：把以上串起来；`aggregate` 是类属性里的普通 `async def`（P4 静态形态检查要求）。
 
@@ -168,11 +169,11 @@ S1 退出条件：E6-03..E6-10 + E6-17 的单测全绿；范围门绿；S1 mutat
 交付（合同 §13-§19、§20.4、§21）：
 
 * `models.py`（`AmaneBatchRound` / `AmaneBatchPreview` / `AmaneBatchSummary`，含全部 `__post_init__` 不变量）与 `facade.py`（preflight、`preview`、`preview_root`、`retry_failed`、`audit_snapshot`、`aclose`）。
-* 测试替身 `_batch_host_double.py`：一个基于 `httpx.MockTransport` 的**脚本化宿主**，实现表 H1 的 5 个端点并建模 Amane 的任务队列（QUEUED → RUNNING → DONE / FAILED、可配置 worker 并发、可控完成顺序、
+* 测试替身 `_batch_host_double.py`：一个基于真实回环 HTTP 服务的**脚本化宿主**（`asyncio` 服务端；不是 `MockTransport`），实现表 H1 的 5 个端点并建模 Amane 的任务队列（QUEUED → RUNNING → DONE / FAILED、可配置 worker 并发、可控完成顺序、
   两种取消语义 DIFF-P6-01 的 v0.15.0 / v0.18.0 变体、**“已认领未登记”窗口与晚到 Metadata 写入（DIFF-P6-05）**、`raw` 与展示列**分开建模**（手工 `PATCH` 只改展示列与 `locked_fields`，不改 `raw` 与 `field_sources`；同号再 SCRAPE 整体替换两者）、孤儿任务（响应丢失仍 `running`）与独立 POST 账本（按 `X-FFCC-Attempt` 区分 attempt，区分 forwarded / delivered）、`Set-Cookie: amane_token`、401 行为）。
   **它只服务于 S1 / S2 的进程内确定性测试，永远不被当作 Amane 证据**（E6-11..E6-16 必须是真实宿主）。S3 用“同一场景在替身与真实宿主上语义投影一致”的对账来约束替身不偏离真实行为。
 * 测试：E6-10（全链并发，含门面并发 / 非法参数 / P4 busy 红绿）、E6-19（含跨轮 hardlink 反例）、E6-20（进程内）、`test_amane_batch_facade.py`（主轮 / 重试 / preflight / 冻结调用顺序 / `preview_root` / 输入校验 / 取消）、E6-09（门面层取消与取消真实性）、E6-18（tripwire 全链）。
-* 进程内纵向：≥ 10 个 FC2 经 `scan → … → BatchPreview → summary`，图片走真实 `HttpxImageClient` + `MockTransport`；失败 / 重试 / 取消 / 并发 / 确定性（完成顺序反转）全覆盖。
+* 进程内纵向：≥ 10 个 FC2 经 `scan → … → BatchPreview → summary`，图片走 P4 真实 `HttpxImageClient`（沿用 P4 自有的 `ImageHttpClient` 测试接缝，不属于 P6 公共 API）；失败 / 重试 / 取消 / 并发 / 确定性（完成顺序反转）全覆盖。
 * 本阶段 mutation：M6-07 / M6-08 / M6-10 / M6-11（含 `ORPHAN-M1`）/ M6-14 / M6-20 / M6-22 / M6-28 的进程内对应项（孪生绿 / 变异红）。
 
 S2 退出条件：进程内纵向全绿；`AmaneBatchSummary` 与 P4 `PreviewSummary` 交叉校验；`peak_in_flight ≤ M` 在完成顺序反转 / 慢 / 失败 / 取消下成立；范围门绿。**无需 Review，直接进入 S3。**
@@ -188,7 +189,7 @@ S2 退出条件：进程内纵向全绿；`AmaneBatchSummary` 与 P4 `PreviewSum
 * 替身 / 真实宿主对账：把 S2 的核心场景（ALL_OK×10、一个失败条目、取消）同样在真实宿主上运行，两边语义投影必须一致。
 * 可选：HOST-A-WIN / HOST-B-WIN（SC-01 / SC-02）；运行了才记录，没运行记 `UNVERIFIED`。
 * `P6_C1_LIVE_SMOKE.json`：`--live` 尝试（合同 §25）；结果 `VERIFIED` / `UNVERIFIED_ENVIRONMENT` / `NOT_RUN`，**不得**默认写成 PASS。
-* E6-21（全部 33 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.12 与 3.14）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
+* E6-21（全部 59 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.11 最低 / 最新小版本、3.12、**3.13（正式验收项）**、3.14；缺哪个就明示 NOT_RUN，不作该版本的支持声明）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
 
 S3 退出条件：合同 §23 的 E6-01..E6-28 全部按合同第 23.2 节词汇（PASS / FAIL / NOT_RUN / UNVERIFIED / BLOCKED）给出状态：`NOT_RUN` / `UNVERIFIED` / `BLOCKED` 不得计为 PASS，必须进入 evidence gaps；E6-28 在真实宿主上实际触发裁剪之前为 `UNVERIFIED`（或把无法获得的项如实写入 evidence gaps，并且不扩大任何支持声明）；HANDOFF 候选完成；然后**停止，等待 C-level Independent Level 1 Review**。
 
@@ -245,7 +246,7 @@ Finding authority 边界（Governance v2 §12.2）：Contract amendment、Plan s
 ## 8. 环境前提（缺失则对应证据如实标 NOT_RUN / UNVERIFIED）
 
 ```text
-项目解释器：Python ≥ 3.11（E6-25：3.12 与 3.14 各跑受影响测试）；httpx 0.27.x（Core 既有依赖）
+项目解释器：Python ≥ 3.11（E6-25：3.11.0 与最新可用 3.11.x、3.12、**3.13**、3.14 各跑受影响测试；3.13 为正式运行时验收项，S3 若无该解释器则 NOT_RUN 且不作支持声明；不修改 pyproject.toml）；httpx 0.27.x（Core 既有依赖）
 宿主解释器：Python 3.14.x（独立 venv，沿用 P5-C2 的 prepare_amane_hosts）
 平台：Windows x64（SC-03 / SC-04）；回环端口；git；pip（仅用于准备宿主 venv，不是任何信任来源）
 live smoke：需要公网（失败则 UNVERIFIED_ENVIRONMENT / NOT_RUN，不影响确定性门）
@@ -270,14 +271,15 @@ Frozen Contract               : NOT YET ACCEPTED
 Construction Plan             : NOT YET ACCEPTED
 Design-R1                     : SUPERSEDED
 Design-R2                     : SUPERSEDED BY DESIGN-R3 CANDIDATE
-Design-R3                     : SUPERSEDED BY DESIGN-R4 CANDIDATE
-Design-R4                     : VERIFIED CLOSURE CANDIDATE（待独立复核）
+Design-R3                     : SUPERSEDED
+Design-R4                     : SUPERSEDED BY DESIGN-R5 DRAFT（6ccf7d3；独立复核 FAIL）
+Design-R5                     : UNCOMMITTED DRAFT — 含 Governance Security Addendum 与最终致命异常安全架构修复（R5-01..R5-12；R5-11 方案 A = APPROVED FOR DESIGN REVISION ONLY；致命异常 F3 = 确定性所有权清理 + 异常引用脱离 = IMPLEMENTED CANDIDATE（生产路径禁止 gc.get_referrers / sys._getframe / frame.clear；R5-C-01..03 与 R5-EV-01 已独立确认关闭；R5-CL-01 / R5-GOV-01 / R5-NEW-01 = CLOSED CANDIDATE，待独立复核）；X-NARROW 仅用于独立载荷对照，四个植入凭据用例 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B1，可达性如实记录，不是 PASS）；调试器 / trace 在任意字节码注入致命异常 = OUT_OF_THREAT_MODEL — ADVERSARIAL_IN_PROCESS_ACCESS（B2；真实信号投递的保证仅限于运行时证据覆盖的范围）；均非 Security PASS；待 Governance 审阅致命异常安全架构修复报告）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
 Tests Modified                : NO
 Risk Class                    : C
-Next                          : GOVERNANCE COORDINATOR 审阅 DESIGN-R4 预提交验证报告；批准后才形成单一 R4 docs-only Candidate commit，再交 G / C / x 独立增量复核（建立 Design Accepted Head 之前禁止 Developer 开始 S1）
+Next                          : GOVERNANCE COORDINATOR 审阅 DESIGN-R5 SECURITY CLOSURE PRE-COMMIT REPORT；批准后才允许形成 R5 docs-only Candidate commit，再交 G / C / x 独立增量复核（独立安全复核的三个 finding R5-C-01..03 已按 CLOSED CANDIDATE 修复；建立 Design Accepted Head 之前禁止 Developer 开始 S1）
 ```
 
 唯一 authority 转换：独立 Design Review PASS → 该 Design Candidate SHA 成为 Design Accepted Head（Frozen Contract / Plan Head、Implementation Input）→ 才允许进入 S1。
