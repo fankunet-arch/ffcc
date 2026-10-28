@@ -17,7 +17,7 @@ Internal Stages                    : S1 / S2 / S3
 Independent Review Plan            : Independent Design Review once before S1 + one C-level Independent Level 1 Review after complete implementation
 Owner Question Gate                : BUSINESS DECISIONS ONLY
 Evidence Gate                      : 合同第 23 节 E6-01..E6-28 全部满足（含：≥10 FC2 的两个真实宿主纵向门、失败 / 重试 / 取消 / 并发 / 确定性、route ownership 机械证明、
-                                     安全 canary（整个包的异常图递归检查与强制失败矩阵）、不执行三层机检、83 项 mutation / non-vacuity、值级 provenance 七类反事实、有界 JSON（O(B)）、孤儿安全并发 oracle（A / K / H、attempt 粒度 POST 账本、H1–H4、ORPHAN-M1）、提交 / 取消 / 致命组合合同与取消请求见证、严格 raw 键集合、图片裁剪语义对照（E6-28）、全量回归与基线对账、live smoke 记录、HANDOFF）
+                                     安全 canary（整个包的异常图递归检查与强制失败矩阵）、不执行三层机检、99 项 mutation / non-vacuity、值级 provenance 七类反事实、有界 JSON（O(B)）、孤儿安全并发 oracle（A / K / H、attempt 粒度 POST 账本、H1–H4、ORPHAN-M1）、提交 / 取消 / 致命组合合同与取消请求见证、严格 raw 键集合、图片裁剪语义对照（E6-28）、全量回归与基线对账、live smoke 记录、HANDOFF）
 ```
 
 ```text
@@ -33,7 +33,8 @@ Design-R5                     : COMMITTED REVIEW CANDIDATE — INDEPENDENT REVIE
 R5 Candidate                  : 22a3fa4922c655cb5ce127ee2825b1678f4855db（已提交并推送的 R5 Review Candidate；不得改写 / amend / reset）
 Design-R5-R1                  : REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（R5-R1 Candidate d16a0a308a5488bde17a03b32b0cee65ba7d2343 是位于 R5 Candidate 之上的单个 docs-only 提交，已提交并推送；Reviewer G / C / x 独立复核 FAIL；不得改写 / amend / reset；该轮正式编号 R5-R1-01..R5-R1-10）
 Design-R5-R2                  : REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（R5-R2 Candidate 55144ba8fc7eef0df57c0639c04b6418a9595002 是位于 R5-R1 Candidate 之上的单个 docs-only 提交，已提交并推送；独立复核 FAIL（Reviewer C：R5-R2-03 仍 OPEN——MC1 嵌套 / 容器变异使入口扫描与数据流守卫假绿；Reviewer x：Metadata 来源见证与严格 GET reader 漏检）；不得改写 / amend / reset；该轮正式编号 R5-R2-01..R5-R2-11）
-Design-R5-R3                  : REVISION CANDIDATE — INDEPENDENT REVIEW REQUIRED（R5-R3 Base = R5-R2 Candidate 55144ba8fc7eef0df57c0639c04b6418a9595002；新 Designer 的定向闭合修复，正式编号 R5-R3-01..R5-R3-06；G-1 = BLOCKED — SECURITY AUTHORITY；G-2 = RESOLVED — ORIGINAL P1/P2/P3 PRESERVED；不是 Design Accepted，不是 CLOSED / PASS；本设计文档只描述稳定的阶段门，实时 HEAD 与提交进度由 Governance Coordinator 裁决并记录在 HANDOFF / 审查报告中）
+Design-R5-R3                  : REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（R5-R3 Candidate aacbbf2764bc32c6d50ce3083cf38ad75c1a43ef 是位于 R5-R2 Candidate 之上的单个 docs-only 提交，已提交并推送；三位独立 Reviewer（C / x / G）均 FAIL，发现 R5-R4-01..R5-R4-07；不得改写 / amend / reset 该提交）
+Design-R5-R4                  : REVISION CANDIDATE — 本地 docs-only 定向闭合修复，**未提交**（R5-R4 Base = R5-R3 Candidate aacbbf2764bc32c6d50ce3083cf38ad75c1a43ef；Package Frozen Base 4189b9552d26b3cc5273e0ac09e46e5a3759121d；正式编号 R5-R4-01..R5-R4-07；GOV-R5R3-CRED = BLOCKED — SECURITY AUTHORITY（Reviewer C 意见为 ACCEPT NARROW LIMITATION — CONDITIONAL，不是豁免；授权包另附于证据包）；GOV-R5R3-EXC = RESOLVED — ORIGINAL P1/P2/P3 PRESERVED；HG-1 = ACCEPTED — NOT EXECUTED；S1 = NOT AUTHORIZED；Design Accepted Head = NOT ESTABLISHED；不是 Design Accepted，不是 CLOSED / PASS；本设计文档只描述稳定的阶段门，实时 HEAD 与提交进度由 Governance Coordinator 裁决并记录在 HANDOFF / 审查报告中）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
@@ -120,6 +121,7 @@ tests/amane_batch/     conftest.py（autouse：执行类 tripwire，合同 §19.
                        test_amane_batch_facade.py            P4 集成、retry_failed 选择、preflight、preview_root
                        test_amane_batch_determinism.py       E6-20（以及 E6-15 的进程内对照）
                        test_amane_batch_mutation_nonvacuity.py   E6-21
+                       test_amane_batch_commit_types.py      E6-08 / E6-10（GT-1..GT-5：提交区操作数类型的证明）
                        test_amane_batch_matrix_json.py       E6-26
                        test_amane_batch_gate_tools.py        门工具本身的单测（不启动宿主）
                        _batch_host_double.py                 脚本化宿主替身（见本计划第 4.2 节；永远不当作 Amane 证据）
@@ -166,10 +168,17 @@ docs/                  review/P6_C1_HANDOFF.md  acceptance/evidence/P6_C1_HOST_M
 3. 再写 `_mapping.py`：字段表穷举守卫（`PluginRaw` ↔ `NormalizedMetadata`）、URL 卫生与 P5 I22 对账、最低成功、号等价、任务侧归属（必要条件）+ **值只来自 `raw["ffcc.fc2-metadata"]`**（展示列、持久化 `field_sources` / `locked_fields` 不参与；`source_urls` / `external_ids` 恒为空）、`HostFailureKind` → Core 配对表（用 `ALLOWED_ERROR_KINDS` 穷举验证）、产出的 `AggregationResult` 通过 Core 校验并被 P4-C9 诊断投影接受。
 4. 最后写 `engine.py`：把以上串起来；`aggregate` 是类属性里的普通 `async def`（P4 静态形态检查要求）。
 5. **R5-R3 的 S1 落实项（合同 §8.3.1 C9、§8.5、§9.4、§10.5、§20.5）**：
-   * 表 E 的 34 个公共入口全部写成规范模板（T1 / T2 跳板 + 叶子模板），业务逻辑、校验、记账、资源构造放进 `_impl`；在**全部 34 个**入口上运行入口门 `entry_gate_r3` 同类测试（[M] 清单相等、[A] 模板相等、[B] 字节码复核、[R] 运行时注入与预测对账），未运行者记 `NOT_RUN`；`AmaneHostCredential.__init__` 的 G-1 结果单独标注 `KNOWN EXPOSURE — BLOCKED — SECURITY AUTHORITY`，不计入 PASS。
+   * 表 E 的 34 个公共入口全部写成规范模板（T1 / T2 跳板 + 叶子模板），业务逻辑、校验、记账、资源构造放进 `_impl`；在**全部 34 个**入口上运行入口门（`entry_gate_r4` 同类测试：失败即关闭的 [M]、两侧复核的 [B]，覆盖口径按动态命中 / 仅静态 / `NOT_RUN` 分列）（[M] 清单相等、[A] 模板相等、[B] 字节码复核、[R] 运行时注入与预测对账），未运行者记 `NOT_RUN`；`AmaneHostCredential.__init__` 的 GOV-R5R3-CRED 结果单独标注 `KNOWN EXPOSURE — BLOCKED — SECURITY AUTHORITY`，不计入 PASS。
    * `_wire.py` 的严格 reader 按字段分类表判定存在性（`result` 必需可空、`error` 可选）；`gate:done_result_precheck` 先于任何 Metadata 请求；宿主路径只由模板函数与已验证的 `int` 构成（AST 守卫）。
-   * 引擎账本只在无检查点的提交区内变更（字节码复核），致命记账为无调用状态转移，记录延迟物化；致命记账探针在检查点模型下 k = 1 穷举。
+   * 引擎账本只在无检查点的提交区内变更（字节码复核），致命记账为无调用状态转移，记录延迟物化；致命记账探针在检查点模型下 k = 1 的计划点验证（报告 planned / fired / unreached，未触发者 `NOT_VERIFIED`）；提交区操作数类型按 GT-1..GT-5 证明（未证明项 OPEN）。
    * 证据按合同 §23.1 的六种单位分别统计，每个数字附输出与 SHA-256。
+
+6. **R5-R4 的 S1 落实项（合同 §10.5、§14.4 O2-4 / O2-11、§20.5、§23.2）**：
+   * 入口门的 `[M]` 失败即关闭（嵌套类 / `partialmethod` / 外部文件可调用 / 外来基类判红，合法生产构造仍绿），`[B]` 两侧复核；`GOV-R5R3-CRED` 的 `g1_probe.py` 须在**真实 S1 代码**上对九个解释器重跑，未跑者 `NOT_RUN`（`GOV-R5R3-CRED` 仍为 BLOCKED，授权包不是豁免）。
+   * 验证器对原始 `202` 体用独立严格 `HostTask` reader，对 `HostMetadata` 用独立表驱动 reader；digest `task_id` 不是证据。
+   * Gate C 探针按忠实预热协议运行并逐解释器逐模型报告 planned / reachable / injected / unreached；任何“完成 / 穷举”声明必须附这四个数；未到达点 `NOT_VERIFIED`；验证器或门崩溃 = `FAIL`。
+   * S2 的致命记账覆盖（状态 CLOSED CANDIDATE — DEFINED KEYED k=1 COVERAGE; RESIDUAL NOT_VERIFIED DISCLOSED；口径分五类：执行结果 / 稳定集合上的位置覆盖 / 不稳定自然时序下观察到的目标 / 未观察分支 `NOT_VERIFIED` / 抽样与穷举，见合同 §10.5 与 L6-35；S1 不得把自然时序变体的 PASS 写成穷举）按目标身份（代码对象 + `co_firstlineno` + 偏移 + 阶段 + 出现序号）定向注入：每个解释器 ≥ 5 次基线并比较序列、必需目标清单在注入前固定、循环 {首轮、第二轮、最后一轮、退出、完成记录路径}、`PASS` / `FAIL` / `NOT_VERIFIED` 三态（退出码 0 不是充分条件）、红孪生与错目标自检、独立重算脚本；不开闸门的自然时序对照保留；闸门只在测试宿主、默认关闭。
+   * 新增测试：`test_amane_batch_commit_types.py`（GT-1..GT-5）。
 
 S1 退出条件：E6-03..E6-10 + E6-17 的单测全绿；范围门绿；S1 mutation 全部“孪生绿 / 变异红”；无任何 CLOSED 文件改动（HG-1 除外）。**无需 Review，直接进入 S2。**
 
@@ -198,7 +207,7 @@ S2 退出条件：进程内纵向全绿；`AmaneBatchSummary` 与 P4 `PreviewSum
 * 替身 / 真实宿主对账：把 S2 的核心场景（ALL_OK×10、一个失败条目、取消）同样在真实宿主上运行，两边语义投影必须一致。
 * 可选：HOST-A-WIN / HOST-B-WIN（SC-01 / SC-02）；运行了才记录，没运行记 `UNVERIFIED`。
 * `P6_C1_LIVE_SMOKE.json`：`--live` 尝试（合同 §25）；结果 `VERIFIED` / `UNVERIFIED_ENVIRONMENT` / `NOT_RUN`，**不得**默认写成 PASS。
-* E6-21（全部 83 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.11 最低 / 最新小版本、3.12、**3.13（正式验收项）**、3.14；缺哪个就明示 NOT_RUN，不作该版本的支持声明）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
+* E6-21（全部 99 项 mutation 孪生）、E6-22（全量回归与基线对账）、E6-23（构件同一性）、E6-25（Python 3.11 最低 / 最新小版本、3.12、**3.13（正式验收项）**、3.14；缺哪个就明示 NOT_RUN，不作该版本的支持声明）、E6-26（证据 JSON 校验）、E6-27（HANDOFF）。
 
 S3 退出条件：合同 §23 的 E6-01..E6-28 全部按合同第 23.2 节词汇（PASS / FAIL / NOT_RUN / UNVERIFIED / BLOCKED）给出状态：`NOT_RUN` / `UNVERIFIED` / `BLOCKED` 不得计为 PASS，必须进入 evidence gaps；E6-28 在真实宿主上实际触发裁剪之前为 `UNVERIFIED`（或把无法获得的项如实写入 evidence gaps，并且不扩大任何支持声明）；HANDOFF 候选完成；然后**停止，等待 C-level Independent Level 1 Review**。
 
@@ -229,7 +238,7 @@ F   纯状态 Final Closure（Governance v2 §11.1：与 Final Closure 合并，
 
 | 评审 | 时点 | 内容 |
 |---|---|---|
-| **Independent Design Review**（一次，已完成 → FAIL；Design-R1 / Design-R2 之后做增量 Closure Review；Design-R5 Candidate、Design-R5-R1 Candidate 与 Design-R5-R2 Candidate 均已被独立复核判 FAIL，Design-R5-R3 为新 Designer 的针对性闭合修订，待独立复核；G-1 BLOCKED — SECURITY AUTHORITY）| S1 之前 | 三份文档一致性；合同第 30 节**完整范围 DR-01..DR-87**（R5-R3 追加 DR-80..DR-87：规范入口模板 / 证据口径 / Metadata 来源 / 字段存在性 / 路径逃逸 / 致命记账 / G-1 / G-2 与证据完整性；其中 DR-36..DR-63 为 Design-R5 追加：谓词 / 快照 / 乱序 / 取消结果 / 3.11 / 方案 A / 安全 F3·B1·B2·逐层所有权，DR-64..DR-69 为 Design-R5-R1 追加：严格类型 / H3·H4 / Z·W·InFlight / 序号空间 / 收集器守卫 / 取消与终态网络见证，DR-70..DR-79 为 Design-R5-R2 追加：状态与编号命名空间 / 边界入口证据与数据流守卫 / §10.5 概念表 / 封闭枚举与全域性 / Task·Metadata 命名空间 / O2-6 全量对账 / 跨记录事件唯一 / Amane 真实取消 schema / 送达 ≠ 已验证 / 严格 GET reader；不得删减 DR-36..DR-79；责任边界见合同第 30 节；DR-01..DR-35 含 HG-1 精确化、F-1、包位置、重试所有权拆分、宿主事实、取消三层模型与 S/T/C/R 正交组合、宿主库写入、值级内容来源（`raw`）、提交基数、整个包的异常 / 凭据边界、门面调用顺序、跨轮冲突、JSON O(B) 成本与上限、A / K / H 并发 oracle、安全边界、不执行隔离）；L6-01 独占 route 前提 |
+| **Independent Design Review**（一次，已完成 → FAIL；Design-R1 / Design-R2 之后做增量 Closure Review；Design-R5 Candidate、Design-R5-R1 Candidate 与 Design-R5-R2 Candidate 均已被独立复核判 FAIL，Design-R5-R3 为新 Designer 的针对性闭合修订，待独立复核；GOV-R5R3-CRED BLOCKED — SECURITY AUTHORITY）| S1 之前 | 三份文档一致性；合同第 30 节**完整范围 DR-01..DR-95**（R5-R4 追加 DR-88..DR-95：入口清单失败即关闭 / 字节码两侧复核与类型证明 / 覆盖口径 / 治理编号 / 旧门 Authority / 严格创建 202 / 严格 Metadata reader / 授权包与证据完整性；R5-R3 追加 DR-80..DR-87：规范入口模板 / 证据口径 / Metadata 来源 / 字段存在性 / 路径逃逸 / 致命记账 / GOV-R5R3-CRED / GOV-R5R3-EXC 与证据完整性；其中 DR-36..DR-63 为 Design-R5 追加：谓词 / 快照 / 乱序 / 取消结果 / 3.11 / 方案 A / 安全 F3·B1·B2·逐层所有权，DR-64..DR-69 为 Design-R5-R1 追加：严格类型 / H3·H4 / Z·W·InFlight / 序号空间 / 收集器守卫 / 取消与终态网络见证，DR-70..DR-79 为 Design-R5-R2 追加：状态与编号命名空间 / 边界入口证据与数据流守卫 / §10.5 概念表 / 封闭枚举与全域性 / Task·Metadata 命名空间 / O2-6 全量对账 / 跨记录事件唯一 / Amane 真实取消 schema / 送达 ≠ 已验证 / 严格 GET reader；不得删减 DR-36..DR-95；责任边界见合同第 30 节；DR-01..DR-35 含 HG-1 精确化、F-1、包位置、重试所有权拆分、宿主事实、取消三层模型与 S/T/C/R 正交组合、宿主库写入、值级内容来源（`raw`）、提交基数、整个包的异常 / 凭据边界、门面调用顺序、跨轮冲突、JSON O(B) 成本与上限、A / K / H 并发 oracle、安全边界、不执行隔离）；L6-01 独占 route 前提 |
 | **C-level Independent Level 1 Review**（一次） | S3 之后 | 完整线性 diff、合同→实现→测试映射、全部证据与 mutation、安全不变量、真实宿主矩阵、evidence gaps |
 | 统一 R1（必要时） | Level 1 FAIL 之后 | 同一根因 / 范围明确 / 不需要新 authority；一次闭合全部已知 findings 并检查直接回归 |
 | Final Closure | Level 1（或 R1）PASS 之后 | 纯状态 docs；不单独再做 docs-only Review |
@@ -286,7 +295,8 @@ Design-R5                     : COMMITTED REVIEW CANDIDATE — INDEPENDENT REVIE
 R5 Candidate                  : 22a3fa4922c655cb5ce127ee2825b1678f4855db（已提交并推送的 R5 Review Candidate；不得改写 / amend / reset）
 Design-R5-R1                  : REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（R5-R1 Candidate d16a0a308a5488bde17a03b32b0cee65ba7d2343 是位于 R5 Candidate 之上的单个 docs-only 提交，已提交并推送；Reviewer G / C / x 独立复核 FAIL；不得改写 / amend / reset；该轮正式编号 R5-R1-01..R5-R1-10）
 Design-R5-R2                  : REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（R5-R2 Candidate 55144ba8fc7eef0df57c0639c04b6418a9595002 是位于 R5-R1 Candidate 之上的单个 docs-only 提交，已提交并推送；独立复核 FAIL（Reviewer C：R5-R2-03 仍 OPEN——MC1 嵌套 / 容器变异使入口扫描与数据流守卫假绿；Reviewer x：Metadata 来源见证与严格 GET reader 漏检）；不得改写 / amend / reset；该轮正式编号 R5-R2-01..R5-R2-11）
-Design-R5-R3                  : REVISION CANDIDATE — INDEPENDENT REVIEW REQUIRED（R5-R3 Base = R5-R2 Candidate 55144ba8fc7eef0df57c0639c04b6418a9595002；新 Designer 的定向闭合修复，正式编号 R5-R3-01..R5-R3-06；G-1 = BLOCKED — SECURITY AUTHORITY；G-2 = RESOLVED — ORIGINAL P1/P2/P3 PRESERVED；不是 Design Accepted，不是 CLOSED / PASS；本设计文档只描述稳定的阶段门，实时 HEAD 与提交进度由 Governance Coordinator 裁决并记录在 HANDOFF / 审查报告中）
+Design-R5-R3                  : REVIEW CANDIDATE — INDEPENDENT REVIEW FAIL（R5-R3 Candidate aacbbf2764bc32c6d50ce3083cf38ad75c1a43ef 是位于 R5-R2 Candidate 之上的单个 docs-only 提交，已提交并推送；三位独立 Reviewer（C / x / G）均 FAIL，发现 R5-R4-01..R5-R4-07；不得改写 / amend / reset 该提交）
+Design-R5-R4                  : REVISION CANDIDATE — 本地 docs-only 定向闭合修复，**未提交**（R5-R4 Base = R5-R3 Candidate aacbbf2764bc32c6d50ce3083cf38ad75c1a43ef；Package Frozen Base 4189b9552d26b3cc5273e0ac09e46e5a3759121d；正式编号 R5-R4-01..R5-R4-07；GOV-R5R3-CRED = BLOCKED — SECURITY AUTHORITY（Reviewer C 意见为 ACCEPT NARROW LIMITATION — CONDITIONAL，不是豁免；授权包另附于证据包）；GOV-R5R3-EXC = RESOLVED — ORIGINAL P1/P2/P3 PRESERVED；HG-1 = ACCEPTED — NOT EXECUTED；S1 = NOT AUTHORIZED；Design Accepted Head = NOT ESTABLISHED；不是 Design Accepted，不是 CLOSED / PASS；本设计文档只描述稳定的阶段门，实时 HEAD 与提交进度由 Governance Coordinator 裁决并记录在 HANDOFF / 审查报告中）
 Design Accepted Head          : NOT ESTABLISHED
 Implementation                : NOT STARTED
 Production Modified           : NO
